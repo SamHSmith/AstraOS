@@ -31,7 +31,7 @@ _start:
 	# li		t5, 0xffff;
 	# csrw	medeleg, t5
 	# csrw	mideleg, t5
-	la		sp, _stack
+	la		sp, _stack_start
 	# We use mret here so that the mstatus register
 	# is properly updated.
 	li		t0, (0b11 << 11) | (1 << 7) | (1 << 3)

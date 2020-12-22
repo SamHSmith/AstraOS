@@ -13,7 +13,7 @@ objects = trap.o boot.o kernel.o
 		riscv64-unknown-linux-gnu-gcc $(CFLAGS) $< -c
 
 kernel.bin: virt.lds $(objects)
-		riscv64-unknown-linux-gnu-ld $(LDFLAGS) -T $< -o $@ $(objects)
+		riscv64-unknown-linux-gnu-gcc $(CFLAGS) $(LDFLAGS) -T $< -o $@ $(wildcard src/*.s) $(wildcard src/*.c)
 
 hdd:
 	./make_hdd.sh
