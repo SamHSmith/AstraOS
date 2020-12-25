@@ -4,15 +4,7 @@ CFLAGS+=-march=rv64gc -mabi=lp64
 LDFLAGS=
 DRIVE=hdd.dsk
 
-objects = trap.o boot.o kernel.o
-
-%.o: src/%.c
-		riscv64-unknown-linux-gnu-gcc $(CFLAGS) $< -c
-
-%.o: src/%.s
-		riscv64-unknown-linux-gnu-gcc $(CFLAGS) $< -c
-
-kernel.bin: virt.lds $(objects)
+kernel.bin: virt.lds
 		riscv64-unknown-linux-gnu-gcc $(CFLAGS) $(LDFLAGS) -T $< -o $@ $(wildcard src/*.s) $(wildcard src/*.c)
 
 hdd:
@@ -22,4 +14,4 @@ run: clean kernel.bin hdd
 	qemu-system-riscv64 -machine virt -cpu rv64 -smp 1 -m 512M -nographic -serial mon:stdio -bios none -kernel kernel.bin -drive if=none,format=raw,file=$(DRIVE),id=foo -device virtio-blk-device,scsi=off,drive=foo
 
 clean:
-	rm -drf $(objects) kernel.bin hdd.dsk
+	rm -drf kernel.bin hdd.dsk
