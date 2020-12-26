@@ -1,3 +1,11 @@
+
+extern u64 HEAP_START;
+extern u64 HEAP_SIZE;
+ 
+#define K_HEAP_START (*(((u64*)HEAP_START) + 0))
+#define K_PAGE_COUNT (*(((u64*)HEAP_START) + 1))
+#define K_TABLE_COUNT (*(((u64*)HEAP_START) + 2))
+
 struct KmemTable
 {
     u64 table_len;
@@ -14,41 +22,60 @@ void mem_table_set_taken(u64 start, u64 count, u8 taken)
     count -= 1;
     for(s64 k = K_TABLE_COUNT - 1; k >= 0; k--)
     {
+        struct KmemTable* last_table = K_MEMTABLES[k+1]; // Be careful with this one
+        struct KmemTable* table = K_MEMTABLES[k];
+        u64 start_byte = (start - (start % 8)) >> 3;
+        u64 end_byte = ((start+count) - ((start+count) % 8)) >> 3;
+    
+        u64 start_bit = start - (start_byte << 3);
+        u64 end_bit = (start+count) - (end_byte << 3);
 
-    struct KmemTable* table = K_MEMTABLES[k];
-    u64 start_byte = (start - (start % 8)) >> 3;
-    u64 end_byte = ((start+count) - ((start+count) % 8)) >> 3;
-
-    u64 start_bit = start - (start_byte << 3);
-    u64 end_bit = (start+count) - (end_byte << 3);
-
-    u64 i = start_byte;
-    u64 j = start_bit;
-    while(i <= end_byte)
-    {
-        u64 e_b = 7;
-        if(i == end_byte) { e_b = end_bit; }
-        while(j <= e_b)
+        u64 i = start_byte;
+        u64 j = start_bit;
+        while(i <= end_byte)
         {
-            if(taken)
+            u64 e_b = 7;
+            if(i == end_byte) { e_b = end_bit; }
+            while(j <= e_b)
             {
-                table->data[i] |= 1 << j;
+                if(k == K_TABLE_COUNT - 1)
+                {
+                    if(taken)
+                    {
+                        table->data[i] |= 1 << j;
+                    }
+                    else
+                    {
+                        table->data[i] &= ~(1 << j);
+                    }
+                }
+                else
+                {
+                    table->data[i] &= ~(1 << j);
+
+                    u64 current = (i << 3) | j;
+                    current = current << 1;
+
+                    u64 yte = current >> 3;
+                    u64 it = current & 0b111;
+                    table->data[i] |= ((last_table->data[yte] & (1 << it)) != 0) << j;
+
+                    current++;
+                    yte = current >> 3;
+                    it = current & 0b111;
+                    table->data[i] |= ((last_table->data[yte] & (1 << it)) != 0) << j;
+                }
+                j++;
             }
-            else
-            {
-                table->data[i] &= ~(1 << j);
-            }
-            j++;
+            j = 0;
+            i++;
         }
-        j = 0;
-        i++;
-    }
-    {
-        u64 e = start + count;
-        start = start >> 1;
-        e = e >> 1;
-        count = e - start;
-    }
+        {
+            u64 e = start + count;
+            start = start >> 1;
+            e = e >> 1;
+            count = e - start;
+        }
     }
 }
 

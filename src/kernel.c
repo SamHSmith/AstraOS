@@ -1,15 +1,7 @@
 #include "types.h"
 
-extern u64 HEAP_START;
-extern u64 HEAP_SIZE;
-
-#define K_HEAP_START (*(((u64*)HEAP_START) + 0))
-#define K_PAGE_COUNT (*(((u64*)HEAP_START) + 1))
-#define K_TABLE_COUNT (*(((u64*)HEAP_START) + 2))
-
-#include "uart.h"
 #include "memory.h"
-
+#include "uart.h"
 
 // --- Lib maybe? ---
 u64 strlen(char* str)
@@ -27,13 +19,9 @@ void kmain()
     uart_write(welcome_msg, strlen(welcome_msg));
 
 
-Kallocation a1 = kalloc_pages(10);
-Kallocation a2 = kalloc_pages(40);
-Kallocation a3 = kalloc_pages(300);
+Kallocation a1 = kalloc_pages(8);
 
 kfree_pages(a1);
-kfree_pages(a2);
-kfree_pages(a3);
 
     for(u64 b = 0; b < K_TABLE_COUNT; b++)
     {
