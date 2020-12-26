@@ -24,11 +24,11 @@ void mem_table_set_taken(u64 start, u64 count, u8 taken)
     {
         struct KmemTable* last_table = K_MEMTABLES[k+1]; // Be careful with this one
         struct KmemTable* table = K_MEMTABLES[k];
-        u64 start_byte = (start - (start % 8)) >> 3;
-        u64 end_byte = ((start+count) - ((start+count) % 8)) >> 3;
+        u64 start_byte = start >> 3;
+        u64 end_byte = (start+count) >> 3;
     
-        u64 start_bit = start - (start_byte << 3);
-        u64 end_bit = (start+count) - (end_byte << 3);
+        u64 start_bit = start & 0b111;
+        u64 end_bit = (start+count) & 0b111;
 
         u64 i = start_byte;
         u64 j = start_bit;
