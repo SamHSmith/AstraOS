@@ -210,3 +210,19 @@ void mem_init()
     }
 }
 
+
+
+void* kalloc_single_page()
+{
+    Kallocation k = kalloc_pages(1);
+    return k.memory;
+}
+ 
+void kfree_single_page(void* page)
+{
+    Kallocation k = {0};
+    k.memory = page;
+    k.page_count = 1;
+    kfree_pages(k);
+}
+

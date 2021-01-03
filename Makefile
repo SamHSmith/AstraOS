@@ -1,4 +1,4 @@
-CFLAGS= -g -mcmodel=medany
+CFLAGS= -g -mcmodel=medany -Wall
 CFLAGS+=-static -ffreestanding -nostdlib 
 CFLAGS+=-march=rv64gc -mabi=lp64
 LDFLAGS=
@@ -11,7 +11,7 @@ hdd:
 	./make_hdd.sh
 
 run: clean kernel.bin hdd
-	qemu-system-riscv64 -machine virt -cpu rv64 -smp 1 -m 512M -nographic -serial mon:stdio -bios none -kernel kernel.bin -drive if=none,format=raw,file=$(DRIVE),id=foo -device virtio-blk-device,scsi=off,drive=foo
+	qemu-system-riscv64 -machine virt -cpu rv64 -smp 1 -m 128M -nographic -serial mon:stdio -bios none -kernel kernel.bin -drive if=none,format=raw,file=$(DRIVE),id=foo -device virtio-blk-device,scsi=off,drive=foo
 
 clean:
 	rm -drf kernel.bin hdd.dsk

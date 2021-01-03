@@ -34,13 +34,13 @@ _start:
 	la		sp, _stack_start
 	# We use mret here so that the mstatus register
 	# is properly updated.
-	li		t0, (0b11 << 11) | (1 << 7) | (1 << 3)
+	li		t0, (0b11 << 11)
 	csrw	mstatus, t0
 	la		t1, kmain
 	csrw	mepc, t1
 	la		t2, asm_trap_vector
 	csrw	mtvec, t2
-	li		t3, (1 << 3) | (1 << 7) | (1 << 11)
+	li		t3, 0
 	csrw	mie, t3
 	la		ra, 4f
 	mret

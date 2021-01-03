@@ -29,7 +29,7 @@ u64 uart_read(u8* data, u64 len)
 {
     for(u64 i = 0; i < len; i++)
     {
-        if(*(UART_BASE_ADDRESS + 5) & 1 == 0)
+        if((*(UART_BASE_ADDRESS + 5) & 1) == 0)
         { return i; }
         else
         {

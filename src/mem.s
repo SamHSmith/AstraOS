@@ -16,13 +16,13 @@ DATA_START: .dword _data_start
 
 .global DATA_END
 DATA_END: .dword _data_end
-
+/*
 .global RODATA_START
 RODATA_START: .dword _rodata_start
 
 .global RODATA_END
 RODATA_END: .dword _rodata_end
-
+*/
 .global BSS_START
 BSS_START: .dword _bss_start
 
