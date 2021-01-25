@@ -210,8 +210,6 @@ void mem_init()
     }
 }
 
-
-
 void* kalloc_single_page()
 {
     Kallocation k = kalloc_pages(1);
@@ -224,5 +222,105 @@ void kfree_single_page(void* page)
     k.memory = page;
     k.page_count = 1;
     kfree_pages(k);
+}
+
+u64 mmu_is_entry_valid(u64 entry)
+{
+    return (entry & 1) != 0;
+}
+
+u64 mmu_is_entry_leaf(u64 entry)
+{
+    return (entry & 0xe) != 0;
+}
+
+void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
+{
+    assert((bits & 0xe) != 0, "bits are not null");
+
+    u64 vpn[3];
+    vpn[0] = (vaddr >> 12) & 0x1ff;
+    vpn[1] = (vaddr >> 21) & 0x1ff;
+    vpn[2] = (vaddr >> 30) & 0x1ff;
+
+    u64 ppn[3];
+    ppn[0] = (paddr >> 12) & 0x1ff;
+    ppn[1] = (paddr >> 21) & 0x1ff;
+    ppn[2] = (paddr >> 30) & 0x3ffffff;
+
+    u64* v = root + vpn[2];
+
+    for(s64 i = 1; i >= level; i--)
+    {
+        if(!mmu_is_entry_valid(*v))
+        {
+            u64 page = (u64)kalloc_single_page();
+            *v = (page >> 2) | 1;
+        }
+        u64* entry = (u64*)((*v & (~0x3ff)) << 2);
+        v = entry + vpn[i];
+    }
+
+    u64 entry = (ppn[2] << 28) |
+                (ppn[1] << 19) |
+                (ppn[0] << 10) |
+                bits |
+                1;
+    *v = entry;
+}
+
+void mmu_unmap(u64* root)
+{
+    for(u64 lv2 = 0; lv2 < 512; lv2++)
+    {
+        u64 entry_lv2 = root[lv2];
+        if(mmu_is_entry_valid(entry_lv2) && !mmu_is_entry_leaf(entry_lv2))
+        {
+            u64* table_lv1 = (u64*)((entry_lv2 & ~0x3ff) << 2);
+
+            for(u64 lv1 = 0; lv1 < 512; lv1++)
+            {
+                u64 entry_lv1 = table_lv1[lv1];
+                if(mmu_is_entry_valid(entry_lv1) && !mmu_is_entry_leaf(entry_lv1))
+                {
+                    u64* table_lv0 = (u64*)((entry_lv1 & ~0x3ff) << 2);
+
+                    kfree_single_page(table_lv0);
+                }
+            }
+            kfree_single_page(table_lv1);
+        }
+    }
+}
+
+/*
+    returns 0 on success.
+*/
+u64 mmu_virt_to_phys(u64* root, u64 vaddr, u64* paddr)
+{
+    u64 vpn[3];
+    vpn[0] = (vaddr >> 12) & 0x1ff;
+    vpn[1] = (vaddr >> 21) & 0x1ff;
+    vpn[2] = (vaddr >> 30) & 0x1ff;
+
+    u64* v = root + vpn[2];
+    for(s64 i = 2; i >= 0; i--)
+    {
+        if(!mmu_is_entry_valid(*v))
+        { return 1; }
+        else if(mmu_is_entry_leaf(*v))
+        {
+            u64 off_mask = (1 << (12 + i * 9)) - 1;
+            u64 vaddr_pgoff = vaddr & off_mask;
+            u64 addr = (*v << 2) & ~off_mask;
+            u64 res = addr | vaddr_pgoff;
+            *paddr = res;
+            return 0;
+        }
+        u64* entry = (u64*)((*v & ~0x3ff) << 2);
+        v = entry + vpn[i - 1];
+    }
+
+    return 2;
 }
 
