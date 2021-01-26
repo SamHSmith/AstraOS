@@ -1,6 +1,16 @@
 
 extern u64 HEAP_START;
 extern u64 HEAP_SIZE;
+extern u64 TEXT_START;
+extern u64 TEXT_END;
+extern u64 DATA_START;
+extern u64 DATA_END;
+extern u64 RODATA_START;
+extern u64 RODATA_END;
+extern u64 BSS_START;
+extern u64 BSS_END;
+extern u64 KERNEL_STACK_START;
+extern u64 KERNEL_STACK_END;
  
 #define K_HEAP_START (*(((u64*)HEAP_START) + 0))
 #define K_PAGE_COUNT (*(((u64*)HEAP_START) + 1))
@@ -160,7 +170,104 @@ void kfree_pages(Kallocation a)
     mem_table_set_taken(addr, a.page_count, 0);
 }
 
-void mem_init()
+void* kalloc_single_page()
+{
+    Kallocation k = kalloc_pages(1);
+    return k.memory;
+}
+ 
+void kfree_single_page(void* page)
+{
+    Kallocation k = {0};
+    k.memory = page;
+    k.page_count = 1;
+    kfree_pages(k);
+}
+
+u64 mmu_is_entry_valid(u64 entry)
+{
+    return (entry & 1) != 0;
+}
+ 
+u64 mmu_is_entry_leaf(u64 entry)
+{
+    return (entry & 0xe) != 0;
+}
+ 
+void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
+{
+    assert((bits & 0xe) != 0, "bits are not null");
+ 
+    u64 vpn[3];
+    vpn[0] = (vaddr >> 12) & 0x1ff;
+    vpn[1] = (vaddr >> 21) & 0x1ff;
+    vpn[2] = (vaddr >> 30) & 0x1ff;
+ 
+    u64 ppn[3];
+    ppn[0] = (paddr >> 12) & 0x1ff;
+    ppn[1] = (paddr >> 21) & 0x1ff;
+    ppn[2] = (paddr >> 30) & 0x3ffffff;
+ 
+    u64* v = root + vpn[2];
+ 
+    for(s64 i = 1; i >= level; i--)
+    {
+        if(!mmu_is_entry_valid(*v))
+        {
+            u64 page = (u64)kalloc_single_page();
+            *v = (page >> 2) | 1;
+        }
+        u64* entry = (u64*)((*v & (~0x3ff)) << 2);
+        v = entry + vpn[i];
+    }
+ 
+    u64 entry = (ppn[2] << 28) |
+                (ppn[1] << 19) |
+                (ppn[0] << 10) |
+                bits |
+                1;
+    *v = entry;
+}
+
+void mmu_kernel_map_range(u64* root, void* start, void* end, u64 bits)
+{
+    u64 memaddr = ((u64)start) & ~(PAGE_SIZE - 1);
+    u64 num_kb_pages = (u64)end;
+    num_kb_pages += PAGE_SIZE - (num_kb_pages % PAGE_SIZE);
+    num_kb_pages = (num_kb_pages - memaddr) / PAGE_SIZE;
+ 
+    for(u64 i = 0; i < num_kb_pages; i++)
+    {
+        mmu_map(root, memaddr, memaddr, bits, 0);
+        memaddr += PAGE_SIZE;
+    }
+}
+ 
+void mmu_unmap(u64* root)
+{
+    for(u64 lv2 = 0; lv2 < 512; lv2++)
+    {
+        u64 entry_lv2 = root[lv2];
+        if(mmu_is_entry_valid(entry_lv2) && !mmu_is_entry_leaf(entry_lv2))
+        {
+            u64* table_lv1 = (u64*)((entry_lv2 & ~0x3ff) << 2);
+ 
+            for(u64 lv1 = 0; lv1 < 512; lv1++)
+            {
+                u64 entry_lv1 = table_lv1[lv1];
+                if(mmu_is_entry_valid(entry_lv1) && !mmu_is_entry_leaf(entry_lv1))
+                {
+                    u64* table_lv0 = (u64*)((entry_lv1 & ~0x3ff) << 2);
+ 
+                    kfree_single_page(table_lv0);
+                }
+            }
+            kfree_single_page(table_lv1);
+        }
+    }
+}
+
+u64* mem_init()
 {
     K_PAGE_COUNT = HEAP_SIZE / PAGE_SIZE;
 
@@ -208,89 +315,28 @@ void mem_init()
             }
         }
     }
-}
 
-void* kalloc_single_page()
-{
-    Kallocation k = kalloc_pages(1);
-    return k.memory;
-}
- 
-void kfree_single_page(void* page)
-{
-    Kallocation k = {0};
-    k.memory = page;
-    k.page_count = 1;
-    kfree_pages(k);
-}
+    printf("Memory has been initialized:\n\n");
+    printf("TEXT:        0x%x <-> 0x%x\n", TEXT_START, TEXT_END);
+    printf("RODATA:      0x%x <-> 0x%x\n", RODATA_START, RODATA_END);
+    printf("DATA:        0x%x <-> 0x%x\n", DATA_START, DATA_END);
+    printf("BSS:         0x%x <-> 0x%x\n", BSS_START, BSS_END);
+    printf("STACK:       0x%x <-> 0x%x\n", KERNEL_STACK_START, KERNEL_STACK_END);
+    printf("HEAP META:   0x%x <-> 0x%x\n", HEAP_START, K_HEAP_START);
+    printf("HEAP:        0x%x <-> 0x%x\n", K_HEAP_START, HEAP_START + HEAP_SIZE);
+    printf("\n\n");
 
-u64 mmu_is_entry_valid(u64 entry)
-{
-    return (entry & 1) != 0;
-}
+    // Initialize MMU table for the kernel
+    u64* table = kalloc_single_page();
+    mmu_kernel_map_range(table, (u64*)TEXT_START, (u64*)TEXT_END, 2 + 8); //read + execute
+    mmu_kernel_map_range(table, (u64*)RODATA_START, (u64*)RODATA_END, 2);
+    mmu_kernel_map_range(table, (u64*)DATA_START, (u64*)DATA_END, 2 + 4); //read + write
+    mmu_kernel_map_range(table, (u64*)BSS_START, (u64*)BSS_END,   2 + 4);
+    mmu_kernel_map_range(table, (u64*)KERNEL_STACK_START, (u64*)KERNEL_STACK_START, 2 + 4);
+    mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
 
-u64 mmu_is_entry_leaf(u64 entry)
-{
-    return (entry & 0xe) != 0;
-}
-
-void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
-{
-    assert((bits & 0xe) != 0, "bits are not null");
-
-    u64 vpn[3];
-    vpn[0] = (vaddr >> 12) & 0x1ff;
-    vpn[1] = (vaddr >> 21) & 0x1ff;
-    vpn[2] = (vaddr >> 30) & 0x1ff;
-
-    u64 ppn[3];
-    ppn[0] = (paddr >> 12) & 0x1ff;
-    ppn[1] = (paddr >> 21) & 0x1ff;
-    ppn[2] = (paddr >> 30) & 0x3ffffff;
-
-    u64* v = root + vpn[2];
-
-    for(s64 i = 1; i >= level; i--)
-    {
-        if(!mmu_is_entry_valid(*v))
-        {
-            u64 page = (u64)kalloc_single_page();
-            *v = (page >> 2) | 1;
-        }
-        u64* entry = (u64*)((*v & (~0x3ff)) << 2);
-        v = entry + vpn[i];
-    }
-
-    u64 entry = (ppn[2] << 28) |
-                (ppn[1] << 19) |
-                (ppn[0] << 10) |
-                bits |
-                1;
-    *v = entry;
-}
-
-void mmu_unmap(u64* root)
-{
-    for(u64 lv2 = 0; lv2 < 512; lv2++)
-    {
-        u64 entry_lv2 = root[lv2];
-        if(mmu_is_entry_valid(entry_lv2) && !mmu_is_entry_leaf(entry_lv2))
-        {
-            u64* table_lv1 = (u64*)((entry_lv2 & ~0x3ff) << 2);
-
-            for(u64 lv1 = 0; lv1 < 512; lv1++)
-            {
-                u64 entry_lv1 = table_lv1[lv1];
-                if(mmu_is_entry_valid(entry_lv1) && !mmu_is_entry_leaf(entry_lv1))
-                {
-                    u64* table_lv0 = (u64*)((entry_lv1 & ~0x3ff) << 2);
-
-                    kfree_single_page(table_lv0);
-                }
-            }
-            kfree_single_page(table_lv1);
-        }
-    }
+    //Map the uart
+    mmu_map(table, 0x10000000, 0x10000000, 2 + 4, 0);
 }
 
 /*

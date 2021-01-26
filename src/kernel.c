@@ -35,7 +35,7 @@ void assert(u64 stat, char* error)
 
 void kmain()
 {
-    mem_init();
+    u64* kernel_mmu_table = mem_init();
     uart_init();
     uart_write_string("Hello there, welcome to the ROS operating system\nYou have no idea the pain I went through to make these characters you type appear on screen\n\n");
 
