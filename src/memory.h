@@ -219,6 +219,7 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
         }
         u64* entry = (u64*)((*v & (~0x3ff)) << 2);
         v = entry + vpn[i];
+        printf("v = 0x%p + %d\n", entry, vpn[i]);
     }
  
     u64 entry = (ppn[2] << 28) |
@@ -226,6 +227,8 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
                 (ppn[0] << 10) |
                 bits |
                 1;
+
+    printf("final entry : 0x%p is %b\n", v, entry);
     *v = entry;
 }
 
@@ -348,6 +351,7 @@ u64 mmu_virt_to_phys(u64* root, u64 vaddr, u64* paddr)
     vpn[0] = (vaddr >> 12) & 0x1ff;
     vpn[1] = (vaddr >> 21) & 0x1ff;
     vpn[2] = (vaddr >> 30) & 0x1ff;
+printf("%b %b %b\n", vpn[2], vpn[1], vpn[0]);
 
     u64* v = root + vpn[2];
     for(s64 i = 2; i >= 0; i--)
@@ -356,6 +360,7 @@ u64 mmu_virt_to_phys(u64* root, u64 vaddr, u64* paddr)
         { return 1; }
         else if(mmu_is_entry_leaf(*v))
         {
+            printf("v = %p, *v = %b\n", v, *v);
             u64 off_mask = (1 << (12 + i * 9)) - 1;
             u64 vaddr_pgoff = vaddr & off_mask;
             u64 addr = (*v << 2) & ~off_mask;

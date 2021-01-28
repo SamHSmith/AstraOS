@@ -36,7 +36,7 @@ _start:
 	# is properly updated.
 	li		t0, (0b11 << 11)
 	csrw	mstatus, t0
-	la		t1, kmain
+	la		t1, kinit
 	csrw	mepc, t1
 	la		t2, asm_trap_vector
 	csrw	mtvec, t2
@@ -44,6 +44,16 @@ _start:
 	csrw	mie, t3
 	la		ra, 4f
 	mret
+.global kpost_init
+kpost_init:
+    csrw satp, a0
+    li        t0, (1 << 11) | (1 << 5)
+    csrw    mstatus, t0
+
+    la        t1, kmain
+    csrw    mepc, t1
+
+    mret
 3:
 
 	# Parked harts go here. We need to set these
