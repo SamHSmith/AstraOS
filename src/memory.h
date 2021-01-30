@@ -154,7 +154,8 @@ Kallocation kalloc_pages(u64 page_count)
         }
     }
     Kallocation al = {0};
-    al.memory = (void*)(HEAP_START + (page_address * PAGE_SIZE));
+    // HEAP_START isn't always 4096 aligned so the first page will be smaller in some cases.
+    al.memory = (void*)((HEAP_START - (HEAP_START % PAGE_SIZE)) + (page_address * PAGE_SIZE));
     al.page_count = page_count;
     return al;
 }
@@ -327,11 +328,6 @@ u64* mem_init()
     printf("HEAP:        0x%x <-> 0x%x\n", K_HEAP_START, HEAP_START + HEAP_SIZE);
     printf("\n\n");
 
-printf("kalloc page size = %d\n", (u64)kalloc_single_page() % PAGE_SIZE);
-printf("kalloc page size = %d\n", (u64)kalloc_single_page() % PAGE_SIZE);
-printf("kalloc page size = %d\n", (u64)kalloc_single_page() % PAGE_SIZE);
-
-assert((u64)kalloc_single_page() % PAGE_SIZE == 0, "kalloc is modular with page size");
 
     // Initialize MMU table for the kernel
     u64* table = kalloc_single_page();

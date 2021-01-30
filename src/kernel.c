@@ -64,19 +64,18 @@ uart_write_string("finished doing mem test\n");
 
 u64* table = kalloc_single_page();
 
-mmu_map(table, 1 << 12, 1 << 12, 2, 1);
-//mmu_map(table, 401*4096, 20012*4096, 3, 0);
-//mmu_map(table, 403*4096, 212*4096, 3, 0);
+mmu_map(table, 401*4096, 20012*4096, 2+4, 0);
+mmu_map(table, 403*4096, 212*4096, 2+4, 0);
 
-//mmu_map(table, 520*4096, 51200000*4096, 3, 0);
+mmu_map(table, 520*4096, 51200000*4096, 2+4, 1);
 
 u64 physical = 0;
 //assert(mmu_virt_to_phys(table, 400*4096, &physical) == 0, "invalid virtual address");
 
-for(u64 i = 0; i < 20; i++)
+for(u64 i = 799; i < 1100; i++)
 {
     if(mmu_virt_to_phys(table, i << 11, &physical) == 0)
-    { printf("%p -> %p\n", i << 10, physical); }
+    { printf("%p -> %p\n", i << 11, physical); }
     else
     { printf("segv"); }
 }
