@@ -340,6 +340,8 @@ u64* mem_init()
 
     //Map the uart
     mmu_map(table, 0x10000000, 0x10000000, 2 + 4, 0);
+
+    return table;
 }
 
 /*
