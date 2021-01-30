@@ -219,7 +219,6 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
         }
         u64* entry = (u64*)((*v & (~0x3ff)) << 2);
         v = entry + vpn[i];
-        printf("v = 0x%p + %d\n", entry, vpn[i]);
     }
  
     u64 entry = (ppn[2] << 28) |
@@ -228,7 +227,6 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
                 bits |
                 1;
 
-    printf("final entry : 0x%p is %b\n", v, entry);
     *v = entry;
 }
 
@@ -329,6 +327,12 @@ u64* mem_init()
     printf("HEAP:        0x%x <-> 0x%x\n", K_HEAP_START, HEAP_START + HEAP_SIZE);
     printf("\n\n");
 
+printf("kalloc page size = %d\n", (u64)kalloc_single_page() % PAGE_SIZE);
+printf("kalloc page size = %d\n", (u64)kalloc_single_page() % PAGE_SIZE);
+printf("kalloc page size = %d\n", (u64)kalloc_single_page() % PAGE_SIZE);
+
+assert((u64)kalloc_single_page() % PAGE_SIZE == 0, "kalloc is modular with page size");
+
     // Initialize MMU table for the kernel
     u64* table = kalloc_single_page();
     mmu_kernel_map_range(table, (u64*)TEXT_START, (u64*)TEXT_END, 2 + 8); //read + execute
@@ -351,7 +355,6 @@ u64 mmu_virt_to_phys(u64* root, u64 vaddr, u64* paddr)
     vpn[0] = (vaddr >> 12) & 0x1ff;
     vpn[1] = (vaddr >> 21) & 0x1ff;
     vpn[2] = (vaddr >> 30) & 0x1ff;
-printf("%b %b %b\n", vpn[2], vpn[1], vpn[0]);
 
     u64* v = root + vpn[2];
     for(s64 i = 2; i >= 0; i--)
@@ -360,7 +363,6 @@ printf("%b %b %b\n", vpn[2], vpn[1], vpn[0]);
         { return 1; }
         else if(mmu_is_entry_leaf(*v))
         {
-            printf("v = %p, *v = %b\n", v, *v);
             u64 off_mask = (1 << (12 + i * 9)) - 1;
             u64 vaddr_pgoff = vaddr & off_mask;
             u64 addr = (*v << 2) & ~off_mask;
