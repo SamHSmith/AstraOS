@@ -227,8 +227,6 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
                 (ppn[0] << 10) |
                 bits |
                 1;
-    if(*v != 0) {
-    printf("old: %lb\nnew: %lb\n", *v, entry); }
     *v = entry;
 }
 

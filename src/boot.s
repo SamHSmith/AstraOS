@@ -60,7 +60,6 @@ _start:
 	la		ra, kpost_init
 	# We use mret here so that the mstatus register is properly updated.
 	mret
-.global kpost_init
 kpost_init:
 	# We set the return address (ra above) to this label. When kinit() is finished
 	# in Rust, it will return here.

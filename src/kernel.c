@@ -34,21 +34,17 @@ void assert(u64 stat, char* error)
 }
 
 u64 KERNEL_MMU_TABLE;
-void kpost_init(u64 satp);
 
-void kinit()
+u64 kinit()
 {
     uart_init();
     KERNEL_MMU_TABLE = (u64)mem_init();
 
     u64 root_ppn = ((u64)KERNEL_MMU_TABLE) >> 12;
-printf("0x%p\n0x%p\n", KERNEL_MMU_TABLE, root_ppn);
     u64 satp_val = (((u64)8) << 60) | root_ppn;
 
-printf("val %lu\n", satp_val);
-
     printf("Entering supervisor mode...");
-    kpost_init(satp_val);
+    return satp_val;
 }
 
 void kmain()
@@ -62,7 +58,7 @@ void* memory = kalloc_single_page();
 kfree_pages(a1);
 
 char* dave = "davey";
-printf("%p\n", dave +2);
+printf("writing to readonly memory: %p\n", dave +2);
 dave[2] = 'p';
 printf("%s\n", dave);
 
