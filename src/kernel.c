@@ -42,7 +42,10 @@ void kinit()
     KERNEL_MMU_TABLE = (u64)mem_init();
 
     u64 root_ppn = ((u64)KERNEL_MMU_TABLE) >> 12;
-    u64 satp_val = (8 << 60) | root_ppn;
+printf("0x%p\n0x%p\n", KERNEL_MMU_TABLE, root_ppn);
+    u64 satp_val = (((u64)8) << 60) | root_ppn;
+
+printf("val %lu\n", satp_val);
 
     printf("Entering supervisor mode...");
     kpost_init(satp_val);
@@ -57,6 +60,11 @@ Kallocation a1 = kalloc_pages(65);
 void* memory = kalloc_single_page();
 
 kfree_pages(a1);
+
+char* dave = "davey";
+printf("%p\n", dave +2);
+dave[2] = 'p';
+printf("%s\n", dave);
 
 kfree_single_page(memory);
 
