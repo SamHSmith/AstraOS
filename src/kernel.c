@@ -111,3 +111,109 @@ mmu_unmap(table);
         }
     }
 }
+
+void kinit_hart(u64 hartid)
+{
+
+}
+
+struct TrapFrame
+{
+    u64 regs[32];
+    u64 fregs[32];
+    u64 satp;
+    void* trap_stack;
+    u64 hartid;
+};
+
+u64 m_trap(
+    u64 epc,
+    u64 tval,
+    u64 cause,
+    u64 hart,
+    u64 status,
+    struct TrapFrame* frame
+    )
+{
+    u64 async = (cause >> 63) & 1 == 1;
+    u64 cause_num = cause & 0xfff;
+    u64 return_pc = epc;
+
+    if(async)
+    {
+             if(cause_num == 0) {
+                printf("User software interrupt CPU%lld\n", hart);
+        }
+        else if(cause_num == 1) {
+                printf("Supervisor software interrupt CPU%lld\n", hart);
+        }
+        else if(cause_num == 3) {
+                printf("Machine software interrupt CPU%lld\n", hart);
+        }
+        else if(cause_num == 4) {
+                printf("User timer interrupt CPU%lld\n", hart);
+        }
+        else if(cause_num == 5) {
+                printf("Supervisor timer interrupt CPU%lld\n", hart);
+        }
+        else if(cause_num == 7) {
+                printf("Machine timer interrupt CPU%lld\n", hart);
+        }
+        else if(cause_num == 8) {
+                printf("User external interrupt CPU%lld\n", hart);
+        }
+        else if(cause_num == 9) {
+                printf("Supervisor external interrupt CPU%lld\n", hart);
+        }
+        else if(cause_num == 11) {
+                printf("Machine external interrupt CPU%lld\n", hart);
+        }
+    }
+    else
+    {
+             if(cause_num == 0) {
+                printf("Interrupt: Instruction address misaligned CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+        else if(cause_num == 1) {
+                printf("Interrupt: Instruction access fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+        else if(cause_num == 2) {
+                printf("Interrupt: Illegal instruction CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+        else if(cause_num == 3) {
+                printf("Interrupt: Breakpoint CPU%lld -> 0x%x\n", hart, epc);
+        }
+        else if(cause_num == 4) {
+                printf("Interrupt: Load access misaligned CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+        else if(cause_num == 5) {
+                printf("Interrupt: Load access fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+        else if(cause_num == 6) {
+                printf("Interrupt: Store/AMO address misaligned CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+        else if(cause_num == 7) {
+                printf("Interrupt: Store/AMO access fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+        else if(cause_num == 8) {
+                printf("Interrupt: Environment call from U-mode CPU%lld -> 0x%x\n", hart, epc);
+        }
+        else if(cause_num == 9) {
+                printf("Interrupt: Environment call from S-mode CPU%lld -> 0x%x\n", hart, epc);
+        }
+        else if(cause_num == 11) {
+                printf("Interrupt: Environment call from M-mode CPU%lld -> 0x%x\n", hart, epc);
+        }
+        else if(cause_num == 12) {
+                printf("Interrupt: Instruction page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+        else if(cause_num == 13) {
+                printf("Interrupt: Load page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+        else if(cause_num == 15) {
+                printf("Interrupt: Store/AMO page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+        }
+    }
+
+    while(1) {}
+}
