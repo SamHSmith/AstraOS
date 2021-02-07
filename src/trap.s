@@ -35,7 +35,6 @@
 m_trap_vector:
 	# All registers are volatile here, we need to save them
 	# before we do anything.
-	csrrw	t6, mscratch, t6
 	# csrrw will atomically swap t6 into mscratch and the old
 	# value of mscratch into t6. This is nice because we just
 	# switched values and didn't destroy anything -- all atomically!
@@ -47,30 +46,44 @@ m_trap_vector:
 	#  CPU HARTID		528
 	# We use t6 as the temporary register because it is the very
 	# bottom register (x31)
-#	.rept	30
 
-#    save_gp 2
+    csrrw t6, mscratch, t6
+    mv t6, sp
 
+.macro intreg_cpy num
+    sd x\num, (t6)
+    addi t6, t6, 8
+.endm
 
-	# Save the actual t6 register, which we swapped into
-	# mscratch
-	mv		t5, t6
-	csrr	t6, mscratch
-# 	save_gp 31, t5
+.set i,0
+.rept 31
+    intreg_cpy %i
+    .set i,i+1
+.endr
 
-	# Restore the kernel trap frame into mscratch
-	csrw	mscratch, t5
+    csrrw t5, mscratch, t5
+    intreg_cpy 30 # t5/x30 stores the real t6/x31 because t6 is our counter
+
+.macro floatreg_cpy num
+    fsd f\num, (t6)
+    addi t6, t6, 8
+.endm
+ 
+#.set i,0
+#.rept 32
+#    floatreg_cpy %i
+#    .set i,i+1
+#.endr
 
 	# Get ready to go into Rust (trap.rs)
 	# We don't want to write into the user's stack or whomever
 	# messed with us here.
-	csrr	a0, mepc
-	csrr	a1, mtval
-	csrr	a2, mcause
-	csrr	a3, mhartid
-	csrr	a4, mstatus
-	mv		a5, t5
-#	ld		sp, 520(a5)
+    csrr	a0, mepc
+    csrr	a1, mtval
+    csrr	a2, mcause
+    csrr	a3, mhartid
+    csrr	a4, mstatus
+    mv      a5, sp
 	call	m_trap
 
 	# When we get here, we've returned from m_trap, restore registers
@@ -80,7 +93,7 @@ m_trap_vector:
 	csrw	mepc, a0
 
 	# Now load the trap frame back into t6
-	csrr	t6, mscratch
+#	csrr	t6, mscratch
 
 	# Restore all GP registers
 #	.set	i, 1

@@ -57,6 +57,10 @@ void* memory = kalloc_single_page();
 
 kfree_pages(a1);
 
+float f = 0.4;
+printf("%f + 4.2 = %f\n", f, f + 4.2);
+
+
 char* dave = "davey";
 printf("writing to readonly memory: %p\n", dave +2);
 dave[2] = 'p';
@@ -135,6 +139,14 @@ u64 m_trap(
     struct TrapFrame* frame
     )
 {
+    printf("args:\n  epc: %x\n  tval: %x\n  cause: %x\n  hart: %x\n  status: %x\n  frame: %x\n",
+            epc, tval, cause, hart, status, frame);
+    printf("frame:\n regs:\n");
+    for(u64 i = 0; i < 32; i++) { printf("  x%lld: %lx\n", i, frame->regs[i]); }
+    printf(" fregs:\n");
+    for(u64 i = 0; i < 32; i++) { printf("  f%lld: %lx\n", i, frame->fregs[i]); }
+    printf(" satp: %lx, trap_stack: %lx, hartid %lld\n", frame->satp, frame->trap_stack, frame->hartid);
+
     u64 async = (cause >> 63) & 1 == 1;
     u64 cause_num = cause & 0xfff;
     u64 return_pc = epc;
