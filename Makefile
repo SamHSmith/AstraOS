@@ -5,7 +5,7 @@ LDFLAGS=
 DRIVE=hdd.dsk
 
 kernel.bin: virt.lds
-		riscv64-unknown-linux-gnu-gcc $(CFLAGS) $(LDFLAGS) -T $< -o $@ $(wildcard src/*.s) $(wildcard src/*.c)
+		riscv64-unknown-elf-gcc $(CFLAGS) $(LDFLAGS) -T $< -o $@ $(wildcard src/*.s) $(wildcard src/*.c)
 
 hdd:
 	./make_hdd.sh
