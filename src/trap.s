@@ -4,27 +4,6 @@
 # Stephen Marz
 # 24 February 2019
 
-.option norvc
-.altmacro
-.set NUM_GP_REGS, 32  # Number of registers per context
-.set NUM_FP_REGS, 32
-.set REG_SIZE, 8   # Register size (in bytes)
-.set MAX_CPUS, 8   # Maximum number of CPUs
-
-# Use macros for saving and restoring multiple registers
-.macro save_gp i, basereg=t6
-	sd	x\i, ((\i)*REG_SIZE)(\basereg)
-.endm
-.macro load_gp i, basereg=t6
-	ld	x\i, ((\i)*REG_SIZE)(\basereg)
-.endm
-.macro save_fp i, basereg=t6
-	fsd	f\i, ((NUM_GP_REGS+(\i))*REG_SIZE)(\basereg)
-.endm
-.macro load_fp i, basereg=t6
-	fld	f\i, ((NUM_GP_REGS+(\i))*REG_SIZE)(\basereg)
-.endm
-
 
 .section .text
 .global m_trap_vector
@@ -47,9 +26,12 @@ m_trap_vector:
 	# We use t6 as the temporary register because it is the very
 	# bottom register (x31)
 
+    addi sp, sp, -65*8
+
     csrrw t6, mscratch, t6
     mv t6, sp
 
+.altmacro
 .macro intreg_cpy num
     sd x\num, (t6)
     addi t6, t6, 8
@@ -69,11 +51,14 @@ m_trap_vector:
     addi t6, t6, 8
 .endm
  
-#.set i,0
-#.rept 32
-#    floatreg_cpy %i
-#    .set i,i+1
-#.endr
+.set i,0
+.rept 32
+    floatreg_cpy %i
+    .set i,i+1
+.endr
+
+    csrr a0, satp
+    sd a0, (t6)
 
 	# Get ready to go into Rust (trap.rs)
 	# We don't want to write into the user's stack or whomever
@@ -90,20 +75,43 @@ m_trap_vector:
 	# and return.
 	# m_trap will return the return address via a0.
 
-	csrw	mepc, a0
+    csrw	mepc, a0
+    mv t6, sp
+ 
+.altmacro
+.macro intreg_place num
+    ld x\num, (t6)
+    addi t6, t6, 8
+.endm
+ 
+.set i,0
+.rept 31
+    intreg_place %i
+    .set i,i+1
+.endr
+ 
+    csrrw t5, mscratch, t5
+    intreg_place 30 # t5/x30 stores the real t6/x31 because t6 is our counter
+    csrrw t5, mscratch, t5 # but this time we swap t6 into mscratch
+ 
+.macro floatreg_place num
+    fld f\num, (t6)
+    addi t6, t6, 8
+.endm
+ 
+.set i,0
+.rept 32
+    floatreg_place %i
+    .set i,i+1
+.endr
 
-	# Now load the trap frame back into t6
-#	csrr	t6, mscratch
+    ld t6, (t6)
+    csrw satp, t6
 
-	# Restore all GP registers
-#	.set	i, 1
-#	.rept	31
-#		load_gp %i
-#		.set	i, i+1
-#	.endr
+    # Now swap the real t6 into t6
+    csrr	t6, mscratch
 
-	# Since we ran this loop 31 times starting with i = 1,
-	# the last one loaded t6 back to its original value.
+    addi sp, sp, 65*8
 
 	mret
 

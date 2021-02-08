@@ -58,8 +58,8 @@ void* memory = kalloc_single_page();
 kfree_pages(a1);
 
 float f = 0.4;
-printf("%f + 4.2 = %f\n", f, f + 4.2);
-
+//printf("%f + 4.2 = %f\n", f, f + 4.2);
+float b = f + 2.3;
 
 char* dave = "davey";
 printf("writing to readonly memory: %p\n", dave +2);
@@ -126,8 +126,6 @@ struct TrapFrame
     u64 regs[32];
     u64 fregs[32];
     u64 satp;
-    void* trap_stack;
-    u64 hartid;
 };
 
 u64 m_trap(
@@ -145,7 +143,7 @@ u64 m_trap(
     for(u64 i = 0; i < 32; i++) { printf("  x%lld: %lx\n", i, frame->regs[i]); }
     printf(" fregs:\n");
     for(u64 i = 0; i < 32; i++) { printf("  f%lld: %lx\n", i, frame->fregs[i]); }
-    printf(" satp: %lx, trap_stack: %lx, hartid %lld\n", frame->satp, frame->trap_stack, frame->hartid);
+    printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
 
     u64 async = (cause >> 63) & 1 == 1;
     u64 cause_num = cause & 0xfff;
@@ -224,6 +222,8 @@ u64 m_trap(
         }
         else if(cause_num == 15) {
                 printf("Interrupt: Store/AMO page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+return_pc += 4;
+return return_pc;
         }
     }
 

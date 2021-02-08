@@ -48,7 +48,8 @@ _start:
 	la		sp, _stack_end
 	# Setting `mstatus` register:
 	# 0b11 << 11: Machine's previous protection mode is 3 (MPP=3).
-	li		t0, 0b11 << 11
+    # place 13 is for enabling floating point registers
+	li		t0, 0b11 << 11 | (1 << 13)
 	csrw	mstatus, t0
 	# Machine's exception program counter (MEPC) is set to `kinit`.
 	la		t1, kinit
@@ -70,7 +71,7 @@ kpost_init:
 	# 1 << 1    : Supervisor's interrupt-enable bit will be set to 1 after sret.
 	# We set the "previous" bits because the sret will write the current bits
 	# with the previous bits.
-	li		t0, (1 << 8) | (1 << 5)
+	li		t0, (1 << 8) | (1 << 5) | (1 << 13)
 	csrw	sstatus, t0
 	la		t1, kmain
 	csrw	sepc, t1
