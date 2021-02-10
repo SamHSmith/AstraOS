@@ -8,6 +8,7 @@ void _putchar(char c)
 }
 
 #include "memory.h"
+#include "plic.h"
 
 // --- Lib maybe? ---
 u64 strlen(char* str)
@@ -63,7 +64,7 @@ float b = f + 2.3;
 
 char* dave = "davey";
 printf("writing to readonly memory: %p\n", dave +2);
-dave[2] = 'p';
+// dave[2] = 'p'; // this causes a kernel trap
 printf("%s\n", dave);
 
 kfree_single_page(memory);
@@ -106,6 +107,7 @@ mmu_unmap(table);
         uart_write_string("\n");
     }
 */
+/*
     while(1)
     {
         u8 r = 0;
@@ -113,6 +115,17 @@ mmu_unmap(table);
         {
             uart_write(&r, 1);
         }
+    }
+*/
+
+    plic_interrupt_set_threshold(0);
+    plic_interrupt_enable(10);
+    plic_interrupt_set_priority(10, 1);
+
+    while(1)
+    {
+        printf("doing stuff");
+        for(u64 i = 0; i < 120000000; i++) {}
     }
 }
 
@@ -175,8 +188,20 @@ u64 m_trap(
         else if(cause_num == 9) {
                 printf("Supervisor external interrupt CPU%lld\n", hart);
         }
-        else if(cause_num == 11) {
-                printf("Machine external interrupt CPU%lld\n", hart);
+        else if(cause_num == 11)
+        {
+            printf("Machine external interrupt CPU%lld\n", hart);
+            u32 interrupt;
+            char character;
+            while(plic_interrupt_next(&interrupt))
+            {
+                if(interrupt == 10 && uart_read(&character, 1))
+                {
+                    printf("you typed the character: %c\n", character);
+                }
+                plic_interrupt_complete(interrupt);
+            }
+            return return_pc;
         }
     }
     else
@@ -222,8 +247,6 @@ u64 m_trap(
         }
         else if(cause_num == 15) {
                 printf("Interrupt: Store/AMO page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
-return_pc += 4;
-return return_pc;
         }
     }
 

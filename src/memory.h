@@ -339,7 +339,11 @@ u64* mem_init()
     mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
 
     //Map the uart
-    mmu_map(table, 0x10000000, 0x10000000, 2 + 4, 0);
+    mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
+
+    //Map the plic
+    mmu_kernel_map_range(table, (u64*)0x0c000000, (u64*)0x0c002001, 2 + 4);
+    mmu_kernel_map_range(table, (u64*)0x0c200000, (u64*)0x0c208001, 2 + 4);
 
     return table;
 }

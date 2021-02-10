@@ -76,11 +76,10 @@ kpost_init:
 	la		t1, kmain
 	csrw	sepc, t1
 
-	# Setting `sie` (supervisor interrupt enable) register:
-	# This register takes the same bits as mideleg
-	# 1 << 1    : Supervisor software interrupt enable (SSIE=1 [Enabled])
-	# 1 << 5    : Supervisor timer interrupt enable (STIE=1 [Enabled])
-	# 1 << 9    : Supervisor external interrupt enable (SEIE=1 [Enabled])
+	# Setting `mie` (machine interrupt enable) register:
+    li t2, 1 << 11
+    csrw mie, t2
+
 
 	# kinit() is required to return back the SATP value (including MODE) via a0
 	csrw	satp, a0
