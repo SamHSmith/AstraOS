@@ -9,6 +9,7 @@ void _putchar(char c)
 
 #include "memory.h"
 #include "plic.h"
+#include "proccess.h"
 
 // --- Lib maybe? ---
 u64 strlen(char* str)
@@ -122,6 +123,8 @@ mmu_unmap(table);
     plic_interrupt_enable(10);
     plic_interrupt_set_priority(10, 1);
 
+    proccess_init();
+
     while(1)
     {
         printf("doing stuff");
@@ -134,20 +137,13 @@ void kinit_hart(u64 hartid)
 
 }
 
-struct TrapFrame
-{
-    u64 regs[32];
-    u64 fregs[32];
-    u64 satp;
-};
-
 u64 m_trap(
     u64 epc,
     u64 tval,
     u64 cause,
     u64 hart,
     u64 status,
-    struct TrapFrame* frame
+    TrapFrame* frame
     )
 {
     printf("args:\n  epc: %x\n  tval: %x\n  cause: %x\n  hart: %x\n  status: %x\n  frame: %x\n",
