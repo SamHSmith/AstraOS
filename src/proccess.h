@@ -60,7 +60,6 @@ u64 proccess_create()
             kfree_pages(KERNEL_PROCCESS_ARRAY_ALLOCATION);
         }
         KERNEL_PROCCESS_ARRAY_ALLOCATION = new_alloc;
-printf("REALLOC\n");
     }
     u64 index = KERNEL_PROCCESS_ARRAY_LEN;
     KERNEL_PROCCESS_ARRAY[index] = proccess;
@@ -84,7 +83,6 @@ u32 proccess_thread_create(u64 pid)
     if(sizeof(Proccess) + (KERNEL_PROCCESS_ARRAY[pid]->thread_count + 1) * sizeof(Thread) > 
         KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.page_count * PAGE_SIZE)
     {
-printf("REALLOC\n");
         Kallocation new_alloc = kalloc_pages(KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.page_count + 1);
         for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
         {
@@ -107,7 +105,6 @@ void proccess_init()
     //for(u64 i = 0; i < 600; i++) { printf("creating procces #%ld\n", proccess_create()); }
 
     u64 pid = proccess_create();
-    for(u64 i = 0; i < 25; i++) {
-        printf("creating thread #%ld\n", proccess_thread_create(pid));
-    }
+    u32 thread1 = proccess_thread_create(pid);
+    u32 thread2 = proccess_thread_create(pid);
 }
