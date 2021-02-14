@@ -176,6 +176,26 @@ void* kalloc_single_page()
     Kallocation k = kalloc_pages(1);
     return k.memory;
 }
+
+void mem_debug_dump_table_counts(u64 table_count)
+{
+    if(table_count > K_TABLE_COUNT) { table_count = K_TABLE_COUNT; }
+    for(u64 b = K_TABLE_COUNT - table_count; b < K_TABLE_COUNT; b++)
+    {
+        u64 count = 0;
+        u64 total = 0;
+        for(u64 i = 0; i < K_MEMTABLES[b]->table_len; i++)
+        {
+            for(u64 j = 0; j < 8; j++)
+            {
+                if((K_MEMTABLES[b]->data[i] & (1 << j)) != 0)
+                { count++; }
+                total++;
+            }
+        }
+        printf("Memtable#%lld %lld/%lld used.\n", b, count, total);
+    }
+}
  
 void kfree_single_page(void* page)
 {
