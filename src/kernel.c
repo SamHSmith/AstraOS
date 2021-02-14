@@ -19,6 +19,21 @@ u64 strlen(char* str)
     return i;
 }
 
+void* memcpy(void* dest, const void* src, u64 n)
+{
+    void* orig_dest = dest;
+    u64 n8 = (n >> 3) << 3;
+    for(u64 i = 0; i < (n8 >> 3); i++)
+    { ((u64*)dest)[i] = ((u64*)src)[i]; }
+
+    dest += n8;
+    src += n8;
+    n -= n8;
+    for(u64 i = 0; i < n; i++)
+    { ((u8*)dest)[i] = ((u8*)src)[i]; }
+    return orig_dest;
+}
+
 void uart_write_string(char* str)
 {
     uart_write((u8*)str, strlen(str));
@@ -42,8 +57,7 @@ u64 kinit()
     uart_init();
     KERNEL_MMU_TABLE = (u64)mem_init();
 
-    u64 root_ppn = ((u64)KERNEL_MMU_TABLE) >> 12;
-    u64 satp_val = (((u64)8) << 60) | root_ppn;
+    u64 satp_val = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
 
     printf("Entering supervisor mode...");
     return satp_val;
@@ -137,6 +151,8 @@ void kinit_hart(u64 hartid)
 
 }
 
+u64 current_thread = 4;
+
 u64 m_trap(
     u64 epc,
     u64 tval,
@@ -146,14 +162,6 @@ u64 m_trap(
     TrapFrame* frame
     )
 {
-    printf("args:\n  epc: %x\n  tval: %x\n  cause: %x\n  hart: %x\n  status: %x\n  frame: %x\n",
-            epc, tval, cause, hart, status, frame);
-    printf("frame:\n regs:\n");
-    for(u64 i = 0; i < 32; i++) { printf("  x%lld: %lx\n", i, frame->regs[i]); }
-    printf(" fregs:\n");
-    for(u64 i = 0; i < 32; i++) { printf("  f%lld: %lx\n", i, frame->fregs[i]); }
-    printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
-
     u64 async = (cause >> 63) & 1 == 1;
     u64 cause_num = cause & 0xfff;
     u64 return_pc = epc;
@@ -176,7 +184,22 @@ u64 m_trap(
                 printf("Supervisor timer interrupt CPU%lld\n", hart);
         }
         else if(cause_num == 7) {
+            KERNEL_PROCCESS_ARRAY[0]->threads[current_thread].frame = *frame;
+            KERNEL_PROCCESS_ARRAY[0]->threads[current_thread].program_counter = return_pc;
+
+            if(current_thread != 0) { current_thread = 0; }
+            else { current_thread = 1; }
+
                 printf("Machine timer interrupt CPU%lld\n", hart);
+            Proccess* proc = KERNEL_PROCCESS_ARRAY[0];
+            Thread* thread = &proc->threads[current_thread];
+            *frame = thread->frame;
+
+            u64* mtimecmp = (u64*)0x02004000;
+            u64* mtime = (u64*)0x0200bff8;
+            *mtimecmp = *mtime + 10000000;
+
+            return thread->program_counter;
         }
         else if(cause_num == 8) {
                 printf("User external interrupt CPU%lld\n", hart);
@@ -245,6 +268,14 @@ u64 m_trap(
                 printf("Interrupt: Store/AMO page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
         }
     }
+
+    printf("args:\n  epc: %x\n  tval: %x\n  cause: %x\n  hart: %x\n  status: %x\n  frame: %x\n",
+            epc, tval, cause, hart, status, frame);
+    printf("frame:\n regs:\n");
+    for(u64 i = 0; i < 32; i++) { printf("  x%lld: %lx\n", i, frame->regs[i]); }
+    printf(" fregs:\n");
+    for(u64 i = 0; i < 32; i++) { printf("  f%lld: %lx\n", i, frame->fregs[i]); }
+    printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
 
     while(1) {}
 }

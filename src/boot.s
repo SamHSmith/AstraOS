@@ -77,7 +77,7 @@ kpost_init:
 	csrw	sepc, t1
 
 	# Setting `mie` (machine interrupt enable) register:
-    li t2, 1 << 11
+    li t2, (1 << 11) | (1 << 7) 
     csrw mie, t2
 
 

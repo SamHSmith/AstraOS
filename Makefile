@@ -1,5 +1,5 @@
 CFLAGS= -g -mcmodel=medany -Wall
-CFLAGS+=-static -ffreestanding -nostdlib 
+CFLAGS+=-static -ffreestanding -nostdlib
 CFLAGS+=-march=rv64gc -mabi=lp64
 LDFLAGS=
 DRIVE=hdd.dsk

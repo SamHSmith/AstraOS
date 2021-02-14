@@ -67,15 +67,26 @@ u64 proccess_create()
     return index;
 }
 
+u64 mmu_table_ptr_to_satp(u64* mmu_table)
+{
+    u64 root_ppn = ((u64)mmu_table) >> 12;
+    u64 satp_val = (((u64)8) << 60) | root_ppn;
+    return satp_val;
+}
+
 u32 proccess_thread_create(u64 pid)
 {
     assert(pid < KERNEL_PROCCESS_ARRAY_LEN, "pid is within range");
     assert(KERNEL_PROCCESS_ARRAY[pid]->mmu_table != 0, "pid refers to a valid proccess");
+
+    u64 thread_satp = mmu_table_ptr_to_satp(KERNEL_PROCCESS_ARRAY[pid]->mmu_table);
+
     for(u32 i = 0; i < KERNEL_PROCCESS_ARRAY[pid]->thread_count; i++)
     {
         if(KERNEL_PROCCESS_ARRAY[pid]->threads[i].thread_state == THREAD_STATE_UNINITIALIZED)
         {
             KERNEL_PROCCESS_ARRAY[pid]->threads[i].thread_state = THREAD_STATE_INITIALIZED;
+            KERNEL_PROCCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
             return i;
         }
     }
@@ -97,14 +108,82 @@ u32 proccess_thread_create(u64 pid)
     KERNEL_PROCCESS_ARRAY[pid]->thread_count += 1;
 
     KERNEL_PROCCESS_ARRAY[pid]->threads[tid].thread_state = THREAD_STATE_INITIALIZED;
+    KERNEL_PROCCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
     return tid;
 }
+
+void thread1_func();
+void thread2_func();
 
 void proccess_init()
 {
     //for(u64 i = 0; i < 600; i++) { printf("creating procces #%ld\n", proccess_create()); }
 
     u64 pid = proccess_create();
+
+    u64* table = KERNEL_PROCCESS_ARRAY[pid]->mmu_table;
+
+    mmu_kernel_map_range(table, (u64*)TEXT_START, (u64*)TEXT_END,                   2 + 8); //read + execute
+    mmu_kernel_map_range(table, (u64*)RODATA_START, (u64*)RODATA_END,               2    ); //readonly
+    mmu_kernel_map_range(table, (u64*)DATA_START, (u64*)DATA_END,                   2 + 4); //read + write
+    mmu_kernel_map_range(table, (u64*)BSS_START, (u64*)BSS_END,                     2 + 4);
+
+    mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
+
     u32 thread1 = proccess_thread_create(pid);
     u32 thread2 = proccess_thread_create(pid);
+
+    Thread* tarr = KERNEL_PROCCESS_ARRAY[pid]->threads;
+
+    tarr[thread1].stack_alloc = kalloc_pages(4);
+    tarr[thread1].frame.regs[2] = 
+        ((u64)tarr[thread1].stack_alloc.memory) + tarr[thread1].stack_alloc.page_count * PAGE_SIZE;
+    mmu_kernel_map_range(
+            table,
+            (u64*)tarr[thread1].stack_alloc.memory,
+            (u64*)tarr[thread1].frame.regs[2],
+            2 + 4
+        );
+
+    tarr[thread2].stack_alloc = kalloc_pages(4);
+    tarr[thread2].frame.regs[2] = 
+        ((u64)tarr[thread2].stack_alloc.memory) + tarr[thread2].stack_alloc.page_count * PAGE_SIZE;
+    mmu_kernel_map_range(
+            table,
+            (u64*)tarr[thread2].stack_alloc.memory,
+            (u64*)tarr[thread2].frame.regs[2],
+            2 + 4
+        );
+
+    tarr[thread1].program_counter = (u64)thread1_func;
+    tarr[thread2].program_counter = (u64)thread2_func;
+
+    u64* mtimecmp = (u64*)0x02004000;
+    u64* mtime = (u64*)0x0200bff8;
+
+    *mtimecmp = *mtime + 10000000;
+}
+
+
+
+void thread1_func()
+{
+    u64 times = 1;
+    while(1)
+    {
+        for(u64 i = 0; i < 90000000; i++) {}
+        printf("thread1 is doing stuff. #%lld times!\n", times);
+        times++;
+    }
+}
+
+void thread2_func()
+{
+    u64 times = 1;
+    while(1)
+    {
+        for(u64 i = 0; i < 500000000; i++) {}
+        printf(" ******** thread2 is ALSO doing stuff!!! ********* #%lld many times!!!!!!!! \n", times);
+        times++;
+    }
 }

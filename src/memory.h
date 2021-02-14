@@ -361,6 +361,9 @@ u64* mem_init()
     //Map the uart
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
 
+    //Map the clint
+    mmu_kernel_map_range(table, 0x02000000, 0x0200ffff, 2 + 4);
+
     //Map the plic
     mmu_kernel_map_range(table, (u64*)0x0c000000, (u64*)0x0c002001, 2 + 4);
     mmu_kernel_map_range(table, (u64*)0x0c200000, (u64*)0x0c208001, 2 + 4);
