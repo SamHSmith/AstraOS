@@ -161,9 +161,18 @@ void proccess_init()
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;
 
-    *mtimecmp = *mtime + 10000000;
+    *mtimecmp = *mtime;
 }
 
+Thread* kernel_current_thread;
+
+u64 current_thread = 55;
+Thread* kernel_choose_new_thread()
+{
+    if(current_thread != 0) { current_thread = 0; }
+    else { current_thread = 1; }
+    return &KERNEL_PROCCESS_ARRAY[0]->threads[current_thread];
+}
 
 
 void thread1_func()

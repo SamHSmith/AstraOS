@@ -151,8 +151,6 @@ void kinit_hart(u64 hartid)
 
 }
 
-u64 current_thread = 4;
-
 u64 m_trap(
     u64 epc,
     u64 tval,
@@ -184,22 +182,25 @@ u64 m_trap(
                 printf("Supervisor timer interrupt CPU%lld\n", hart);
         }
         else if(cause_num == 7) {
-            KERNEL_PROCCESS_ARRAY[0]->threads[current_thread].frame = *frame;
-            KERNEL_PROCCESS_ARRAY[0]->threads[current_thread].program_counter = return_pc;
+            // Store thread
+            if(kernel_current_thread != 0)
+            {
+                kernel_current_thread->frame = *frame;
+                kernel_current_thread->program_counter = return_pc;
+            }
 
-            if(current_thread != 0) { current_thread = 0; }
-            else { current_thread = 1; }
+            kernel_current_thread = kernel_choose_new_thread();
 
-                printf("Machine timer interrupt CPU%lld\n", hart);
-            Proccess* proc = KERNEL_PROCCESS_ARRAY[0];
-            Thread* thread = &proc->threads[current_thread];
-            *frame = thread->frame;
+            // Load thread
+            *frame = kernel_current_thread->frame;
+            return_pc = kernel_current_thread->program_counter;
 
+            // Reset the Machine Timer
             u64* mtimecmp = (u64*)0x02004000;
             u64* mtime = (u64*)0x0200bff8;
-            *mtimecmp = *mtime + 10000000;
+            *mtimecmp = *mtime + 10000000 / 600;
 
-            return thread->program_counter;
+            return return_pc;
         }
         else if(cause_num == 8) {
                 printf("User external interrupt CPU%lld\n", hart);
