@@ -15,12 +15,13 @@ typedef struct Thread
     Kallocation stack_alloc;
     u64 program_counter;
     u64 thread_state;
+    u64 proccess_pid;
 } Thread;
 
 typedef struct Proccess
 {
     Kallocation proc_alloc;
-    u64* mmu_table;
+    u64* mmu_table; // does not change during the lifetime of the proccess
     u32 thread_count;
     Thread threads[];
 } Proccess;
@@ -87,6 +88,7 @@ u32 proccess_thread_create(u64 pid)
         {
             KERNEL_PROCCESS_ARRAY[pid]->threads[i].thread_state = THREAD_STATE_INITIALIZED;
             KERNEL_PROCCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
+            KERNEL_PROCCESS_ARRAY[pid]->threads[i].proccess_pid = pid;
             return i;
         }
     }
@@ -109,6 +111,7 @@ u32 proccess_thread_create(u64 pid)
 
     KERNEL_PROCCESS_ARRAY[pid]->threads[tid].thread_state = THREAD_STATE_INITIALIZED;
     KERNEL_PROCCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
+    KERNEL_PROCCESS_ARRAY[pid]->threads[tid].proccess_pid = pid;
     return tid;
 }
 
