@@ -131,6 +131,8 @@ void proccess_init()
     mmu_kernel_map_range(table, (u64*)DATA_START, (u64*)DATA_END,                   2 + 4); //read + write
     mmu_kernel_map_range(table, (u64*)BSS_START, (u64*)BSS_END,                     2 + 4);
 
+mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
+
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
 
     u32 thread1 = proccess_thread_create(pid);
@@ -165,6 +167,8 @@ void proccess_init()
     u64* mtime = (u64*)0x0200bff8;
 
     *mtimecmp = *mtime;
+
+    while(1) {}
 }
 
 Thread* kernel_current_thread;
@@ -177,16 +181,38 @@ Thread* kernel_choose_new_thread()
     return &KERNEL_PROCCESS_ARRAY[0]->threads[current_thread];
 }
 
+Surface surface;
 
 void thread1_func()
 {
-    u64 times = 1;
-    while(1)
+u64 ball = 0;
+while(1) {
+    while(!surface_has_commited(surface))
     {
-        for(u64 i = 0; i < 90000000; i++) {}
-        printf("thread1 is doing stuff. #%lld times!\n", times);
-        times++;
+        Framebuffer* fb = surface.fb_draw; // Acquire
+        for(u64 i = 0; i < fb->width * fb->height; i++)
+        {
+            if((i % 100) == ball)
+            {
+                fb->data[i*4 + 0] = 0.0;
+                fb->data[i*4 + 1] = 1.0;
+                fb->data[i*4 + 2] = 1.0;
+                fb->data[i*4 + 3] = 1.0;
+            }
+            else
+            {
+                fb->data[i*4 + 0] = 0.0;
+                fb->data[i*4 + 1] = 0.0;
+                fb->data[i*4 + 2] = 0.0;
+                fb->data[i*4 + 3] = 1.0;
+            }
+        }
+        ball += 1;
+        if(ball >= 100) { ball = 0; }
+
+        surface_commit(&surface);
     }
+}
 }
 
 void thread2_func()

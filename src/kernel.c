@@ -9,6 +9,7 @@ void _putchar(char c)
 
 #include "memory.h"
 #include "plic.h"
+#include "video.h"
 #include "proccess.h"
 
 // --- Lib maybe? ---
@@ -68,43 +69,6 @@ void kmain()
     printf("done.\n    Successfully entered kmain with supervisor mode enabled.\n\n");
     uart_write_string("Hello there, welcome to the ROS operating system\nYou have no idea the pain I went through to make these characters you type appear on screen\n\n");
 
-Kallocation a1 = kalloc_pages(65);
-void* memory = kalloc_single_page();
-
-kfree_pages(a1);
-
-float f = 0.4;
-//printf("%f + 4.2 = %f\n", f, f + 4.2);
-float b = f + 2.3;
-
-char* dave = "davey";
-printf("writing to readonly memory: %p\n", dave +2);
-// dave[2] = 'p'; // this causes a kernel trap
-printf("%s\n", dave);
-
-kfree_single_page(memory);
-
-uart_write_string("finished doing mem test\n");
-
-u64* table = kalloc_single_page();
-
-mmu_map(table, 401*4096, 20012*4096, 2+4, 0);
-mmu_map(table, 403*4096, 212*4096, 2+4, 0);
-
-mmu_map(table, 520*4096, 51200000*4096, 2+4, 1);
-
-u64 physical = 0;
-//assert(mmu_virt_to_phys(table, 400*4096, &physical) == 0, "invalid virtual address");
-
-for(u64 i = 799; i < 1100; i++)
-{
-    if(mmu_virt_to_phys(table, i << 11, &physical) == 0)
-    { printf("%p -> %p\n", i << 11, physical); }
-    else
-    { printf("segv"); }
-}
-
-mmu_unmap(table);
 
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)
@@ -137,19 +101,17 @@ mmu_unmap(table);
     plic_interrupt_enable(10);
     plic_interrupt_set_priority(10, 1);
 
-    proccess_init();
+    surface = surface_create();
 
-    while(1)
-    {
-        printf("doing stuff");
-        for(u64 i = 0; i < 120000000; i++) {}
-    }
+    proccess_init();
 }
 
 void kinit_hart(u64 hartid)
 {
 
 }
+
+Framebuffer* framebuffer = 0;
 
 u64 m_trap(
     u64 epc,
@@ -210,14 +172,53 @@ u64 m_trap(
         }
         else if(cause_num == 11)
         {
-            printf("Machine external interrupt CPU%lld\n", hart);
+//            printf("Machine external interrupt CPU%lld\n", hart);
             u32 interrupt;
             char character;
             while(plic_interrupt_next(&interrupt))
             {
                 if(interrupt == 10 && uart_read(&character, 1))
                 {
-                    printf("you typed the character: %c\n", character);
+                    if(character == 'a')
+                    {
+                        u16 width, height;
+                        uart_read_blocking(&width, 2);
+                        uart_read_blocking(&height, 2);
+                        surface.width = width;
+                        surface.height = height;
+
+                        if(framebuffer == 0)
+                        { framebuffer = framebuffer_create(width, height); }
+                        else if(framebuffer->width != width || framebuffer->height != height)
+                        {
+                            kfree_pages(framebuffer->alloc);
+                            framebuffer = framebuffer_create(width, height);
+                        }
+
+                        if(surface_has_commited(surface))
+                        {
+                            Framebuffer* temp = framebuffer;
+                            framebuffer = surface.fb_present;
+                            surface.fb_present = temp;
+                            surface.has_commited = 0;
+                        }
+
+                        for(u64 i = 0; i < (width * height) >> 3; i++)
+                        {
+                            u8 r=0, g=0, b=0;
+                            for(u64 j = 0; j < 8; j++)
+                            {
+                                r |= (framebuffer->data[4*(i*8 + j) + 0] > 0.0) << j;
+                                g |= (framebuffer->data[4*(i*8 + j) + 1] > 0.0) << j;
+                                b |= (framebuffer->data[4*(i*8 + j) + 2] > 0.0) << j;
+                            }
+                            uart_write(&r, 1);
+                            uart_write(&g, 1);
+                            uart_write(&b, 1);
+                        }
+                    } else {
+                        printf("you typed the character: %c\n", character);
+                    }
                 }
                 plic_interrupt_complete(interrupt);
             }

@@ -3,7 +3,11 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#include <sys/time.h>
+
 #include <unistd.h>
+#include <signal.h>
+#include <fcntl.h>
 
 int main()
 {
@@ -11,8 +15,8 @@ int main()
 		fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
 	}
-
-	SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 267, 150, SDL_WINDOW_SHOWN);
+    int size = 13;
+    SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 16*size, 9*size, SDL_WINDOW_SHOWN);
 	if (win == NULL) {
 		fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
@@ -29,23 +33,35 @@ int main()
 	}
 
     int pipefds[2];
+    int inpipefds[2];
     pipe(pipefds);
+    pipe(inpipefds);
     pid_t pid;
 
     pid = fork();
     if(pid)
     {
         close(pipefds[1]);
+        close(inpipefds[0]);
     }
     else // child
     {
         close(pipefds[0]);
+        close(inpipefds[1]);
         dup2(pipefds[1], STDOUT_FILENO);
+        dup2(inpipefds[0], STDIN_FILENO);
         chdir("..");
         execlp("make", "make", "run");
-//        execlp("find", "find", "/");
         exit(0);
     }
+
+    int flags = fcntl(pipefds[0], F_GETFL, 0);
+    fcntl(pipefds[0], F_SETFL, flags | O_NONBLOCK);
+
+    int frame_counter = 0;
+    double total_secs = 0.0;
+
+    SDL_Delay(500);
 
     int running = 1;
     while(running)
@@ -60,27 +76,64 @@ int main()
         SDL_SetRenderDrawColor(ren, 0,0,0,255);
         SDL_RenderClear(ren);
 
-        int width, height;
-        SDL_GetWindowSize(win, &width, &height);
-
         unsigned char c = 0;
-        int s = 0;
+        while(read(pipefds[0], &c, 1) != -1)
+        {
+            write(STDOUT_FILENO, &c, 1);
+        }
+
+        struct timeval start, stop;
+        gettimeofday(&start, NULL);
+
+        c = 'a';
+        write(inpipefds[1], &c, 1);
+
+        int w, h;
+        SDL_GetWindowSize(win, &w, &h);
+        unsigned int width = w, height = h;
+
+        c = width & 0xFF;
+        write(inpipefds[1], &c, 1);
+        c = (width >> 8) & 0xFF;
+        write(inpipefds[1], &c, 1);
+
+        c = height & 0xFF;
+        write(inpipefds[1], &c, 1);
+        c = (height >> 8) & 0xFF;
+        write(inpipefds[1], &c, 1);
+
+        int s = 8;
+        unsigned char r = 0,g = 0,b = 0;
         for(int y = 0; y < height; y++)
         {
             for(int x = 0; x < width; x++)
             {
-                if(s)
-                { c = c >> 4; s = 0; }
-                else
+                if(s >= 8)
                 {
-                    read(pipefds[0], &c, 1);
-                    s = 1;
+                    while(read(pipefds[0], &r, 1) == -1) {}
+                    while(read(pipefds[0], &g, 1) == -1) {}
+                    while(read(pipefds[0], &b, 1) == -1) {}
+                    s = 0;
                 }
                 
-                SDL_SetRenderDrawColor(ren, 255*((c & 8)!=0), 255*((c & 4)!=0),
-                                            255*((c & 2)!=0), 255*((c & 1)!=0));
+                SDL_SetRenderDrawColor(ren, 255*((r & (1 << s))!=0),
+                                            255*((g & (1 << s))!=0),
+                                            255*((b & (1 << s))!=0),
+                                            255);
                 SDL_RenderDrawPoint(ren, x, y);
+                s++;
             }
+        }
+
+        gettimeofday(&stop, NULL);
+        frame_counter += 1;
+        total_secs += (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec);
+
+        if(frame_counter > 60 * 10)
+        {
+            printf("Avg frame time(ms) = %lf\n", 1000.0 * total_secs / (double)frame_counter);
+            frame_counter = 0;
+            total_secs = 0.0;
         }
 
         SDL_RenderPresent(ren);
@@ -89,6 +142,8 @@ int main()
 	SDL_DestroyRenderer(ren);
 	SDL_DestroyWindow(win);
 	SDL_Quit();
+
+    kill(pid, SIGKILL);
 
 	return EXIT_SUCCESS;
 }

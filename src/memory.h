@@ -98,7 +98,7 @@ typedef struct Kallocation
 Kallocation kalloc_pages(u64 page_count)
 {
     if(page_count == 0) { Kallocation al = {0}; return al; }
-    u64 a_size = 0;
+    s64 a_size = 0;
     for(u64 i = 0; i < 64; i++)
     {
         u64 temp = (((u64)1) << (63 - i));
@@ -109,6 +109,8 @@ Kallocation kalloc_pages(u64 page_count)
             break;
         }
     }
+
+    if(a_size < 0) { Kallocation al = {0}; return al; }
 
     u64 allocation_splits = 0;
     for(u64 i = 0; i < ALLOCATION_SPLIT_COUNT; i++)

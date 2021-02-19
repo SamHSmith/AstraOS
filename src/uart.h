@@ -38,3 +38,14 @@ u64 uart_read(u8* data, u64 len)
     }
     return len;
 }
+
+void uart_read_blocking(u8* data, u64 len)
+{
+    for(u64 i = 0; i < len;)
+    {
+        if((*(UART_BASE_ADDRESS + 5) & 1) == 0)
+        { continue; }
+        data[i] = *UART_BASE_ADDRESS;
+        i++;
+    }
+}
