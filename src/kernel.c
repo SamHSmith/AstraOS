@@ -160,7 +160,7 @@ u64 m_trap(
             // Reset the Machine Timer
             u64* mtimecmp = (u64*)0x02004000;
             u64* mtime = (u64*)0x0200bff8;
-            *mtimecmp = *mtime + 10000000 / 600;
+            *mtimecmp = *mtime + 10000000 / 500;
 
             return return_pc;
         }
@@ -186,6 +186,7 @@ u64 m_trap(
                         uart_read_blocking(&height, 2);
                         surface.width = width;
                         surface.height = height;
+                        u8 frame_dropped = 1;
 
                         if(framebuffer == 0)
                         { framebuffer = framebuffer_create(width, height); }
@@ -201,6 +202,7 @@ u64 m_trap(
                             framebuffer = surface.fb_present;
                             surface.fb_present = temp;
                             surface.has_commited = 0;
+                            frame_dropped = 0;
                         }
 
                         for(u64 i = 0; i < (width * height) >> 3; i++)
@@ -216,6 +218,7 @@ u64 m_trap(
                             uart_write(&g, 1);
                             uart_write(&b, 1);
                         }
+                        if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
                     } else {
                         printf("you typed the character: %c\n", character);
                     }

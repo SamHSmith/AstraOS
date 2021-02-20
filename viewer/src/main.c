@@ -15,7 +15,7 @@ int main()
 		fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
 	}
-    int size = 13;
+    int size = 14;
     SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 16*size, 9*size, SDL_WINDOW_SHOWN);
 	if (win == NULL) {
 		fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
@@ -60,6 +60,7 @@ int main()
 
     int frame_counter = 0;
     double total_secs = 0.0;
+    double longest_frame = 0.0;
 
     SDL_Delay(500);
 
@@ -127,13 +128,17 @@ int main()
 
         gettimeofday(&stop, NULL);
         frame_counter += 1;
-        total_secs += (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec);
+        double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec);
+        total_secs += secs;
+        if(secs > longest_frame) { longest_frame = secs; }
 
-        if(frame_counter > 60 * 10)
+        if(frame_counter >= 60 * 8)
         {
             printf("Avg frame time(ms) = %lf\n", 1000.0 * total_secs / (double)frame_counter);
+            printf("Longest frame(ms) = %lf\n", 1000.0 * longest_frame);
             frame_counter = 0;
             total_secs = 0.0;
+            longest_frame = 0.0;
         }
 
         SDL_RenderPresent(ren);
