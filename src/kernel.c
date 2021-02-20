@@ -158,9 +158,9 @@ u64 m_trap(
             return_pc = kernel_current_thread->program_counter;
 
             // Reset the Machine Timer
-            u64* mtimecmp = (u64*)0x02004000;
-            u64* mtime = (u64*)0x0200bff8;
-            *mtimecmp = *mtime + 10000000 / 500;
+            volatile u64* mtimecmp = (u64*)0x02004000;
+            volatile u64* mtime = (u64*)0x0200bff8;
+            *mtimecmp = *mtime + 10000000 / 10000;
 
             return return_pc;
         }

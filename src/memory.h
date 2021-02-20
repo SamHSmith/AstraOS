@@ -12,16 +12,16 @@ extern u64 BSS_END;
 extern u64 KERNEL_STACK_START;
 extern u64 KERNEL_STACK_END;
  
-#define K_HEAP_START (*(((u64*)HEAP_START) + 0))
-#define K_PAGE_COUNT (*(((u64*)HEAP_START) + 1))
-#define K_TABLE_COUNT (*(((u64*)HEAP_START) + 2))
+#define K_HEAP_START (*(((volatile u64*)HEAP_START) + 0))
+#define K_PAGE_COUNT (*(((volatile u64*)HEAP_START) + 1))
+#define K_TABLE_COUNT (*(((volatile u64*)HEAP_START) + 2))
 
 struct KmemTable
 {
     u64 table_len;
     u8 data[];
 };
-#define K_MEMTABLES ((struct KmemTable**)((u64*)HEAP_START + 3))
+#define K_MEMTABLES ((volatile struct KmemTable**)((u64*)HEAP_START + 3))
 
 #define PAGE_SIZE 4096
 #define ALLOCATION_SPLIT_COUNT 3

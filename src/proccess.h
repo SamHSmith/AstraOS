@@ -181,7 +181,7 @@ Thread* kernel_choose_new_thread()
     return &KERNEL_PROCCESS_ARRAY[0]->threads[current_thread];
 }
 
-Surface surface;
+volatile Surface surface;
 
 void thread1_func()
 {

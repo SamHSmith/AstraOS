@@ -62,7 +62,7 @@ int main()
     double total_secs = 0.0;
     double longest_frame = 0.0;
 
-    SDL_Delay(500);
+    SDL_Delay(1000);
 
     int running = 1;
     while(running)
@@ -132,10 +132,10 @@ int main()
         total_secs += secs;
         if(secs > longest_frame) { longest_frame = secs; }
 
-        if(frame_counter >= 60 * 8)
+        if(frame_counter >= 60 * 20)
         {
-            printf("Avg frame time(ms) = %lf\n", 1000.0 * total_secs / (double)frame_counter);
-            printf("Longest frame(ms) = %lf\n", 1000.0 * longest_frame);
+            printf("Viewer: Avg frame time(ms) = %lf\n", 1000.0 * total_secs / (double)frame_counter);
+            printf("Viewer:  Longest frame(ms) = %lf\n", 1000.0 * longest_frame);
             frame_counter = 0;
             total_secs = 0.0;
             longest_frame = 0.0;

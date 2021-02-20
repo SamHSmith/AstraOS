@@ -27,8 +27,8 @@ typedef struct
 {
     u32 width;
     u32 height;
-    Framebuffer* fb_present;
-    Framebuffer* fb_draw;
+    volatile Framebuffer* fb_present;
+    volatile Framebuffer* fb_draw;
     u8 has_commited;
 } Surface;
 
@@ -47,7 +47,7 @@ u8 surface_has_commited(Surface s)
 
 void surface_commit(Surface* s)
 {
-    Framebuffer* temp = s->fb_present;
+    volatile Framebuffer* temp = s->fb_present;
     s->fb_present = s->fb_draw;
 
     if(temp->width != s->width || temp->height != s->height)
