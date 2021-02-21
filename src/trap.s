@@ -113,5 +113,7 @@ m_trap_vector:
 
     addi sp, sp, 65*8
 
-	mret
+    sfence.vma
+
+    mret
 

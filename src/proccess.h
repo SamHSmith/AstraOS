@@ -1,5 +1,5 @@
 
-typedef struct TrapFrame
+typedef struct
 {
     u64 regs[32];
     u64 fregs[32];
@@ -9,7 +9,7 @@ typedef struct TrapFrame
 #define THREAD_STATE_UNINITIALIZED 0
 #define THREAD_STATE_INITIALIZED 1
 #define THREAD_STATE_RUNNING 2
-typedef struct Thread
+typedef struct
 {
     TrapFrame frame;
     Kallocation stack_alloc;
@@ -18,7 +18,7 @@ typedef struct Thread
     u64 proccess_pid;
 } Thread;
 
-typedef struct Proccess
+typedef struct
 {
     Kallocation proc_alloc;
     u64* mmu_table; // does not change during the lifetime of the proccess
@@ -131,7 +131,7 @@ void proccess_init()
     mmu_kernel_map_range(table, (u64*)DATA_START, (u64*)DATA_END,                   2 + 4); //read + write
     mmu_kernel_map_range(table, (u64*)BSS_START, (u64*)BSS_END,                     2 + 4);
 
-mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
+//mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
 
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
 
@@ -181,47 +181,3 @@ Thread* kernel_choose_new_thread()
     return &KERNEL_PROCCESS_ARRAY[0]->threads[current_thread];
 }
 
-volatile Surface surface;
-
-void thread1_func()
-{
-u64 ball = 0;
-while(1) {
-    while(!surface_has_commited(surface))
-    {
-        Framebuffer* fb = surface.fb_draw; // Acquire
-        for(u64 i = 0; i < fb->width * fb->height; i++)
-        {
-            if((i % 100) == ball)
-            {
-                fb->data[i*4 + 0] = 0.0;
-                fb->data[i*4 + 1] = 1.0;
-                fb->data[i*4 + 2] = 1.0;
-                fb->data[i*4 + 3] = 1.0;
-            }
-            else
-            {
-                fb->data[i*4 + 0] = 0.0;
-                fb->data[i*4 + 1] = 0.0;
-                fb->data[i*4 + 2] = 0.0;
-                fb->data[i*4 + 3] = 1.0;
-            }
-        }
-        ball += 1;
-        if(ball >= 100) { ball = 0; }
-
-        surface_commit(&surface);
-    }
-}
-}
-
-void thread2_func()
-{
-    u64 times = 1;
-    while(1)
-    {
-        for(u64 i = 0; i < 500000000; i++) {}
-        printf(" ******** thread2 is ALSO doing stuff!!! ********* #%lld many times!!!!!!!! \n", times);
-        times++;
-    }
-}

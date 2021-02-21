@@ -266,7 +266,7 @@ void mmu_kernel_map_range(u64* root, void* start, void* end, u64 bits)
     }
 }
  
-void mmu_unmap(u64* root)
+void mmu_unmap_table(u64* root)
 {
     for(u64 lv2 = 0; lv2 < 512; lv2++)
     {
@@ -287,6 +287,20 @@ void mmu_unmap(u64* root)
             }
             kfree_single_page(table_lv1);
         }
+    }
+}
+
+void mmu_map_kallocation(u64* root, Kallocation k, void* vaddr, u64 bits)
+{
+    u64 vmemaddr = ((u64)vaddr) & ~(PAGE_SIZE - 1);
+    u64 memaddr = (u64)k.memory;
+    u64 num_kb_pages = k.page_count;
+
+    for(u64 i = 0; i < num_kb_pages; i++)
+    {
+        mmu_map(root, vmemaddr, memaddr, bits, 0); // TODO: Auto larger pages
+        memaddr += PAGE_SIZE;
+        vmemaddr += PAGE_SIZE;
     }
 }
 

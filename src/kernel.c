@@ -9,8 +9,9 @@ void _putchar(char c)
 
 #include "memory.h"
 #include "plic.h"
-#include "video.h"
 #include "proccess.h"
+#include "video.h"
+#include "syscall.h"
 
 // --- Lib maybe? ---
 u64 strlen(char* str)
@@ -111,6 +112,26 @@ void kinit_hart(u64 hartid)
 
 }
 
+void trap_hang_kernel(
+    u64 epc,
+    u64 tval,
+    u64 cause,
+    u64 hart,
+    u64 status,
+    TrapFrame* frame
+    )
+{
+    printf("args:\n  epc: %x\n  tval: %x\n  cause: %x\n  hart: %x\n  status: %x\n  frame: %x\n",
+            epc, tval, cause, hart, status, frame);
+    printf("frame:\n regs:\n");
+    for(u64 i = 0; i < 32; i++) { printf("  x%lld: %lx\n", i, frame->regs[i]); }
+    printf(" fregs:\n");
+    for(u64 i = 0; i < 32; i++) { printf("  f%lld: %lx\n", i, frame->fregs[i]); }
+    printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
+    printf("Kernel has hung.");
+    while(1) {}
+}
+
 Framebuffer* framebuffer = 0;
 
 u64 m_trap(
@@ -124,51 +145,52 @@ u64 m_trap(
 {
     u64 async = (cause >> 63) & 1 == 1;
     u64 cause_num = cause & 0xfff;
-    u64 return_pc = epc;
+
+    // Store thread
+    if(kernel_current_thread != 0)
+    {
+        kernel_current_thread->frame = *frame;
+        kernel_current_thread->program_counter = epc;
+    }
 
     if(async)
     {
              if(cause_num == 0) {
                 printf("User software interrupt CPU%lld\n", hart);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 1) {
                 printf("Supervisor software interrupt CPU%lld\n", hart);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 3) {
                 printf("Machine software interrupt CPU%lld\n", hart);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 4) {
                 printf("User timer interrupt CPU%lld\n", hart);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 5) {
                 printf("Supervisor timer interrupt CPU%lld\n", hart);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
-            // Store thread
-            if(kernel_current_thread != 0)
-            {
-                kernel_current_thread->frame = *frame;
-                kernel_current_thread->program_counter = return_pc;
-            }
 
             kernel_current_thread = kernel_choose_new_thread();
-
-            // Load thread
-            *frame = kernel_current_thread->frame;
-            return_pc = kernel_current_thread->program_counter;
 
             // Reset the Machine Timer
             volatile u64* mtimecmp = (u64*)0x02004000;
             volatile u64* mtime = (u64*)0x0200bff8;
             *mtimecmp = *mtime + 10000000 / 10000;
-
-            return return_pc;
         }
         else if(cause_num == 8) {
                 printf("User external interrupt CPU%lld\n", hart);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 9) {
                 printf("Supervisor external interrupt CPU%lld\n", hart);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 11)
         {
@@ -225,62 +247,116 @@ u64 m_trap(
                 }
                 plic_interrupt_complete(interrupt);
             }
-            return return_pc;
         }
     }
     else
     {
              if(cause_num == 0) {
                 printf("Interrupt: Instruction address misaligned CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 1) {
                 printf("Interrupt: Instruction access fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 2) {
                 printf("Interrupt: Illegal instruction CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 3) {
                 printf("Interrupt: Breakpoint CPU%lld -> 0x%x\n", hart, epc);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 4) {
                 printf("Interrupt: Load access misaligned CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 5) {
                 printf("Interrupt: Load access fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 6) {
                 printf("Interrupt: Store/AMO address misaligned CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
                 printf("Interrupt: Store/AMO access fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 8) {
                 printf("Interrupt: Environment call from U-mode CPU%lld -> 0x%x\n", hart, epc);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 9) {
-                printf("Interrupt: Environment call from S-mode CPU%lld -> 0x%x\n", hart, epc);
+            do_syscall(&kernel_current_thread);
         }
         else if(cause_num == 11) {
                 printf("Interrupt: Environment call from M-mode CPU%lld -> 0x%x\n", hart, epc);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 12) {
                 printf("Interrupt: Instruction page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 13) {
                 printf("Interrupt: Load page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 15) {
                 printf("Interrupt: Store/AMO page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
     }
 
-    printf("args:\n  epc: %x\n  tval: %x\n  cause: %x\n  hart: %x\n  status: %x\n  frame: %x\n",
-            epc, tval, cause, hart, status, frame);
-    printf("frame:\n regs:\n");
-    for(u64 i = 0; i < 32; i++) { printf("  x%lld: %lx\n", i, frame->regs[i]); }
-    printf(" fregs:\n");
-    for(u64 i = 0; i < 32; i++) { printf("  f%lld: %lx\n", i, frame->fregs[i]); }
-    printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
+    // Load thread
+    *frame = kernel_current_thread->frame;
+    return kernel_current_thread->program_counter;
+}
 
-    while(1) {}
+// To be user code
+
+void user_surface_commit(u64 surface_slot);
+u64 user_surface_acquire(u64 surface_slot, Framebuffer** fb);
+ 
+void thread1_func()
+{
+u64 ball = 0;
+while(1) {
+    Framebuffer* fb;
+    while(user_surface_acquire(42, &fb))
+    {
+        for(u64 i = 0; i < fb->width * fb->height; i++)
+        {
+            if((i % 100) == ball)
+            {
+                fb->data[i*4 + 0] = 0.0;
+                fb->data[i*4 + 1] = 1.0;
+                fb->data[i*4 + 2] = 1.0;
+                fb->data[i*4 + 3] = 1.0;
+            }
+            else
+            {
+                fb->data[i*4 + 0] = 0.0;
+                fb->data[i*4 + 1] = 0.0;
+                fb->data[i*4 + 2] = 0.0;
+                fb->data[i*4 + 3] = 1.0;
+            }
+        }
+        ball += 1;
+        if(ball >= 100) { ball = 0; }
+ 
+        user_surface_commit(42);
+    }
+}
+}
+ 
+void thread2_func()
+{
+    u64 times = 1;
+    while(1)
+    {
+        for(u64 i = 0; i < 380000000; i++) {}
+        printf(" ******** thread2 is ALSO doing stuff!!! ********* #%lld many times!!!!!!!! \n", times);
+        times++;
+    }
 }
