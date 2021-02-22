@@ -50,7 +50,7 @@ int main()
         close(inpipefds[1]);
         dup2(pipefds[1], STDOUT_FILENO);
         dup2(inpipefds[0], STDIN_FILENO);
-        execlp("make", "make", "-C", "..", "run");
+        execl("/bin/sh", "sh", "-c", "cd .. && make run");
         exit(0);
     }
 
