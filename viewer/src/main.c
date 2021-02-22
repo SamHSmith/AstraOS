@@ -158,7 +158,5 @@ int main()
 	SDL_DestroyWindow(win);
 	SDL_Quit();
 
-//    kill(pid, SIGKILL); // Does not compile no void musl for some reason
-
 	return EXIT_SUCCESS;
 }
