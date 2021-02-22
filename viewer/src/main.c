@@ -50,8 +50,7 @@ int main()
         close(inpipefds[1]);
         dup2(pipefds[1], STDOUT_FILENO);
         dup2(inpipefds[0], STDIN_FILENO);
-        chdir("..");
-        execlp("make", "make", "run");
+        execlp("make", "make", "-C", "..", "run");
         exit(0);
     }
 
@@ -62,7 +61,18 @@ int main()
     double total_secs = 0.0;
     double longest_frame = 0.0;
 
-    SDL_Delay(1000);
+    int newlines = 0;
+    unsigned char _c = 0;
+    while(1)
+    {
+        while(read(pipefds[0], &_c, 1) == -1) { SDL_Delay(50); }
+        if(_c == '\n')
+        { newlines++; }
+        else
+        { newlines = 0; }
+        if(newlines >= 5)
+        { break; }
+    }
 
     int running = 1;
     while(running)
@@ -148,7 +158,7 @@ int main()
 	SDL_DestroyWindow(win);
 	SDL_Quit();
 
-    kill(pid, SIGKILL);
+//    kill(pid, SIGKILL); // Does not compile no void musl for some reason
 
 	return EXIT_SUCCESS;
 }

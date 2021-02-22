@@ -104,6 +104,8 @@ void kmain()
 
     surface = surface_create();
 
+    for(s64 i = 0; i < 5; i++) { printf("\n"); } //tells the viewer we have initialized
+
     proccess_init();
 }
 
