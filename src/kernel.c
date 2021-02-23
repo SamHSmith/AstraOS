@@ -178,13 +178,13 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
-
-            kernel_current_thread = kernel_choose_new_thread();
+            u64 dt = 10000000 / 500;
+            kernel_current_thread = kernel_choose_new_thread(dt);
 
             // Reset the Machine Timer
             volatile u64* mtimecmp = (u64*)0x02004000;
             volatile u64* mtime = (u64*)0x0200bff8;
-            *mtimecmp = *mtime + 10000000 / 10000;
+            *mtimecmp = *mtime + dt;
         }
         else if(cause_num == 8) {
                 printf("User external interrupt CPU%lld\n", hart);

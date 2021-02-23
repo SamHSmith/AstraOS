@@ -75,12 +75,33 @@ u64 mmu_table_ptr_to_satp(u64* mmu_table)
     return satp_val;
 }
 
+
+typedef struct
+{
+    u64 pid;
+    u32 tid;
+    u32 state;
+    u64 runtime;
+} ThreadRuntime;
+
+#define THREAD_RUNTIME_UNINITIALIZED 0
+#define THREAD_RUNTIME_RUNNING 1
+#define THREAD_RUNTIME_REMOVE 2
+ 
+Kallocation KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION = {0};
+#define KERNEL_THREAD_RUNTIME_ARRAY ((ThreadRuntime*)KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.memory)
+u64 KERNEL_THREAD_RUNTIME_ARRAY_LEN = 0;
+ 
+
 u32 proccess_thread_create(u64 pid)
 {
     assert(pid < KERNEL_PROCCESS_ARRAY_LEN, "pid is within range");
     assert(KERNEL_PROCCESS_ARRAY[pid]->mmu_table != 0, "pid refers to a valid proccess");
 
     u64 thread_satp = mmu_table_ptr_to_satp(KERNEL_PROCCESS_ARRAY[pid]->mmu_table);
+
+    u8 has_been_allocated = 0;
+    u32 tid = 0;
 
     for(u32 i = 0; i < KERNEL_PROCCESS_ARRAY[pid]->thread_count; i++)
     {
@@ -89,31 +110,141 @@ u32 proccess_thread_create(u64 pid)
             KERNEL_PROCCESS_ARRAY[pid]->threads[i].thread_state = THREAD_STATE_INITIALIZED;
             KERNEL_PROCCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
             KERNEL_PROCCESS_ARRAY[pid]->threads[i].proccess_pid = pid;
-            return i;
+            tid = i;
+            has_been_allocated = 1;
         }
     }
-
-    if(sizeof(Proccess) + (KERNEL_PROCCESS_ARRAY[pid]->thread_count + 1) * sizeof(Thread) > 
-        KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.page_count * PAGE_SIZE)
+    if(!has_been_allocated)
     {
-        Kallocation new_alloc = kalloc_pages(KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.page_count + 1);
-        for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
+        if(sizeof(Proccess) + (KERNEL_PROCCESS_ARRAY[pid]->thread_count + 1) * sizeof(Thread) > 
+            KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.page_count * PAGE_SIZE)
         {
-            *(((u64*)new_alloc.memory) + i) =
-                *(((u64*)KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.memory) + i);
+            Kallocation new_alloc = kalloc_pages(KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.page_count + 1);
+            for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
+            {
+                *(((u64*)new_alloc.memory) + i) =
+                        *(((u64*)KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.memory) + i);
+            }
+            kfree_pages(KERNEL_PROCCESS_ARRAY[pid]->proc_alloc);
+            KERNEL_PROCCESS_ARRAY[pid] = (Proccess*)new_alloc.memory;
+            KERNEL_PROCCESS_ARRAY[pid]->proc_alloc = new_alloc;
         }
-        kfree_pages(KERNEL_PROCCESS_ARRAY[pid]->proc_alloc);
-        KERNEL_PROCCESS_ARRAY[pid] = (Proccess*)new_alloc.memory;
-        KERNEL_PROCCESS_ARRAY[pid]->proc_alloc = new_alloc;
-    }
-    u32 tid = KERNEL_PROCCESS_ARRAY[pid]->thread_count;
-    KERNEL_PROCCESS_ARRAY[pid]->thread_count += 1;
+        tid = KERNEL_PROCCESS_ARRAY[pid]->thread_count;
+        KERNEL_PROCCESS_ARRAY[pid]->thread_count += 1;
 
-    KERNEL_PROCCESS_ARRAY[pid]->threads[tid].thread_state = THREAD_STATE_INITIALIZED;
-    KERNEL_PROCCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
-    KERNEL_PROCCESS_ARRAY[pid]->threads[tid].proccess_pid = pid;
+        KERNEL_PROCCESS_ARRAY[pid]->threads[tid].thread_state = THREAD_STATE_INITIALIZED;
+        KERNEL_PROCCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
+        KERNEL_PROCCESS_ARRAY[pid]->threads[tid].proccess_pid = pid;
+    }
+
+    // Now the thread has been created it has to be allocated a "runtime" so that it can be schedualed
+    u64 runtime = 0;
+    u8 has_runtime = 0;
+
+    for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
+    {
+        if(KERNEL_THREAD_RUNTIME_ARRAY[i].state == THREAD_RUNTIME_UNINITIALIZED)
+        {
+            runtime = i;
+            has_runtime = 1;
+        }
+    }
+    // We maybe must allocate a new runtime
+    if(!has_runtime)
+    {
+        if((KERNEL_THREAD_RUNTIME_ARRAY_LEN + 1) * sizeof(ThreadRuntime) >
+            KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.page_count * PAGE_SIZE)
+        {
+            Kallocation new_alloc = kalloc_pages(KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.page_count + 1);
+            for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
+            {
+                *(((u64*)new_alloc.memory) + i) =
+                        *(((u64*)KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.memory) + i);
+            }
+            kfree_pages(KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION);
+            KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION = new_alloc;
+        }
+
+        runtime = KERNEL_THREAD_RUNTIME_ARRAY_LEN;
+        KERNEL_THREAD_RUNTIME_ARRAY_LEN += 1;
+    }
+    // A new runtime should always be at index 0 since the array is sorted by runtime
+
+    for(u64 i = 0; i < runtime; i++)
+    {
+        KERNEL_THREAD_RUNTIME_ARRAY[runtime - i] = KERNEL_THREAD_RUNTIME_ARRAY[runtime - (i+1)];
+    }
+
+    KERNEL_THREAD_RUNTIME_ARRAY[0].pid = pid;
+    KERNEL_THREAD_RUNTIME_ARRAY[0].tid = tid;
+    KERNEL_THREAD_RUNTIME_ARRAY[0].runtime = 0;
+    KERNEL_THREAD_RUNTIME_ARRAY[0].state = THREAD_RUNTIME_RUNNING;
+
     return tid;
 }
+
+
+Thread* kernel_current_thread;
+
+u64 current_thread_runtime = 0;
+ 
+Thread* kernel_choose_new_thread(u64 time_passed)
+{
+    ThreadRuntime holding = KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime];
+    holding.runtime = time_passed;
+
+    u64 time_to_remove = KERNEL_THREAD_RUNTIME_ARRAY[0].runtime;
+
+    u8 found_new_thread = 0;
+    u64 new_thread_runtime = 0;
+ 
+    for(u64 i = 1; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
+    {
+        KERNEL_THREAD_RUNTIME_ARRAY[i].runtime -= time_to_remove;
+
+        if(i > current_thread_runtime && holding.state != THREAD_RUNTIME_UNINITIALIZED)
+        {
+            if(holding.state == THREAD_RUNTIME_REMOVE ||
+                    holding.runtime >= KERNEL_THREAD_RUNTIME_ARRAY[i].runtime)
+            {
+                KERNEL_THREAD_RUNTIME_ARRAY[i-1] = KERNEL_THREAD_RUNTIME_ARRAY[i];
+            }
+            else
+            {
+                KERNEL_THREAD_RUNTIME_ARRAY[i-1] = holding;
+                holding.state = THREAD_RUNTIME_UNINITIALIZED;
+            }
+        }
+
+        if((!found_new_thread) && KERNEL_THREAD_RUNTIME_ARRAY[i-1].state == THREAD_RUNTIME_RUNNING)
+        {
+            found_new_thread = 1;
+            new_thread_runtime = i-1;
+        }
+    }
+
+    if(holding.state == THREAD_RUNTIME_REMOVE)
+    {
+        KERNEL_THREAD_RUNTIME_ARRAY_LEN -= 1;
+    }
+    else if(holding.state != THREAD_RUNTIME_UNINITIALIZED)
+    {
+        KERNEL_THREAD_RUNTIME_ARRAY[KERNEL_THREAD_RUNTIME_ARRAY_LEN-1] = holding;
+    }
+    
+
+    if((!found_new_thread) &&
+        KERNEL_THREAD_RUNTIME_ARRAY[KERNEL_THREAD_RUNTIME_ARRAY_LEN-1].state == THREAD_RUNTIME_RUNNING)
+    {
+        found_new_thread = 1;
+        new_thread_runtime = KERNEL_THREAD_RUNTIME_ARRAY_LEN-1;
+    }
+    current_thread_runtime = new_thread_runtime;
+
+    ThreadRuntime runtime = KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime];
+    return &KERNEL_PROCCESS_ARRAY[runtime.pid]->threads[runtime.tid];
+}
+
 
 void thread1_func();
 void thread2_func();
@@ -135,8 +266,8 @@ void proccess_init()
 
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
 
-    u32 thread1 = proccess_thread_create(pid);
     u32 thread2 = proccess_thread_create(pid);
+    u32 thread1 = proccess_thread_create(pid);
 
     Thread* tarr = KERNEL_PROCCESS_ARRAY[pid]->threads;
 
@@ -171,13 +302,4 @@ void proccess_init()
     while(1) {}
 }
 
-Thread* kernel_current_thread;
-
-u64 current_thread = 55;
-Thread* kernel_choose_new_thread()
-{
-    if(current_thread != 0) { current_thread = 0; }
-    else { current_thread = 1; }
-    return &KERNEL_PROCCESS_ARRAY[0]->threads[current_thread];
-}
 
