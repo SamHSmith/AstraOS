@@ -86,7 +86,6 @@ typedef struct
 
 #define THREAD_RUNTIME_UNINITIALIZED 0
 #define THREAD_RUNTIME_RUNNING 1
-#define THREAD_RUNTIME_REMOVE 2
  
 Kallocation KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION = {0};
 #define KERNEL_THREAD_RUNTIME_ARRAY ((ThreadRuntime*)KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.memory)
@@ -168,17 +167,11 @@ u32 proccess_thread_create(u64 pid)
         runtime = KERNEL_THREAD_RUNTIME_ARRAY_LEN;
         KERNEL_THREAD_RUNTIME_ARRAY_LEN += 1;
     }
-    // A new runtime should always be at index 0 since the array is sorted by runtime
 
-    for(u64 i = 0; i < runtime; i++)
-    {
-        KERNEL_THREAD_RUNTIME_ARRAY[runtime - i] = KERNEL_THREAD_RUNTIME_ARRAY[runtime - (i+1)];
-    }
-
-    KERNEL_THREAD_RUNTIME_ARRAY[0].pid = pid;
-    KERNEL_THREAD_RUNTIME_ARRAY[0].tid = tid;
-    KERNEL_THREAD_RUNTIME_ARRAY[0].runtime = 0;
-    KERNEL_THREAD_RUNTIME_ARRAY[0].state = THREAD_RUNTIME_RUNNING;
+    KERNEL_THREAD_RUNTIME_ARRAY[runtime].pid = pid;
+    KERNEL_THREAD_RUNTIME_ARRAY[runtime].tid = tid;
+    KERNEL_THREAD_RUNTIME_ARRAY[runtime].runtime = 0;
+    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_RUNNING;
 
     return tid;
 }
@@ -187,58 +180,37 @@ u32 proccess_thread_create(u64 pid)
 Thread* kernel_current_thread;
 
 u64 current_thread_runtime = 0;
+u64 previous_lowest_runtime = 0;
  
 Thread* kernel_choose_new_thread(u64 time_passed)
 {
-    ThreadRuntime holding = KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime];
-    holding.runtime = time_passed;
+    KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime += time_passed;
 
-    u64 time_to_remove = KERNEL_THREAD_RUNTIME_ARRAY[0].runtime;
+    u64 time_to_remove = previous_lowest_runtime;
+    previous_lowest_runtime = U64_MAX;
 
     u8 found_new_thread = 0;
     u64 new_thread_runtime = 0;
+    u64 new_thread_runtime_weight = U64_MAX;
  
-    for(u64 i = 1; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
+    for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
     {
+        if(KERNEL_THREAD_RUNTIME_ARRAY[i].runtime < time_to_remove)
+        {  KERNEL_THREAD_RUNTIME_ARRAY[i].runtime = time_to_remove;  } // We don't want to underflow
         KERNEL_THREAD_RUNTIME_ARRAY[i].runtime -= time_to_remove;
 
-        if(i > current_thread_runtime && holding.state != THREAD_RUNTIME_UNINITIALIZED)
-        {
-            if(holding.state == THREAD_RUNTIME_REMOVE ||
-                    holding.runtime >= KERNEL_THREAD_RUNTIME_ARRAY[i].runtime)
-            {
-                KERNEL_THREAD_RUNTIME_ARRAY[i-1] = KERNEL_THREAD_RUNTIME_ARRAY[i];
-            }
-            else
-            {
-                KERNEL_THREAD_RUNTIME_ARRAY[i-1] = holding;
-                holding.state = THREAD_RUNTIME_UNINITIALIZED;
-            }
-        }
+        if(KERNEL_THREAD_RUNTIME_ARRAY[i].runtime < previous_lowest_runtime)
+        { previous_lowest_runtime = KERNEL_THREAD_RUNTIME_ARRAY[i].runtime; }
 
-        if((!found_new_thread) && KERNEL_THREAD_RUNTIME_ARRAY[i-1].state == THREAD_RUNTIME_RUNNING)
+        if( ( (!found_new_thread) || new_thread_runtime_weight > KERNEL_THREAD_RUNTIME_ARRAY[i].runtime) &&
+                KERNEL_THREAD_RUNTIME_ARRAY[i].state == THREAD_RUNTIME_RUNNING)
         {
             found_new_thread = 1;
-            new_thread_runtime = i-1;
+            new_thread_runtime = i;
+            new_thread_runtime_weight = KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
         }
     }
 
-    if(holding.state == THREAD_RUNTIME_REMOVE)
-    {
-        KERNEL_THREAD_RUNTIME_ARRAY_LEN -= 1;
-    }
-    else if(holding.state != THREAD_RUNTIME_UNINITIALIZED)
-    {
-        KERNEL_THREAD_RUNTIME_ARRAY[KERNEL_THREAD_RUNTIME_ARRAY_LEN-1] = holding;
-    }
-    
-
-    if((!found_new_thread) &&
-        KERNEL_THREAD_RUNTIME_ARRAY[KERNEL_THREAD_RUNTIME_ARRAY_LEN-1].state == THREAD_RUNTIME_RUNNING)
-    {
-        found_new_thread = 1;
-        new_thread_runtime = KERNEL_THREAD_RUNTIME_ARRAY_LEN-1;
-    }
     current_thread_runtime = new_thread_runtime;
 
     ThreadRuntime runtime = KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime];

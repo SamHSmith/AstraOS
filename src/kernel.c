@@ -325,6 +325,7 @@ void thread1_func()
 u64 ball = 0;
 while(1) {
     Framebuffer* fb;
+    printf("Thread 1 wants to render\n");
     while(user_surface_acquire(42, &fb))
     {
         for(u64 i = 0; i < fb->width * fb->height; i++)
@@ -357,7 +358,7 @@ void thread2_func()
     u64 times = 1;
     while(1)
     {
-        for(u64 i = 0; i < 380000000; i++) {}
+        for(u64 i = 0; i < 180000000; i++) {}
         printf(" ******** thread2 is ALSO doing stuff!!! ********* #%lld many times!!!!!!!! \n", times);
         times++;
     }
