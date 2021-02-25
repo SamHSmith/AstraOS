@@ -104,9 +104,15 @@ void kmain()
 
     surface = surface_create();
 
+    proccess_init();
+
     for(s64 i = 0; i < 5; i++) { printf("\n"); } //tells the viewer we have initialized
 
-    proccess_init();
+    u64* mtimecmp = (u64*)0x02004000;
+    u64* mtime = (u64*)0x0200bff8;
+ 
+    *mtimecmp = *mtime;
+    while(1) {}
 }
 
 void kinit_hart(u64 hartid)
@@ -178,12 +184,13 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
-            u64 dt = 10000000 / 500;
-            kernel_current_thread = kernel_choose_new_thread(dt);
+            u64 dt = 10000000 / 100;
 
             // Reset the Machine Timer
             volatile u64* mtimecmp = (u64*)0x02004000;
             volatile u64* mtime = (u64*)0x0200bff8;
+
+            kernel_current_thread = kernel_choose_new_thread(*mtime);
             *mtimecmp = *mtime + dt;
         }
         else if(cause_num == 8) {
@@ -205,6 +212,13 @@ u64 m_trap(
                 {
                     if(character == 'a')
                     {
+                        char frame_confirm[4];
+                        frame_confirm[0] = 'a';
+                        frame_confirm[1] = 'a';
+                        frame_confirm[2] = 'a';
+                        frame_confirm[3] = 'a';
+                        uart_write(frame_confirm, 4);
+
                         u16 width, height;
                         uart_read_blocking(&width, 2);
                         uart_read_blocking(&height, 2);
@@ -345,7 +359,7 @@ while(1) {
                 fb->data[i*4 + 3] = 1.0;
             }
         }
-        ball += 1;
+//        ball += 1;
         if(ball >= 100) { ball = 0; }
  
         user_surface_commit(42);
@@ -358,7 +372,7 @@ void thread2_func()
     u64 times = 1;
     while(1)
     {
-        for(u64 i = 0; i < 180000000; i++) {}
+        for(u64 i = 0; i < 18000; i++) {}
         printf(" ******** thread2 is ALSO doing stuff!!! ********* #%lld many times!!!!!!!! \n", times);
         times++;
     }

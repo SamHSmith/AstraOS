@@ -1,8 +1,3 @@
-# boot.S
-# bootloader for SoS
-# Stephen Marz
-# 8 February 2019
-
 # Disable generation of compressed instructions.
 .option norvc
 
@@ -64,22 +59,20 @@ _start:
 kpost_init:
 	# We set the return address (ra above) to this label. When kinit() is finished
 	# in Rust, it will return here.
-
-	# Setting `sstatus` (supervisor status) register:
-	# 1 << 8    : Supervisor's previous protection mode is 1 (SPP=1 [Supervisor]).
-	# 1 << 5    : Supervisor's previous interrupt-enable bit is 1 (SPIE=1 [Enabled]).
-	# 1 << 1    : Supervisor's interrupt-enable bit will be set to 1 after sret.
-	# We set the "previous" bits because the sret will write the current bits
-	# with the previous bits.
-	li		t0, (1 << 8) | (1 << 5) | (1 << 13)
-	csrw	sstatus, t0
-	la		t1, kmain
-	csrw	sepc, t1
-
-	# Setting `mie` (machine interrupt enable) register:
+    # Setting `sstatus` (supervisor status) register:
+    # 1 << 8    : Supervisor's previous protection mode is 1 (SPP=1 [Supervisor]).
+    # 1 << 5    : Supervisor's previous interrupt-enable bit is 1 (SPIE=1 [Enabled]).
+    # 1 << 1    : Supervisor's interrupt-enable bit will be set to 1 after sret.
+    # We set the "previous" bits because the sret will write the current bits
+    # with the previous bits.
+    li        t0, (1 << 8) | (1 << 5) | (1 << 13)
+    csrw    sstatus, t0
+    la        t1, kmain
+    csrw    sepc, t1
+ 
+    # Setting `mie` (machine interrupt enable) register:
     li t2, (1 << 11) | (1 << 7) 
     csrw mie, t2
-
 
 	# kinit() is required to return back the SATP value (including MODE) via a0
 	csrw	satp, a0

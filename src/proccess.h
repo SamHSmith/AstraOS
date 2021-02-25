@@ -181,9 +181,14 @@ Thread* kernel_current_thread;
 
 u64 current_thread_runtime = 0;
 u64 previous_lowest_runtime = 0;
- 
-Thread* kernel_choose_new_thread(u64 time_passed)
+
+u64 last_mtime = 0; 
+Thread* kernel_choose_new_thread(u64 new_mtime)
 {
+    u64 time_passed = 0;
+    if(last_mtime != 0) { time_passed = new_mtime - last_mtime; }
+    last_mtime = new_mtime;
+
     KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime += time_passed;
 
     u64 time_to_remove = previous_lowest_runtime;
@@ -266,12 +271,7 @@ void proccess_init()
     tarr[thread1].program_counter = (u64)thread1_func;
     tarr[thread2].program_counter = (u64)thread2_func;
 
-    u64* mtimecmp = (u64*)0x02004000;
-    u64* mtime = (u64*)0x0200bff8;
-
-    *mtimecmp = *mtime;
-
-    while(1) {}
+    kernel_current_thread = kernel_choose_new_thread(0);
 }
 
 

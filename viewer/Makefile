@@ -10,7 +10,7 @@ msg:
 	@echo '--- C11 ---'
 
 main: src/main.c
-	${CC} ${CFLAGS} -O2 -o $@ $< ${SDL2FLAGS}
+	${CC} ${CFLAGS} -o $@ $< ${SDL2FLAGS}
 
 small: src/main.c
 	${CC} ${CFLAGS} -Os -o main $< ${SDL2FLAGS}

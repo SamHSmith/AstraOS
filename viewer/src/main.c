@@ -15,7 +15,7 @@ int main()
 		fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
 	}
-    int size = 14;
+    int size = 1;
     SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 16*size, 9*size, SDL_WINDOW_SHOWN);
 	if (win == NULL) {
 		fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
@@ -54,8 +54,8 @@ int main()
         exit(0);
     }
 
-    int flags = fcntl(pipefds[0], F_GETFL, 0);
-    fcntl(pipefds[0], F_SETFL, flags | O_NONBLOCK);
+//    int flags = fcntl(pipefds[0], F_GETFL, 0);
+//    fcntl(pipefds[0], F_SETFL, flags | O_NONBLOCK);
 
     int frame_counter = 0;
     double total_secs = 0.0;
@@ -88,14 +88,6 @@ int main()
         SDL_RenderClear(ren);
 
         unsigned char c = 0;
-        while(read(pipefds[0], &c, 1) != -1)
-        {
-            write(STDOUT_FILENO, &c, 1);
-        }
-
-        struct timeval start, stop;
-        gettimeofday(&start, NULL);
-
         c = 'a';
         write(inpipefds[1], &c, 1);
 
@@ -113,6 +105,27 @@ int main()
         c = (height >> 8) & 0xFF;
         write(inpipefds[1], &c, 1);
 
+        int n_count = 0;
+        char buf[4];
+        while(n_count < 4)
+        {
+            if(read(pipefds[0], &c, 1) == -1)
+            { continue; }
+            if(c != 'a')
+            {
+                if(n_count > 0) { write(STDOUT_FILENO, buf, n_count); }
+                n_count = 0;
+                write(STDOUT_FILENO, &c, 1);
+                continue;
+            }
+ 
+            buf[n_count] = c;
+            n_count++;
+        }
+ 
+        struct timeval start, stop;
+        gettimeofday(&start, NULL);
+
         int s = 8;
         unsigned char r = 0,g = 0,b = 0;
         for(int y = 0; y < height; y++)
@@ -121,9 +134,9 @@ int main()
             {
                 if(s >= 8)
                 {
-                    while(read(pipefds[0], &r, 1) == -1) {}
-                    while(read(pipefds[0], &g, 1) == -1) {}
-                    while(read(pipefds[0], &b, 1) == -1) {}
+                    while(read(pipefds[0], &r, 1) != 1) {}
+                    while(read(pipefds[0], &g, 1) != 1) {}
+                    while(read(pipefds[0], &b, 1) != 1) {}
                     s = 0;
                 }
                 
