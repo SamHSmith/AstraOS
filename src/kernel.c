@@ -70,7 +70,6 @@ void kmain()
     printf("done.\n    Successfully entered kmain with supervisor mode enabled.\n\n");
     uart_write_string("Hello there, welcome to the ROS operating system\nYou have no idea the pain I went through to make these characters you type appear on screen\n\n");
 
-
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)
     {
@@ -104,15 +103,9 @@ void kmain()
 
     surface = surface_create();
 
+    for(s64 i = 0; i < 5; i++) { uart_write_string("\n"); } //tells the viewer we have initialized
+
     proccess_init();
-
-    for(s64 i = 0; i < 5; i++) { printf("\n"); } //tells the viewer we have initialized
-
-    u64* mtimecmp = (u64*)0x02004000;
-    u64* mtime = (u64*)0x0200bff8;
- 
-    *mtimecmp = *mtime;
-    while(1) {}
 }
 
 void kinit_hart(u64 hartid)
@@ -184,7 +177,7 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
-            u64 dt = 10000000 / 100;
+            u64 dt = 10000000 / 1000;
 
             // Reset the Machine Timer
             volatile u64* mtimecmp = (u64*)0x02004000;
@@ -212,12 +205,7 @@ u64 m_trap(
                 {
                     if(character == 'a')
                     {
-                        char frame_confirm[4];
-                        frame_confirm[0] = 'a';
-                        frame_confirm[1] = 'a';
-                        frame_confirm[2] = 'a';
-                        frame_confirm[3] = 'a';
-                        uart_write(frame_confirm, 4);
+                        uart_write("new;;_;;frame", 13);
 
                         u16 width, height;
                         uart_read_blocking(&width, 2);
@@ -324,9 +312,16 @@ u64 m_trap(
         }
     }
 
-    // Load thread
-    *frame = kernel_current_thread->frame;
-    return kernel_current_thread->program_counter;
+    if(kernel_current_thread != 0)
+    {
+        // Load thread
+        *frame = kernel_current_thread->frame;
+        return kernel_current_thread->program_counter;
+    }
+    else
+    {
+        return epc;
+    }
 }
 
 // To be user code
@@ -339,9 +334,9 @@ void thread1_func()
 u64 ball = 0;
 while(1) {
     Framebuffer* fb;
-    printf("Thread 1 wants to render\n");
     while(user_surface_acquire(42, &fb))
     {
+        printf("I'm gonna do a render!\n");
         for(u64 i = 0; i < fb->width * fb->height; i++)
         {
             if((i % 100) == ball)
@@ -359,7 +354,7 @@ while(1) {
                 fb->data[i*4 + 3] = 1.0;
             }
         }
-//        ball += 1;
+        ball += 1;
         if(ball >= 100) { ball = 0; }
  
         user_surface_commit(42);
@@ -372,8 +367,19 @@ void thread2_func()
     u64 times = 1;
     while(1)
     {
-        for(u64 i = 0; i < 18000; i++) {}
-        printf(" ******** thread2 is ALSO doing stuff!!! ********* #%lld many times!!!!!!!! \n", times);
+        for(u64 i = 0; i < 3800000; i++) {}
+        printf(" **** thread2 is ALSO !! ****** #%lld many times!!!!!!!! \n", times);
+        times++;
+    }
+}
+
+void thread3_func()
+{
+    u64 times = 1;
+    while(1)
+    {
+        for(u64 i = 0; i < 5800000; i++) {}
+        printf("<> <> <> <> <> <> <> <>  OMG ITS A THIRD THREAD!!!! #%lld times... <> <> <> \n", times);
         times++;
     }
 }

@@ -1,6 +1,6 @@
 CC?=gcc
 SDL2FLAGS=$(shell pkg-config sdl2 --cflags --libs)
-CFLAGS?=-std=c11 -Wall -pedantic -Werror -Wshadow -Wstrict-aliasing -Wstrict-overflow
+CFLAGS?=-std=c11 -pedantic -Werror -Wshadow -Wstrict-aliasing -Wstrict-overflow
 
 .PHONY: all msg clean fullclean
 
@@ -10,7 +10,7 @@ msg:
 	@echo '--- C11 ---'
 
 main: src/main.c
-	${CC} ${CFLAGS} -o $@ $< ${SDL2FLAGS}
+	${CC} ${CFLAGS} -O2 -o $@ $< ${SDL2FLAGS}
 
 small: src/main.c
 	${CC} ${CFLAGS} -Os -o main $< ${SDL2FLAGS}

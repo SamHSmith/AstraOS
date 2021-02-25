@@ -15,7 +15,7 @@ int main()
 		fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
 	}
-    int size = 1;
+    int size = 15;
     SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 16*size, 9*size, SDL_WINDOW_SHOWN);
 	if (win == NULL) {
 		fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
@@ -53,9 +53,6 @@ int main()
         execl("/bin/sh", "sh", "-c", "cd .. && make run");
         exit(0);
     }
-
-//    int flags = fcntl(pipefds[0], F_GETFL, 0);
-//    fcntl(pipefds[0], F_SETFL, flags | O_NONBLOCK);
 
     int frame_counter = 0;
     double total_secs = 0.0;
@@ -106,12 +103,12 @@ int main()
         write(inpipefds[1], &c, 1);
 
         int n_count = 0;
-        char buf[4];
-        while(n_count < 4)
+        char* frame_sync = "new;;_;;frame";
+        char buf[13];
+        while(n_count < 13)
         {
-            if(read(pipefds[0], &c, 1) == -1)
-            { continue; }
-            if(c != 'a')
+            read(pipefds[0], &c, 1);
+            if(c != frame_sync[n_count])
             {
                 if(n_count > 0) { write(STDOUT_FILENO, buf, n_count); }
                 n_count = 0;
@@ -134,9 +131,9 @@ int main()
             {
                 if(s >= 8)
                 {
-                    while(read(pipefds[0], &r, 1) != 1) {}
-                    while(read(pipefds[0], &g, 1) != 1) {}
-                    while(read(pipefds[0], &b, 1) != 1) {}
+                    read(pipefds[0], &r, 1);
+                    read(pipefds[0], &g, 1);
+                    read(pipefds[0], &b, 1);
                     s = 0;
                 }
                 

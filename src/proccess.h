@@ -225,6 +225,7 @@ Thread* kernel_choose_new_thread(u64 new_mtime)
 
 void thread1_func();
 void thread2_func();
+void thread3_func();
 
 void proccess_init()
 {
@@ -243,8 +244,9 @@ void proccess_init()
 
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
 
-    u32 thread2 = proccess_thread_create(pid);
     u32 thread1 = proccess_thread_create(pid);
+    u32 thread2 = proccess_thread_create(pid);
+    u32 thread3 = proccess_thread_create(pid);
 
     Thread* tarr = KERNEL_PROCCESS_ARRAY[pid]->threads;
 
@@ -268,10 +270,26 @@ void proccess_init()
             2 + 4
         );
 
+    tarr[thread3].stack_alloc = kalloc_pages(4);
+    tarr[thread3].frame.regs[2] = 
+        ((u64)tarr[thread3].stack_alloc.memory) + tarr[thread3].stack_alloc.page_count * PAGE_SIZE;
+    mmu_kernel_map_range(
+            table,
+            (u64*)tarr[thread3].stack_alloc.memory,
+            (u64*)tarr[thread3].frame.regs[2],
+            2 + 4
+        );
+
     tarr[thread1].program_counter = (u64)thread1_func;
     tarr[thread2].program_counter = (u64)thread2_func;
+    tarr[thread3].program_counter = (u64)thread3_func;
 
-    kernel_current_thread = kernel_choose_new_thread(0);
+    u64* mtimecmp = (u64*)0x02004000;
+    u64* mtime = (u64*)0x0200bff8;
+ 
+    *mtimecmp = *mtime;
+
+    while(1) {}
 }
 
 
