@@ -191,9 +191,7 @@ u32 proccess_thread_create(u64 pid)
     KERNEL_THREAD_RUNTIME_ARRAY[runtime].pid = pid;
     KERNEL_THREAD_RUNTIME_ARRAY[runtime].tid = tid;
     KERNEL_THREAD_RUNTIME_ARRAY[runtime].runtime = 0;
-//    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_RUNNING;
-    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_TIME_SLEEP;
-    KERNEL_THREAD_RUNTIME_ARRAY[runtime].data = 50000000;
+    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_RUNNING;
 
     return tid;
 }
@@ -310,5 +308,4 @@ void proccess_init()
     u64* mtime = (u64*)0x0200bff8;
     *mtimecmp = *mtime;
 }
-
 

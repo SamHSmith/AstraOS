@@ -110,8 +110,8 @@ void kmain()
 
     while(1)
     {
-        printf("No threads want to do anything :(\n");
-        for(u64 i = 0; i < 1400000; i++) {}
+        printf("Kernel Bored :(\n");
+        for(u64 i = 0; i < 6400000; i++) {}
     }
 }
 
