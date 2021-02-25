@@ -82,10 +82,30 @@ typedef struct
     u32 tid;
     u32 state;
     u64 runtime;
+    s64 data;
 } ThreadRuntime;
 
 #define THREAD_RUNTIME_UNINITIALIZED 0
 #define THREAD_RUNTIME_RUNNING 1
+#define THREAD_RUNTIME_TIME_SLEEP 2
+
+u64 thread_runtime_is_live(ThreadRuntime* r, u64 time_passed)
+{
+         if(r->state == THREAD_RUNTIME_RUNNING)
+    {  return 1;  }
+    else if(r->state == THREAD_RUNTIME_TIME_SLEEP)
+    {
+        r->data -= time_passed;
+        if(r->data > 0)
+        {  return 0;  }
+        else
+        {
+            r->state = THREAD_RUNTIME_RUNNING;
+            return 1;
+        }
+    }
+    return 0;
+}
  
 Kallocation KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION = {0};
 #define KERNEL_THREAD_RUNTIME_ARRAY ((ThreadRuntime*)KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.memory)
@@ -171,11 +191,12 @@ u32 proccess_thread_create(u64 pid)
     KERNEL_THREAD_RUNTIME_ARRAY[runtime].pid = pid;
     KERNEL_THREAD_RUNTIME_ARRAY[runtime].tid = tid;
     KERNEL_THREAD_RUNTIME_ARRAY[runtime].runtime = 0;
-    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_RUNNING;
+//    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_RUNNING;
+    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_TIME_SLEEP;
+    KERNEL_THREAD_RUNTIME_ARRAY[runtime].data = 50000000;
 
     return tid;
 }
-
 
 Thread* kernel_current_thread;
 
@@ -183,13 +204,13 @@ u64 current_thread_runtime = 0;
 u64 previous_lowest_runtime = 0;
 
 u64 last_mtime = 0; 
-Thread* kernel_choose_new_thread(u64 new_mtime)
+Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
 {
     u64 time_passed = 0;
     if(last_mtime != 0) { time_passed = new_mtime - last_mtime; }
     last_mtime = new_mtime;
 
-    KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime += time_passed;
+    if(apply_time) { KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime += time_passed; }
 
     u64 time_to_remove = previous_lowest_runtime;
     previous_lowest_runtime = U64_MAX;
@@ -207,14 +228,17 @@ Thread* kernel_choose_new_thread(u64 new_mtime)
         if(KERNEL_THREAD_RUNTIME_ARRAY[i].runtime < previous_lowest_runtime)
         { previous_lowest_runtime = KERNEL_THREAD_RUNTIME_ARRAY[i].runtime; }
 
-        if( ( (!found_new_thread) || new_thread_runtime_weight > KERNEL_THREAD_RUNTIME_ARRAY[i].runtime) &&
-                KERNEL_THREAD_RUNTIME_ARRAY[i].state == THREAD_RUNTIME_RUNNING)
+        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY + i, time_passed) &
+            new_thread_runtime_weight > KERNEL_THREAD_RUNTIME_ARRAY[i].runtime
+        )
         {
             found_new_thread = 1;
             new_thread_runtime = i;
             new_thread_runtime_weight = KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
         }
     }
+    if(!found_new_thread)
+    {  return 0;  } // Causes the KERNEL nop thread to be loaded
 
     current_thread_runtime = new_thread_runtime;
 
@@ -229,8 +253,6 @@ void thread3_func();
 
 void proccess_init()
 {
-    //for(u64 i = 0; i < 600; i++) { printf("creating procces #%ld\n", proccess_create()); }
-
     u64 pid = proccess_create();
 
     u64* table = KERNEL_PROCCESS_ARRAY[pid]->mmu_table;
@@ -286,10 +308,7 @@ void proccess_init()
 
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;
- 
     *mtimecmp = *mtime;
-
-    while(1) {}
 }
 
 

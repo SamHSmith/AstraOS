@@ -53,6 +53,7 @@ void assert(u64 stat, char* error)
 }
 
 u64 KERNEL_MMU_TABLE;
+Thread KERNEL_THREAD;
 
 u64 kinit()
 {
@@ -106,6 +107,12 @@ void kmain()
     for(s64 i = 0; i < 5; i++) { uart_write_string("\n"); } //tells the viewer we have initialized
 
     proccess_init();
+
+    while(1)
+    {
+        printf("No threads want to do anything :(\n");
+        for(u64 i = 0; i < 1400000; i++) {}
+    }
 }
 
 void kinit_hart(u64 hartid)
@@ -153,6 +160,11 @@ u64 m_trap(
         kernel_current_thread->frame = *frame;
         kernel_current_thread->program_counter = epc;
     }
+    else // Store kernel thread
+    {
+        KERNEL_THREAD.frame = *frame;
+        KERNEL_THREAD.program_counter = epc;
+    }
 
     if(async)
     {
@@ -177,14 +189,12 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
-            u64 dt = 10000000 / 1000;
-
             // Reset the Machine Timer
             volatile u64* mtimecmp = (u64*)0x02004000;
             volatile u64* mtime = (u64*)0x0200bff8;
 
-            kernel_current_thread = kernel_choose_new_thread(*mtime);
-            *mtimecmp = *mtime + dt;
+            kernel_current_thread = kernel_choose_new_thread(*mtime, kernel_current_thread != 0);
+            *mtimecmp = *mtime + 10000000 / 1000;
         }
         else if(cause_num == 8) {
                 printf("User external interrupt CPU%lld\n", hart);
@@ -318,9 +328,10 @@ u64 m_trap(
         *frame = kernel_current_thread->frame;
         return kernel_current_thread->program_counter;
     }
-    else
+    else // Load kernel thread
     {
-        return epc;
+        *frame = KERNEL_THREAD.frame;
+        return KERNEL_THREAD.program_counter;
     }
 }
 
