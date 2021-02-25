@@ -1,4 +1,6 @@
 
+#define SCHEDUALER_MIX_IN_WINDOW 50
+
 typedef struct
 {
     u64 regs[32];
@@ -9,6 +11,8 @@ typedef struct
 #define THREAD_STATE_UNINITIALIZED 0
 #define THREAD_STATE_INITIALIZED 1
 #define THREAD_STATE_RUNNING 2
+#define THREAD_STATE_TIME_SLEEP 3
+
 typedef struct
 {
     TrapFrame frame;
@@ -16,6 +20,7 @@ typedef struct
     u64 program_counter;
     u64 thread_state;
     u64 proccess_pid;
+    s64 sleep_time;
 } Thread;
 
 typedef struct
@@ -82,25 +87,24 @@ typedef struct
     u32 tid;
     u32 state;
     u64 runtime;
-    s64 data;
 } ThreadRuntime;
 
 #define THREAD_RUNTIME_UNINITIALIZED 0
-#define THREAD_RUNTIME_RUNNING 1
-#define THREAD_RUNTIME_TIME_SLEEP 2
+#define THREAD_RUNTIME_INITIALIZED 1
 
-u64 thread_runtime_is_live(ThreadRuntime* r, u64 time_passed)
+u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
 {
-         if(r->state == THREAD_RUNTIME_RUNNING)
+    Thread* t = &KERNEL_PROCCESS_ARRAY[r.pid]->threads[r.tid];
+         if(t->thread_state == THREAD_STATE_RUNNING)
     {  return 1;  }
-    else if(r->state == THREAD_RUNTIME_TIME_SLEEP)
+    else if(t->thread_state == THREAD_STATE_TIME_SLEEP)
     {
-        r->data -= time_passed;
-        if(r->data > 0)
+        t->sleep_time -= time_passed;
+        if(t->sleep_time > 0)
         {  return 0;  }
         else
         {
-            r->state = THREAD_RUNTIME_RUNNING;
+            t->thread_state = THREAD_STATE_RUNNING;
             return 1;
         }
     }
@@ -191,7 +195,7 @@ u32 proccess_thread_create(u64 pid)
     KERNEL_THREAD_RUNTIME_ARRAY[runtime].pid = pid;
     KERNEL_THREAD_RUNTIME_ARRAY[runtime].tid = tid;
     KERNEL_THREAD_RUNTIME_ARRAY[runtime].runtime = 0;
-    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_RUNNING;
+    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_INITIALIZED;
 
     return tid;
 }
@@ -199,7 +203,6 @@ u32 proccess_thread_create(u64 pid)
 Thread* kernel_current_thread;
 
 u64 current_thread_runtime = 0;
-u64 previous_lowest_runtime = 0;
 
 u64 last_mtime = 0; 
 Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
@@ -208,10 +211,13 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
     if(last_mtime != 0) { time_passed = new_mtime - last_mtime; }
     last_mtime = new_mtime;
 
-    if(apply_time) { KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime += time_passed; }
-
-    u64 time_to_remove = previous_lowest_runtime;
-    previous_lowest_runtime = U64_MAX;
+    if(apply_time) {
+        KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime =
+            (
+            time_passed + 
+            (KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime* (SCHEDUALER_MIX_IN_WINDOW-1))
+            ) / SCHEDUALER_MIX_IN_WINDOW;
+    }
 
     u8 found_new_thread = 0;
     u64 new_thread_runtime = 0;
@@ -219,14 +225,10 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
  
     for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
     {
-        if(KERNEL_THREAD_RUNTIME_ARRAY[i].runtime < time_to_remove)
-        {  KERNEL_THREAD_RUNTIME_ARRAY[i].runtime = time_to_remove;  } // We don't want to underflow
-        KERNEL_THREAD_RUNTIME_ARRAY[i].runtime -= time_to_remove;
+        KERNEL_THREAD_RUNTIME_ARRAY[i].runtime *= SCHEDUALER_MIX_IN_WINDOW-1;
+        KERNEL_THREAD_RUNTIME_ARRAY[i].runtime /= SCHEDUALER_MIX_IN_WINDOW;
 
-        if(KERNEL_THREAD_RUNTIME_ARRAY[i].runtime < previous_lowest_runtime)
-        { previous_lowest_runtime = KERNEL_THREAD_RUNTIME_ARRAY[i].runtime; }
-
-        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY + i, time_passed) &
+        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY[i], time_passed) &
             new_thread_runtime_weight > KERNEL_THREAD_RUNTIME_ARRAY[i].runtime
         )
         {
@@ -303,6 +305,10 @@ void proccess_init()
     tarr[thread1].program_counter = (u64)thread1_func;
     tarr[thread2].program_counter = (u64)thread2_func;
     tarr[thread3].program_counter = (u64)thread3_func;
+
+    tarr[thread1].thread_state = THREAD_STATE_RUNNING;
+    tarr[thread2].thread_state = THREAD_STATE_TIME_SLEEP;
+    tarr[thread2].sleep_time = 92000000;
 
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;
