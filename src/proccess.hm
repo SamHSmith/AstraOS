@@ -86,7 +86,7 @@ typedef struct
     u64 pid;
     u32 tid;
     u32 state;
-    u64 runtime;
+    s64 runtime;
 } ThreadRuntime;
 
 #define THREAD_RUNTIME_UNINITIALIZED 0
@@ -205,7 +205,7 @@ Thread* kernel_current_thread;
 u64 current_thread_runtime = 0;
 
 u64 last_mtime = 0;
-struct xoshiro256ss_state rando_state = {5, 42, 68, 1};
+struct xoshiro256ss_state rando_state = {0};
 Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
 {
     u64 time_passed = 0;
@@ -213,68 +213,44 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
     last_mtime = new_mtime;
 
     if(apply_time) {
-        KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime = ( time_passed +
-        (KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime* (SCHEDUALER_MIX_IN_WINDOW-1))
-          )  / SCHEDUALER_MIX_IN_WINDOW;
+//        KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime = ( time_passed +
+//        (KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime* (SCHEDUALER_MIX_IN_WINDOW-1))
+//          )  / SCHEDUALER_MIX_IN_WINDOW;
+        KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime += time_passed *
+             KERNEL_THREAD_RUNTIME_ARRAY_LEN;
     }
 
-    u64 total_runtime = 0;
-    u64 participant_count = 0;
-
-    for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
-    {
-        if(apply_time && i != current_thread_runtime)
-        {
-            KERNEL_THREAD_RUNTIME_ARRAY[i].runtime *= SCHEDUALER_MIX_IN_WINDOW-1;
-            KERNEL_THREAD_RUNTIME_ARRAY[i].runtime /= SCHEDUALER_MIX_IN_WINDOW;
-        }
-        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY[i], time_passed))
-        {
-            total_runtime += KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
-            participant_count += 1;
-            printf("Thread: %lld    is     %lld\n", i, KERNEL_THREAD_RUNTIME_ARRAY[i].runtime);
-        }
-    }
-    printf("Total  is   %lld\n", total_runtime);
-
-    u64 total_points = total_runtime * (participant_count - 1);
-    u64 to_umax_factor = U64_MAX / total_points;
-
-    u64 rando = xoshiro256ss(&rando_state);
-    u64 bump = 0;
-    u64 participant = 0;
-  
     u8 found_new_thread = 0;
     u64 new_thread_runtime = 0;
-
+    s64 new_thread_runtime_weight = S64_MAX;
+ 
     for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
     {
-        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY[i], 0))
+//        if(i != current_thread_runtime)
         {
-u64 point = total_runtime - KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
-printf("%llu : %% %llu\n", i, (point * 100) / total_points);
+//            KERNEL_THREAD_RUNTIME_ARRAY[i].runtime *= SCHEDUALER_MIX_IN_WINDOW-1;
+//            KERNEL_THREAD_RUNTIME_ARRAY[i].runtime /= SCHEDUALER_MIX_IN_WINDOW;
+        }
+        if(KERNEL_THREAD_RUNTIME_ARRAY[i].runtime >= 0)
+        {
+            KERNEL_THREAD_RUNTIME_ARRAY[i].runtime -= time_passed;
+        }
+printf("Thread: %lld    is     %lld\n", i, KERNEL_THREAD_RUNTIME_ARRAY[i].runtime);
+printf("random : %lld\n", xoshiro256ss(&rando_state));
+
+        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY[i], time_passed) &
+            new_thread_runtime_weight > KERNEL_THREAD_RUNTIME_ARRAY[i].runtime
+        )
+        {
+            found_new_thread = 1;
+            new_thread_runtime = i;
+            new_thread_runtime_weight = KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
         }
     }
-
-    for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
-    {
-        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY[i], 0))
-        {
-            u64 point = total_runtime - KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
-            bump += point * to_umax_factor;
-            if(bump >= rando || participant == (participant_count - 1))
-            {
-                found_new_thread = 1;
-                new_thread_runtime = i;
-                break;
-            }
-            participant += 1;
-        }
-    }
-printf("thread is %llu\n\n", new_thread_runtime);
-
     if(!found_new_thread)
     {  return 0;  } // Causes the KERNEL nop thread to be loaded
+
+printf("\n");
 
     current_thread_runtime = new_thread_runtime;
 
@@ -344,9 +320,9 @@ void proccess_init()
 
     tarr[thread1].thread_state = THREAD_STATE_RUNNING;
     tarr[thread2].thread_state = THREAD_STATE_TIME_SLEEP;
-    tarr[thread2].sleep_time = 32000000;
+    tarr[thread2].sleep_time = 12000000;
     tarr[thread3].thread_state = THREAD_STATE_TIME_SLEEP;
-    tarr[thread3].sleep_time = 80000000;
+    tarr[thread3].sleep_time = 50000000;
 
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;

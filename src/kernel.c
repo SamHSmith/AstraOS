@@ -1,4 +1,5 @@
 #include "types.h"
+#include "random.h"
 
 #include "uart.h"
 #include "printf.h"
@@ -194,7 +195,7 @@ u64 m_trap(
             volatile u64* mtime = (u64*)0x0200bff8;
 
             kernel_current_thread = kernel_choose_new_thread(*mtime, kernel_current_thread != 0);
-            *mtimecmp = *mtime + 10000000 / 1000;
+            *mtimecmp = *mtime + 10000000 / 100;
         }
         else if(cause_num == 8) {
                 printf("User external interrupt CPU%lld\n", hart);
@@ -254,7 +255,7 @@ u64 m_trap(
                             uart_write(&g, 1);
                             uart_write(&b, 1);
                         }
-                        if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
+//                        if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
                     } else {
                         printf("you typed the character: %c\n", character);
                     }
@@ -347,7 +348,7 @@ while(1) {
     Framebuffer* fb;
     while(user_surface_acquire(42, &fb))
     {
-        printf("I'm gonna do a render!\n");
+//        printf("I'm gonna do a render!\n");
         for(u64 i = 0; i < fb->width * fb->height; i++)
         {
             if((i % 100) == ball)
@@ -369,6 +370,7 @@ while(1) {
         if(ball >= 100) { ball = 0; }
  
         user_surface_commit(42);
+//printf("completed a render\n");
     }
 }
 }
@@ -378,8 +380,8 @@ void thread2_func()
     u64 times = 1;
     while(1)
     {
-        for(u64 i = 0; i < 3800000; i++) {}
-        printf(" **** thread2 is ALSO !! ****** #%lld many times!!!!!!!! \n", times);
+        for(u64 i = 0; i < 38000000; i++) {}
+//        printf(" **** thread2 is ALSO !! ****** #%lld many times!!!!!!!! \n", times);
         times++;
     }
 }
@@ -390,7 +392,7 @@ void thread3_func()
     while(1)
     {
         for(u64 i = 0; i < 5800000; i++) {}
-        printf("<> <> <> <> <> <> <> <>  OMG ITS A THIRD THREAD!!!! #%lld times... <> <> <> \n", times);
+//        printf("<> <> <> <> <> <> <> <>  OMG ITS A THIRD THREAD!!!! #%lld times... <> <> <> \n", times);
         times++;
     }
 }
