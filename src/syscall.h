@@ -42,6 +42,21 @@ void syscall_thread_sleep(Thread** current_thread, u64 mtime)
     t->program_counter += 4;
 }
 
+void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
+{
+    TrapFrame* frame = &(*current_thread)->frame; // Seems dumb to pull the whole frame onto the stack
+    u64 surface_slot = frame->regs[11];
+    Thread* t = *current_thread;
+
+    if(surface_has_commited(surface)) // replace surface with slot later
+    {
+        t->surface_slot_wait = surface_slot;
+        t->thread_state = THREAD_STATE_SURFACE_WAIT;
+        *current_thread = kernel_choose_new_thread(mtime, 1);
+    }
+    t->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -51,6 +66,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_surface_acquire(current_thread); }
     else if(call_num == 2)
     { syscall_thread_sleep(current_thread, mtime); }
+    else if(call_num == 3)
+    { syscall_wait_for_surface_draw(current_thread, mtime); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

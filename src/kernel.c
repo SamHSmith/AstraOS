@@ -12,6 +12,7 @@ void _putchar(char c)
 #include "plic.h"
 #include "proccess.h"
 #include "video.h"
+#include "proccess_run.h"
 #include "syscall.h"
 
 // --- Lib maybe? ---
@@ -195,7 +196,7 @@ u64 m_trap(
             volatile u64* mtime = (u64*)0x0200bff8;
 
             kernel_current_thread = kernel_choose_new_thread(*mtime, kernel_current_thread != 0);
-            *mtimecmp = *mtime + (10000000 / 100);
+            *mtimecmp = *mtime + (10000000 / 1000);
         }
         else if(cause_num == 8) {
                 printf("User external interrupt CPU%lld\n", hart);
@@ -255,7 +256,7 @@ u64 m_trap(
                             uart_write(&g, 1);
                             uart_write(&b, 1);
                         }
-//                        if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
+                        if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
                     } else {
                         printf("you typed the character: %c\n", character);
                     }
@@ -342,15 +343,16 @@ u64 m_trap(
 void user_surface_commit(u64 surface_slot);
 u64 user_surface_acquire(u64 surface_slot, Framebuffer** fb);
 void user_thread_sleep(u64 duration);
+void user_wait_for_surface_draw(u64 surface_slot);
  
 void thread1_func()
 {
 u64 ball = 0;
 while(1) {
+    user_wait_for_surface_draw(42);
     Framebuffer* fb;
-    while(user_surface_acquire(42, &fb))
+    if(user_surface_acquire(42, &fb))
     {
-//        printf("I'm gonna do a render!\n");
         for(u64 i = 0; i < fb->width * fb->height; i++)
         {
             if((i % 100) == ball)
@@ -372,8 +374,11 @@ while(1) {
         if(ball >= 100) { ball = 0; }
  
         user_surface_commit(42);
-//printf("completed a render\n");
-        user_thread_sleep(10000000/10);
+    }
+    else
+    {
+        printf("there was nothing to render\n");
+        user_thread_sleep(10000000/1000);
     }
 }
 }
@@ -383,7 +388,7 @@ void thread2_func()
     u64 times = 1;
     while(1)
     {
-        user_thread_sleep(10000000*8);
+        user_thread_sleep(10000000*5);
         printf(" **** thread2 is ALSO !! ****** #%lld many times!!!!!!!! \n", times);
         times++;
     }
@@ -394,7 +399,7 @@ void thread3_func()
     u64 times = 1;
     while(1)
     {
-        user_thread_sleep(10000000*15);
+        user_thread_sleep(10000000*12);
         printf("<> <> <> <> <> <> <> <>  OMG ITS A THIRD THREAD!!!! #%lld times... <> <> <> \n", times);
         times++;
     }

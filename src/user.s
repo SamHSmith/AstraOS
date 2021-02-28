@@ -21,3 +21,11 @@ user_thread_sleep:
     addi a0, x0, 2
     ecall
     ret
+
+.global user_wait_for_surface_draw
+user_wait_for_surface_draw:
+    mv a1, a0
+    addi a0, x0, 3
+    ecall
+    ret
+
