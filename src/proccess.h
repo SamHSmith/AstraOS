@@ -20,7 +20,7 @@ typedef struct
     u64 program_counter;
     u64 thread_state;
     u64 proccess_pid;
-    s64 sleep_time;
+    u64 sleep_time;
 } Thread;
 
 typedef struct
@@ -95,15 +95,19 @@ typedef struct
 u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
 {
     Thread* t = &KERNEL_PROCCESS_ARRAY[r.pid]->threads[r.tid];
+
          if(t->thread_state == THREAD_STATE_RUNNING)
     {  return 1;  }
     else if(t->thread_state == THREAD_STATE_TIME_SLEEP)
     {
-        t->sleep_time -= time_passed;
-        if(t->sleep_time > 0)
-        {  return 0;  }
+        if(t->sleep_time > time_passed)
+        {
+            t->sleep_time -= time_passed;
+            return 0;
+        }
         else
         {
+            t->sleep_time = 0;
             t->thread_state = THREAD_STATE_RUNNING;
             return 1;
         }
@@ -232,10 +236,8 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
         {
             total_runtime += KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
             participant_count += 1;
-            printf("Thread: %lld    is     %lld\n", i, KERNEL_THREAD_RUNTIME_ARRAY[i].runtime);
         }
     }
-    printf("Total  is   %lld\n", total_runtime);
 
     u64 total_points = total_runtime * (participant_count - 1);
     u64 to_umax_factor = U64_MAX / total_points;
@@ -246,15 +248,6 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
   
     u8 found_new_thread = 0;
     u64 new_thread_runtime = 0;
-
-    for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
-    {
-        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY[i], 0))
-        {
-u64 point = total_runtime - KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
-printf("%llu : %% %llu\n", i, (point * 100) / total_points);
-        }
-    }
 
     for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
     {
@@ -271,7 +264,6 @@ printf("%llu : %% %llu\n", i, (point * 100) / total_points);
             participant += 1;
         }
     }
-printf("thread is %llu\n\n", new_thread_runtime);
 
     if(!found_new_thread)
     {  return 0;  } // Causes the KERNEL nop thread to be loaded
@@ -343,10 +335,8 @@ void proccess_init()
     tarr[thread3].program_counter = (u64)thread3_func;
 
     tarr[thread1].thread_state = THREAD_STATE_RUNNING;
-    tarr[thread2].thread_state = THREAD_STATE_TIME_SLEEP;
-    tarr[thread2].sleep_time = 32000000;
-    tarr[thread3].thread_state = THREAD_STATE_TIME_SLEEP;
-    tarr[thread3].sleep_time = 80000000;
+    tarr[thread2].thread_state = THREAD_STATE_RUNNING;
+    tarr[thread3].thread_state = THREAD_STATE_RUNNING;
 
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;

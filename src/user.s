@@ -14,3 +14,10 @@ user_surface_acquire:
     addi a0, x0, 1
     ecall
     ret
+
+.global user_thread_sleep
+user_thread_sleep:
+    mv a1, a0
+    addi a0, x0, 2
+    ecall
+    ret

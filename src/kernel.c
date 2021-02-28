@@ -111,8 +111,8 @@ void kmain()
 
     while(1)
     {
-        printf("Kernel Bored :(\n");
-        for(u64 i = 0; i < 6400000; i++) {}
+//        printf("Kernel Bored :(\n");
+//        for(u64 i = 0; i < 640000000; i++) {}
     }
 }
 
@@ -195,7 +195,7 @@ u64 m_trap(
             volatile u64* mtime = (u64*)0x0200bff8;
 
             kernel_current_thread = kernel_choose_new_thread(*mtime, kernel_current_thread != 0);
-            *mtimecmp = *mtime + 10000000 / 100;
+            *mtimecmp = *mtime + (10000000 / 100);
         }
         else if(cause_num == 8) {
                 printf("User external interrupt CPU%lld\n", hart);
@@ -303,7 +303,8 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 9) {
-            do_syscall(&kernel_current_thread);
+            volatile u64* mtime = (u64*)0x0200bff8;
+            do_syscall(&kernel_current_thread, *mtime);
         }
         else if(cause_num == 11) {
                 printf("Interrupt: Environment call from M-mode CPU%lld -> 0x%x\n", hart, epc);
@@ -340,6 +341,7 @@ u64 m_trap(
 
 void user_surface_commit(u64 surface_slot);
 u64 user_surface_acquire(u64 surface_slot, Framebuffer** fb);
+void user_thread_sleep(u64 duration);
  
 void thread1_func()
 {
@@ -371,6 +373,7 @@ while(1) {
  
         user_surface_commit(42);
 //printf("completed a render\n");
+        user_thread_sleep(10000000/10);
     }
 }
 }
@@ -380,8 +383,8 @@ void thread2_func()
     u64 times = 1;
     while(1)
     {
-        for(u64 i = 0; i < 38000000; i++) {}
-//        printf(" **** thread2 is ALSO !! ****** #%lld many times!!!!!!!! \n", times);
+        user_thread_sleep(10000000*8);
+        printf(" **** thread2 is ALSO !! ****** #%lld many times!!!!!!!! \n", times);
         times++;
     }
 }
@@ -391,8 +394,8 @@ void thread3_func()
     u64 times = 1;
     while(1)
     {
-        for(u64 i = 0; i < 5800000; i++) {}
-//        printf("<> <> <> <> <> <> <> <>  OMG ITS A THIRD THREAD!!!! #%lld times... <> <> <> \n", times);
+        user_thread_sleep(10000000*15);
+        printf("<> <> <> <> <> <> <> <>  OMG ITS A THIRD THREAD!!!! #%lld times... <> <> <> \n", times);
         times++;
     }
 }
