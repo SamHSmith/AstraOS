@@ -249,16 +249,14 @@ u64 m_trap(
 
                         for(u64 i = 0; i < (width * height) >> 3; i++)
                         {
-                            u8 r=0, g=0, b=0;
+                            u8 r=0;
                             for(u64 j = 0; j < 8; j++)
                             {
                                 r |= (framebuffer->data[4*(i*8 + j) + 0] > 0.0) << j;
-                                g |= (framebuffer->data[4*(i*8 + j) + 1] > 0.0) << j;
-                                b |= (framebuffer->data[4*(i*8 + j) + 2] > 0.0) << j;
+                                r |= (framebuffer->data[4*(i*8 + j) + 1] > 0.0) << j;
+                                r |= (framebuffer->data[4*(i*8 + j) + 2] > 0.0) << j;
                             }
                             uart_write(&r, 1);
-                            uart_write(&g, 1);
-                            uart_write(&b, 1);
                         }
                         if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
 printf("inside: x %d, y %d, state %x\n", mouse_data[0], mouse_data[1], mouse_data[2]);

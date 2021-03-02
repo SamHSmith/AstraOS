@@ -15,8 +15,7 @@ int main()
 		fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
 	}
-    int size = 13;
-    SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 16*size, 9*size, SDL_WINDOW_SHOWN);
+    SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 532, 300, SDL_WINDOW_SHOWN);
 	if (win == NULL) {
 		fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
@@ -37,6 +36,8 @@ int main()
     int child_out = open("../pipe.out", O_RDONLY);
     int child_in = open("../pipe.in", O_WRONLY);
 
+    assert(child_out != -1 && child_in != -1);
+
 /*    pid = fork();
     if(pid)
     {
@@ -52,7 +53,7 @@ int main()
     double total_secs = 0.0;
     double longest_frame = 0.0;
 
-    int newlines = 0;
+/*    int newlines = 0;
     unsigned char _c = 0;
     while(1)
     {
@@ -63,7 +64,7 @@ int main()
         { newlines = 0; }
         if(newlines >= 5)
         { break; }
-    }
+    } */
 
     int running = 1;
     while(running)
@@ -125,7 +126,7 @@ int main()
         gettimeofday(&start, NULL);
 
         int s = 8;
-        unsigned char r = 0,g = 0,b = 0;
+        unsigned char r = 0;
         for(int y = 0; y < height; y++)
         {
             for(int x = 0; x < width; x++)
@@ -133,14 +134,12 @@ int main()
                 if(s >= 8)
                 {
                     read(child_out, &r, 1);
-                    read(child_out, &g, 1);
-                    read(child_out, &b, 1);
                     s = 0;
                 }
                 
                 SDL_SetRenderDrawColor(ren, 255*((r & (1 << s))!=0),
-                                            255*((g & (1 << s))!=0),
-                                            255*((b & (1 << s))!=0),
+                                            255*((r & (1 << s))!=0),
+                                            255*((r & (1 << s))!=0),
                                             255);
                 SDL_RenderDrawPoint(ren, x, y);
                 s++;
