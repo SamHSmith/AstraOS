@@ -32,27 +32,21 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-    int pipefds[2];
-    int inpipefds[2];
-    pipe(pipefds);
-    pipe(inpipefds);
     pid_t pid;
 
-    pid = fork();
+    int child_out = open("../pipe.out", O_RDONLY);
+    int child_in = open("../pipe.in", O_WRONLY);
+
+/*    pid = fork();
     if(pid)
     {
-        close(pipefds[1]);
-        close(inpipefds[0]);
     }
     else // child
     {
-        close(pipefds[0]);
-        close(inpipefds[1]);
-        dup2(pipefds[1], STDOUT_FILENO);
-        dup2(inpipefds[0], STDIN_FILENO);
-        execl("/bin/sh", "sh", "-c", "cd .. && make run");
+        chdir("..");
+        execl("/bin/make", "make", "run");
         exit(0);
-    }
+    } */
 
     int frame_counter = 0;
     double total_secs = 0.0;
@@ -62,7 +56,7 @@ int main()
     unsigned char _c = 0;
     while(1)
     {
-        while(read(pipefds[0], &_c, 1) == -1) { SDL_Delay(50); }
+        while(read(child_out, &_c, 1) == -1) { SDL_Delay(50); }
         if(_c == '\n')
         { newlines++; }
         else
@@ -86,28 +80,35 @@ int main()
 
         unsigned char c = 0;
         c = 'a';
-        write(inpipefds[1], &c, 1);
+        write(child_in, &c, 1);
 
         int w, h;
         SDL_GetWindowSize(win, &w, &h);
         unsigned int width = w, height = h;
 
         c = width & 0xFF;
-        write(inpipefds[1], &c, 1);
+        write(child_in, &c, 1);
         c = (width >> 8) & 0xFF;
-        write(inpipefds[1], &c, 1);
+        write(child_in, &c, 1);
 
         c = height & 0xFF;
-        write(inpipefds[1], &c, 1);
+        write(child_in, &c, 1);
         c = (height >> 8) & 0xFF;
-        write(inpipefds[1], &c, 1);
+        write(child_in, &c, 1);
+
+        int mouse_data[3];
+        mouse_data[2] = SDL_GetMouseState(&mouse_data[0], &mouse_data[1]);
+
+//        printf("x %d, y %d, state %x\n", mouse_data[0], mouse_data[1], mouse_data[2]);
+
+        write(child_in, mouse_data, 3*4);
 
         int n_count = 0;
         char* frame_sync = "new;;_;;frame";
         char buf[13];
         while(n_count < 13)
         {
-            read(pipefds[0], &c, 1);
+            read(child_out, &c, 1);
             if(c != frame_sync[n_count])
             {
                 if(n_count > 0) { write(STDOUT_FILENO, buf, n_count); }
@@ -131,9 +132,9 @@ int main()
             {
                 if(s >= 8)
                 {
-                    read(pipefds[0], &r, 1);
-                    read(pipefds[0], &g, 1);
-                    read(pipefds[0], &b, 1);
+                    read(child_out, &r, 1);
+                    read(child_out, &g, 1);
+                    read(child_out, &b, 1);
                     s = 0;
                 }
                 

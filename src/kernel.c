@@ -222,6 +222,10 @@ u64 m_trap(
                         u16 width, height;
                         uart_read_blocking(&width, 2);
                         uart_read_blocking(&height, 2);
+
+                        u32 mouse_data[3];
+                        uart_read_blocking(mouse_data, 3*4);
+
                         surface.width = width;
                         surface.height = height;
                         u8 frame_dropped = 1;
@@ -257,6 +261,7 @@ u64 m_trap(
                             uart_write(&b, 1);
                         }
                         if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
+printf("inside: x %d, y %d, state %x\n", mouse_data[0], mouse_data[1], mouse_data[2]);
                     } else {
                         printf("you typed the character: %c\n", character);
                     }
