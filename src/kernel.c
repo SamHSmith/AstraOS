@@ -348,6 +348,7 @@ void user_surface_commit(u64 surface_slot);
 u64 user_surface_acquire(u64 surface_slot, Framebuffer** fb);
 void user_thread_sleep(u64 duration);
 void user_wait_for_surface_draw(u64 surface_slot);
+u64 user_get_raw_mouse(RawMouse* buf, u64 len);
  
 void thread1_func()
 {
@@ -358,21 +359,26 @@ while(1) {
     Framebuffer* fb;
     if(user_surface_acquire(42, &fb))
     {
-        ballx += mouse.x / 20.0;
-        bally += mouse.y / 20.0;
-        mouse.x = 0.0;
-        mouse.y = 0.0;
+        u64 raw_mouse_count = user_get_raw_mouse(0, 0);
+        RawMouse mouses[raw_mouse_count];
+        user_get_raw_mouse(mouses, raw_mouse_count);
 
-        while(ballx < 0.0) { ballx += 100.0; }
-        while(ballx >= 100.0) { ballx -= 100.0; }
-        while(bally < 0.0) { bally += 100.0; }
-        while(bally >= 100.0) { bally -= 100.0; }
+        for(u64 i = 0; i < raw_mouse_count; i++)
+        {
+            ballx += mouses[i].x / 5.0;
+            bally += mouses[i].y / 5.0;
+        }
+
+        if(ballx < 0.0) { ballx = 0.0; }
+        if(bally < 0.0) { bally = 0.0; }
+        if((u64)ballx >= fb->width) { ballx = (f64)(fb->width-1); }
+        if((u64)bally >= fb->height) { bally = (f64)(fb->height-1); }
 
         for(u64 y = 0; y < fb->height; y++)
         for(u64 x = 0; x < fb->width; x++)
         {
             u64 i = x + (y * fb->width);
-            if((x % 100) == (u64)ballx || (y % 100) == (u64)bally)
+            if(x == (u64)ballx || y == (u64)bally)
             {
                 fb->data[i*4 + 0] = 0.0;
                 fb->data[i*4 + 1] = 1.0;

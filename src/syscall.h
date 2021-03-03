@@ -57,6 +57,35 @@ void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
     t->program_counter += 4;
 }
 
+// Vulkan style call that gets all the mouse state and resets it.
+void syscall_get_raw_mouse(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame; // Seems dumb to pull the whole frame onto the stack
+    Proccess* proccess = KERNEL_PROCCESS_ARRAY[t->proccess_pid];
+
+    u64 user_buf = frame->regs[11];
+    u64 len = frame->regs[12];
+
+    u64 mouse_count = 1;
+
+    if(user_buf != 0)
+    {
+        RawMouse* buf;
+        assert(
+            mmu_virt_to_phys(proccess->mmu_table, user_buf, (u64*)&buf) == 0,
+            "you didn't do a memory bad"
+        );
+        if(len < mouse_count) { mouse_count = len; }
+        for(u64 i = 0; i < mouse_count; i++)
+        {
+            buf[i] = fetch_mouse_data(&mouse); // temporary
+        }
+    }
+    frame->regs[10] = mouse_count;
+    t->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -68,6 +97,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_thread_sleep(current_thread, mtime); }
     else if(call_num == 3)
     { syscall_wait_for_surface_draw(current_thread, mtime); }
+    else if(call_num == 4)
+    { syscall_get_raw_mouse(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }
