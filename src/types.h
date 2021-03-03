@@ -25,4 +25,7 @@ typedef unsigned long long int u64;
 #define S64_MAX  ((s64)9223372036854775807)
 #define U64_MAX  ((u64)18446744073709551615)
 
+typedef float f32;
+typedef double f64;
+
 #endif

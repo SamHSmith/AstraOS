@@ -10,6 +10,7 @@ void _putchar(char c)
 
 #include "memory.h"
 #include "plic.h"
+#include "input.h"
 #include "proccess.h"
 #include "video.h"
 #include "proccess_run.h"
@@ -219,12 +220,13 @@ u64 m_trap(
                     {
                         uart_write("new;;_;;frame", 13);
 
-                        u16 width, height;
-                        uart_read_blocking(&width, 2);
-                        uart_read_blocking(&height, 2);
+                        u32 width, height;
+                        uart_read_blocking(&width, 4);
+                        uart_read_blocking(&height, 4);
 
-                        u32 mouse_data[3];
+                        s32 mouse_data[3];
                         uart_read_blocking(mouse_data, 3*4);
+                        new_mouse_input_from_serial(mouse_data);
 
                         surface.width = width;
                         surface.height = height;
@@ -259,7 +261,6 @@ u64 m_trap(
                             uart_write(&r, 1);
                         }
                         if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
-printf("inside: x %d, y %d, state %x\n", mouse_data[0], mouse_data[1], mouse_data[2]);
                     } else {
                         printf("you typed the character: %c\n", character);
                     }
@@ -350,15 +351,28 @@ void user_wait_for_surface_draw(u64 surface_slot);
  
 void thread1_func()
 {
-u64 ball = 0;
+f64 ballx = 0.0;
+f64 bally = 0.0;
 while(1) {
     user_wait_for_surface_draw(42);
     Framebuffer* fb;
     if(user_surface_acquire(42, &fb))
     {
-        for(u64 i = 0; i < fb->width * fb->height; i++)
+        ballx += mouse.x / 20.0;
+        bally += mouse.y / 20.0;
+        mouse.x = 0.0;
+        mouse.y = 0.0;
+
+        while(ballx < 0.0) { ballx += 100.0; }
+        while(ballx >= 100.0) { ballx -= 100.0; }
+        while(bally < 0.0) { bally += 100.0; }
+        while(bally >= 100.0) { bally -= 100.0; }
+
+        for(u64 y = 0; y < fb->height; y++)
+        for(u64 x = 0; x < fb->width; x++)
         {
-            if((i % 100) == ball)
+            u64 i = x + (y * fb->width);
+            if((x % 100) == (u64)ballx || (y % 100) == (u64)bally)
             {
                 fb->data[i*4 + 0] = 0.0;
                 fb->data[i*4 + 1] = 1.0;
@@ -373,8 +387,6 @@ while(1) {
                 fb->data[i*4 + 3] = 1.0;
             }
         }
-        ball += 1;
-        if(ball >= 100) { ball = 0; }
  
         user_surface_commit(42);
     }

@@ -15,7 +15,8 @@ int main()
 		fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
 	}
-    SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 532, 300, SDL_WINDOW_SHOWN);
+    int div = 2;
+    SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 532/div, 300/div, SDL_WINDOW_SHOWN);
 	if (win == NULL) {
 		fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
@@ -30,6 +31,7 @@ int main()
 		SDL_Quit();
 		return EXIT_FAILURE;
 	}
+    assert(SDL_SetRelativeMouseMode(SDL_TRUE) != -1);
 
     pid_t pid;
 
@@ -87,20 +89,11 @@ int main()
         SDL_GetWindowSize(win, &w, &h);
         unsigned int width = w, height = h;
 
-        c = width & 0xFF;
-        write(child_in, &c, 1);
-        c = (width >> 8) & 0xFF;
-        write(child_in, &c, 1);
-
-        c = height & 0xFF;
-        write(child_in, &c, 1);
-        c = (height >> 8) & 0xFF;
-        write(child_in, &c, 1);
+        write(child_in, &width, 4);
+        write(child_in, &height, 4);
 
         int mouse_data[3];
-        mouse_data[2] = SDL_GetMouseState(&mouse_data[0], &mouse_data[1]);
-
-//        printf("x %d, y %d, state %x\n", mouse_data[0], mouse_data[1], mouse_data[2]);
+        mouse_data[2] = SDL_GetRelativeMouseState(&mouse_data[0], &mouse_data[1]);
 
         write(child_in, mouse_data, 3*4);
 
