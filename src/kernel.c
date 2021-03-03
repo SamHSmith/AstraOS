@@ -261,7 +261,20 @@ u64 m_trap(
                             uart_write(&r, 1);
                         }
                         if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
-                    } else {
+                    }
+                    else if(character == 'd') // Key down
+                    {
+                        u8 scode;
+                        uart_read_blocking(&scode, 1);
+                        printf("scancode %u down\n", scode);
+                    }
+                    else if(character == 'u') // Key up
+                    {
+                        u8 scode;
+                        uart_read_blocking(&scode, 1);
+                        printf("scancode %u up\n", scode);
+                    }
+                    else {
                         printf("you typed the character: %c\n", character);
                     }
                 }

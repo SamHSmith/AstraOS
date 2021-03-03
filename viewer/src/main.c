@@ -44,27 +44,27 @@ int main()
     double total_secs = 0.0;
     double longest_frame = 0.0;
 
-/*    int newlines = 0;
-    unsigned char _c = 0;
-    while(1)
-    {
-        while(read(child_out, &_c, 1) == -1) { SDL_Delay(50); }
-        if(_c == '\n')
-        { newlines++; }
-        else
-        { newlines = 0; }
-        if(newlines >= 5)
-        { break; }
-    } */
-
     int running = 1;
     while(running)
     {
         SDL_Event sevent;
+        SDL_KeyboardEvent* kevent = (SDL_KeyboardEvent*)&sevent;
         while(SDL_PollEvent(&sevent))
         {
             if(sevent.type == SDL_QUIT)
             { running = 0; }
+            else if(sevent.type == SDL_KEYDOWN && !kevent->repeat)
+            {
+                unsigned char scode = kevent->keysym.scancode;
+                write(child_in, "d", 1);
+                write(child_in, &scode, 1);
+            }
+            else if(sevent.type == SDL_KEYUP && !kevent->repeat)
+            {
+                unsigned char scode = kevent->keysym.scancode;
+                write(child_in, "u", 1);
+                write(child_in, &scode, 1);
+            }
         }
 
         SDL_SetRenderDrawColor(ren, 0,0,0,255);
