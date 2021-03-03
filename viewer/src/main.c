@@ -40,17 +40,6 @@ int main()
 
     assert(child_out != -1 && child_in != -1);
 
-/*    pid = fork();
-    if(pid)
-    {
-    }
-    else // child
-    {
-        chdir("..");
-        execl("/bin/make", "make", "run");
-        exit(0);
-    } */
-
     int frame_counter = 0;
     double total_secs = 0.0;
     double longest_frame = 0.0;
