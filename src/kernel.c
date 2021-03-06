@@ -266,13 +266,15 @@ u64 m_trap(
                     {
                         u8 scode;
                         uart_read_blocking(&scode, 1);
-                        printf("scancode %u down\n", scode);
+                        printf("interrupt scancode %u down\n", scode);
+                        keyboard_put_new_event(&kbd_event_queue, KEYBOARD_EVENT_PRESSED, scode);
                     }
                     else if(character == 'u') // Key up
                     {
                         u8 scode;
                         uart_read_blocking(&scode, 1);
-                        printf("scancode %u up\n", scode);
+                        printf("interrupt scancode %u up\n", scode);
+                        keyboard_put_new_event(&kbd_event_queue, KEYBOARD_EVENT_RELEASED, scode);
                     }
                     else {
                         printf("you typed the character: %c\n", character);
@@ -375,6 +377,16 @@ while(1) {
         u64 raw_mouse_count = user_get_raw_mouse(0, 0);
         RawMouse mouses[raw_mouse_count];
         user_get_raw_mouse(mouses, raw_mouse_count);
+
+        KeyboardEvent kbd_event;
+        do {
+            keyboard_poll_events(&kbd_event_queue, &kbd_event);
+            printf("kbd event: %u, scancode: %u\n", kbd_event.event, kbd_event.scancode);
+        } while(kbd_event.event != KEYBOARD_EVENT_NOTHING);
+        printf("status: %llx %llx %llx %llx\n", kbd_event.current_state.keys_down[0],
+                                        kbd_event.current_state.keys_down[1],
+                                        kbd_event.current_state.keys_down[2],
+                                        kbd_event.current_state.keys_down[3]);
 
         for(u64 i = 0; i < raw_mouse_count; i++)
         {
