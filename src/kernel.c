@@ -266,14 +266,12 @@ u64 m_trap(
                     {
                         u8 scode;
                         uart_read_blocking(&scode, 1);
-                        printf("interrupt scancode %u down\n", scode);
                         keyboard_put_new_event(&kbd_event_queue, KEYBOARD_EVENT_PRESSED, scode);
                     }
                     else if(character == 'u') // Key up
                     {
                         u8 scode;
                         uart_read_blocking(&scode, 1);
-                        printf("interrupt scancode %u up\n", scode);
                         keyboard_put_new_event(&kbd_event_queue, KEYBOARD_EVENT_RELEASED, scode);
                     }
                     else {
@@ -364,6 +362,7 @@ u64 user_surface_acquire(u64 surface_slot, Framebuffer** fb);
 void user_thread_sleep(u64 duration);
 void user_wait_for_surface_draw(u64 surface_slot);
 u64 user_get_raw_mouse(RawMouse* buf, u64 len);
+u64 user_get_keyboard_events(KeyboardEvent* buf, u64 len);
  
 void thread1_func()
 {
@@ -378,20 +377,31 @@ while(1) {
         RawMouse mouses[raw_mouse_count];
         user_get_raw_mouse(mouses, raw_mouse_count);
 
-        KeyboardEvent kbd_event;
+        u64 kbd_event_count = user_get_keyboard_events(0, 0);
+        KeyboardEvent kbd_events[kbd_event_count];
+        u64 more = 0;
         do {
-            keyboard_poll_events(&kbd_event_queue, &kbd_event);
-            printf("kbd event: %u, scancode: %u\n", kbd_event.event, kbd_event.scancode);
-        } while(kbd_event.event != KEYBOARD_EVENT_NOTHING);
-        printf("status: %llx %llx %llx %llx\n", kbd_event.current_state.keys_down[0],
-                                        kbd_event.current_state.keys_down[1],
-                                        kbd_event.current_state.keys_down[2],
-                                        kbd_event.current_state.keys_down[3]);
+            more = 0;
+            kbd_event_count = user_get_keyboard_events(kbd_events, kbd_event_count);
+            for(u64 i = 0; i < kbd_event_count; i++)
+            {
+                if(kbd_events[i].event == KEYBOARD_EVENT_NOTHING)
+                { continue; }
+                more = 1;
 
+                printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+            }
+        } while(more);
+
+/*        printf("status: %llx %llx %llx %llx\n", kbd_events[0].current_state.keys_down[0],
+                                        kbd_events[0].current_state.keys_down[1],
+                                        kbd_events[0].current_state.keys_down[2],
+                                        kbd_events[0].current_state.keys_down[3]);
+*/
         for(u64 i = 0; i < raw_mouse_count; i++)
         {
-            ballx += mouses[i].x / 5.0;
-            bally += mouses[i].y / 5.0;
+            ballx += mouses[i].x / 2.0;
+            bally += mouses[i].y / 2.0;
         }
 
         if(ballx < 0.0) { ballx = 0.0; }

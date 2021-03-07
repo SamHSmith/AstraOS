@@ -36,3 +36,11 @@ user_get_raw_mouse:
     addi a0, x0, 4
     ecall
     ret
+
+.global user_get_keyboard_events
+user_get_keyboard_events:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 5
+    ecall
+    ret
