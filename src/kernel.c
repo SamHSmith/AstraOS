@@ -426,6 +426,10 @@ while(1) {
                                         kbd_events[0].current_state.keys_down[2],
                                         kbd_events[0].current_state.keys_down[3]);
 */
+
+        u64 column_count = (fb->width / 9) - 1;
+        u64 row_count = (fb->height / 12) - 1;
+
         for(u64 i = 0; i < raw_mouse_count; i++)
         {
             ballx += mouses[i].x / 2.0;
@@ -441,19 +445,27 @@ while(1) {
         for(u64 x = 0; x < fb->width; x++)
         {
             u64 i = x + (y * fb->width);
+
+            fb->data[i*4 + 0] = 0.0;
+            fb->data[i*4 + 1] = 0.0;
+            fb->data[i*4 + 2] = 0.0;
+            fb->data[i*4 + 3] = 1.0;
+
+            u64 c = x / 9;
+            u64 r = y / 12;
+
+            if(((c % 5 == 0) || (r % 5 == 0)) && c < column_count && r < row_count)
+            {
+                fb->data[i*4 + 0] = 1.0;
+                fb->data[i*4 + 1] = 1.0;
+                fb->data[i*4 + 2] = 0.0;
+            }
+
             if(x == (u64)ballx || y == (u64)bally)
             {
-                fb->data[i*4 + 0] = 0.0;
-                fb->data[i*4 + 1] = 1.0;
-                fb->data[i*4 + 2] = 1.0;
-                fb->data[i*4 + 3] = 1.0;
-            }
-            else
-            {
-                fb->data[i*4 + 0] = 0.0;
-                fb->data[i*4 + 1] = 0.0;
-                fb->data[i*4 + 2] = 0.0;
-                fb->data[i*4 + 3] = 1.0;
+                fb->data[i*4 + 0] = 1.0 - fb->data[i*4 + 0];
+                fb->data[i*4 + 1] = 1.0 - fb->data[i*4 + 1];
+                fb->data[i*4 + 2] = 1.0 - fb->data[i*4 + 2];
             }
         }
  
