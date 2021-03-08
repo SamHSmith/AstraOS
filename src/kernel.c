@@ -363,11 +363,17 @@ void user_thread_sleep(u64 duration);
 void user_wait_for_surface_draw(u64 surface_slot);
 u64 user_get_raw_mouse(RawMouse* buf, u64 len);
 u64 user_get_keyboard_events(KeyboardEvent* buf, u64 len);
- 
+
+#include "samorak.h"
+
 void thread1_func()
 {
 f64 ballx = 0.0;
 f64 bally = 0.0;
+char textbuffer[4096];
+textbuffer[0] = 0;
+
+s64 backspace_timer = -1;
 while(1) {
     user_wait_for_surface_draw(42);
     Framebuffer* fb;
@@ -389,9 +395,31 @@ while(1) {
                 { continue; }
                 more = 1;
 
-                printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+                if(kbd_events[i].event == KEYBOARD_EVENT_PRESSED)
+                {
+                    append_scancode_to_string(kbd_events[i].scancode,
+                                kbd_events[i].current_state, textbuffer);
+                    if(kbd_events[i].scancode == 42 && strlen(textbuffer) > 0) {
+                        backspace_timer = 5;
+                        textbuffer[strlen(textbuffer)-1] = 0;
+                    }
+                }
+                else
+                {
+                    if(kbd_events[i].scancode == 42)
+                    { backspace_timer = -1; }
+                }
+
+//                printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
             }
         } while(more);
+
+        if(strlen(textbuffer) >= 1 && backspace_timer == 0)
+        { textbuffer[strlen(textbuffer)-1] = 0; }
+        else
+        { backspace_timer--; }
+
+        printf("%s\n", textbuffer);
 
 /*        printf("status: %llx %llx %llx %llx\n", kbd_events[0].current_state.keys_down[0],
                                         kbd_events[0].current_state.keys_down[1],
