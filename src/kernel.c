@@ -365,9 +365,13 @@ u64 user_get_raw_mouse(RawMouse* buf, u64 len);
 u64 user_get_keyboard_events(KeyboardEvent* buf, u64 len);
 
 #include "samorak.h"
+#include "font9_12.h"
 
 void thread1_func()
 {
+u64 font_bitmaps[256*2];
+font9_12_get_bitmap(font_bitmaps);
+
 f64 ballx = 0.0;
 f64 bally = 0.0;
 char textbuffer[4096];
@@ -430,6 +434,8 @@ while(1) {
         u64 column_count = (fb->width / 9) - 1;
         u64 row_count = (fb->height / 12) - 1;
 
+        u64 tblen = strlen(textbuffer);
+
         for(u64 i = 0; i < raw_mouse_count; i++)
         {
             ballx += mouses[i].x / 2.0;
@@ -454,7 +460,15 @@ while(1) {
             u64 c = x / 9;
             u64 r = y / 12;
 
-            if(((c % 5 == 0) || (r % 5 == 0)) && c < column_count && r < row_count)
+            u64 ch_index = c + (r * column_count);
+            u64 font_id = textbuffer[ch_index];
+
+            u64 here = c < column_count && r < row_count && ch_index < tblen;
+
+            u64 bitmap_index = (x % 9) + (9 * (y % 12));
+            here =here &&(font_bitmaps[2*font_id + (bitmap_index >>6)] & (((u64)1) << (bitmap_index & 0x3F)));
+
+            if(here)
             {
                 fb->data[i*4 + 0] = 1.0;
                 fb->data[i*4 + 1] = 1.0;
