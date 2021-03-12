@@ -102,8 +102,8 @@ void font9_12_get_bitmap(u64* bitmap)
         }
 
           else if(c == 'a') {
-            bitmap[2*c+0] = 0x905030000000000;
-            bitmap[2*c+1] = 0x230A42211;
+            bitmap[2*c+0] = 0x1E00000000000000;
+            bitmap[2*c+1] = 0x2E0884422;
         } else if(c == 'b') {
             bitmap[2*c+0] = 0x260D008040201000;
             bitmap[2*c+1] = 0x1A1308844;
@@ -120,8 +120,8 @@ void font9_12_get_bitmap(u64* bitmap)
             bitmap[2*c+0] = 0x103C0404020E000;
             bitmap[2*c+1] = 0x10080402;
         } else if(c == 'g') {
-            bitmap[2*c+0] = 0x100B064221206000;
-            bitmap[2*c+1] = 0xE0884420;
+            bitmap[2*c+0] = 0x904838000000000;
+            bitmap[2*c+1] = 0x1C11070040C;
         } else if(c == 'h') {
             bitmap[2*c+0] = 0xD00804020100800;
             bitmap[2*c+1] = 0x110884426;
@@ -150,35 +150,35 @@ void font9_12_get_bitmap(u64* bitmap)
             bitmap[2*c+0] = 0xF0884C1A0000000;
             bitmap[2*c+1] = 0x10080402;
         } else if(c == 'q') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0x1E08844221E00000;
+            bitmap[2*c+1] = 0x100C0C020;
         } else if(c == 'r') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0x306800000000000;
+            bitmap[2*c+1] = 0x10080402;
         } else if(c == 's') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0x1E00000000000000;
+            bitmap[2*c+1] = 0xF0803802;
         } else if(c == 't') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0x40F010080000000;
+            bitmap[2*c+1] = 0x180201008;
         } else if(c == 'u') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0x1100000000000000;
+            bitmap[2*c+1] = 0x2E0884422;
         } else if(c == 'v') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0x1110400000000000;
+            bitmap[2*c+1] = 0x40502822;
         } else if(c == 'w') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0x2080000000000000;
+            bitmap[2*c+1] = 0x11154AA49;
         } else if(c == 'x') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0x1100000000000000;
+            bitmap[2*c+1] = 0x110501014;
         } else if(c == 'y') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0xA05044220000000;
+            bitmap[2*c+1] = 0x2020101008;
         } else if(c == 'z') {
-            bitmap[2*c+0] = 0x180C0000000;
-            bitmap[2*c+1] = 0x60300000;
+            bitmap[2*c+0] = 0x1F00000000000000;
+            bitmap[2*c+1] = 0x1F0101010;
         }
     }
 }
