@@ -100,5 +100,85 @@ void font9_12_get_bitmap(u64* bitmap)
             bitmap[2*c+0] = 0x180C0000000;
             bitmap[2*c+1] = 0x60300000;
         }
+
+          else if(c == 'a') {
+            bitmap[2*c+0] = 0x905030000000000;
+            bitmap[2*c+1] = 0x230A42211;
+        } else if(c == 'b') {
+            bitmap[2*c+0] = 0x260D008040201000;
+            bitmap[2*c+1] = 0x1A1308844;
+        } else if(c == 'c') {
+            bitmap[2*c+0] = 0x107000000000000;
+            bitmap[2*c+1] = 0xE0080402;
+        } else if(c == 'd') {
+            bitmap[2*c+0] = 0xF04020100804000;
+            bitmap[2*c+1] = 0x230A42211;
+        } else if(c == 'e') {
+            bitmap[2*c+0] = 0x1107000000000000;
+            bitmap[2*c+1] = 0xE0083C22;
+        } else if(c == 'f') {
+            bitmap[2*c+0] = 0x103C0404020E000;
+            bitmap[2*c+1] = 0x10080402;
+        } else if(c == 'g') {
+            bitmap[2*c+0] = 0x100B064221206000;
+            bitmap[2*c+1] = 0xE0884420;
+        } else if(c == 'h') {
+            bitmap[2*c+0] = 0xD00804020100800;
+            bitmap[2*c+1] = 0x110884426;
+        } else if(c == 'i') {
+            bitmap[2*c+0] = 0x403000000402000;
+            bitmap[2*c+1] = 0x40201008;
+        } else if(c == 'j') {
+            bitmap[2*c+0] = 0x403000000402000;
+            bitmap[2*c+1] = 0x6048201008;
+        } else if(c == 'k') {
+            bitmap[2*c+0] = 0x908804020100000;
+            bitmap[2*c+1] = 0x210882C0A;
+        } else if(c == 'l') {
+            bitmap[2*c+0] = 0x804020100C00000;
+            bitmap[2*c+1] = 0x100402010;
+        } else if(c == 'm') {
+            bitmap[2*c+0] = 0x1B00000000000000;
+            bitmap[2*c+1] = 0x249249249;
+        } else if(c == 'n') {
+            bitmap[2*c+0] = 0x500000000000000;
+            bitmap[2*c+1] = 0x90482416;
+        } else if(c == 'o') {
+            bitmap[2*c+0] = 0xE00000000000000;
+            bitmap[2*c+1] = 0xE0884422;
+        } else if(c == 'p') {
+            bitmap[2*c+0] = 0xF0884C1A0000000;
+            bitmap[2*c+1] = 0x10080402;
+        } else if(c == 'q') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        } else if(c == 'r') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        } else if(c == 's') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        } else if(c == 't') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        } else if(c == 'u') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        } else if(c == 'v') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        } else if(c == 'w') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        } else if(c == 'x') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        } else if(c == 'y') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        } else if(c == 'z') {
+            bitmap[2*c+0] = 0x180C0000000;
+            bitmap[2*c+1] = 0x60300000;
+        }
     }
 }
