@@ -30,6 +30,8 @@ typedef struct
 {
     Kallocation proc_alloc;
     u64* mmu_table; // does not change during the lifetime of the proccess
+    Kallocation surface_alloc;
+    u64 surface_count;
     u32 thread_count;
     Thread threads[];
 } Proccess;
@@ -45,6 +47,7 @@ u64 proccess_create()
     proccess->proc_alloc = _proc;
 
     proccess->mmu_table = (u64*)kalloc_single_page();
+    proccess->surface_alloc.page_count = 0;
     for(u64 i = 0; i < 512; i++) { proccess->mmu_table[i] = 0; }
     proccess->thread_count = 0;
 

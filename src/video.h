@@ -30,28 +30,56 @@ typedef struct
     volatile Framebuffer* fb_present;
     volatile Framebuffer* fb_draw;
     u8 has_commited;
+    u8 is_initialized;
 } Surface;
 
-volatile Surface surface;
-
-Surface surface_create()
+u64 surface_create(Proccess* p)
 {
-    Surface s = {0};
-    s.fb_present = framebuffer_create(0, 0);
-    s.fb_draw = framebuffer_create(0, 0);
-    return s;
+    for(u64 i = 0; i < p->surface_count; i++)
+    {
+        Surface* s = ((Surface*)p->surface_alloc.memory) + i;
+        if(!s->is_initialized)
+        {
+            s->fb_present = framebuffer_create(0, 0);
+            s->fb_draw = framebuffer_create(0, 0);
+            s->is_initialized = 1;
+            return i;
+        }
+    }
+
+    if((p->surface_count + 1) * sizeof(Surface) > p->surface_alloc.page_count * PAGE_SIZE)
+    {
+        Kallocation new_alloc = kalloc_pages(p->surface_alloc.page_count + 1);
+        Surface* new_array = (Surface*)new_alloc.memory;
+        for(u64 i = 0; i < p->surface_count; i++)
+        {
+            new_array[i] = ((Surface*)p->surface_alloc.memory)[i];
+        }
+        if(p->surface_alloc.page_count != 0)
+        {
+            kfree_pages(p->surface_alloc);
+        }
+        p->surface_alloc = new_alloc;
+    }
+    Surface* s = ((Surface*)p->surface_alloc.memory) + p->surface_count;
+    p->surface_count += 1;
+
+    s->fb_present = framebuffer_create(0, 0);
+    s->fb_draw = framebuffer_create(0, 0);
+    s->is_initialized = 1;
+    return p->surface_count - 1;
 }
 
-u64 surface_has_commited(Surface s)
+u64 surface_has_commited(Surface* s)
 {
-    return s.has_commited && s.fb_present->width == s.width && s.fb_present->height == s.height;
+    return s->has_commited && s->fb_present->width == s->width && s->fb_present->height == s->height;
 }
 
 u64 surface_acquire(u64 surface_slot, Framebuffer** fb, Proccess* proccess)
 {
-    Surface* s = &surface; //TODO: replace
+    Surface* s = ((Surface*)proccess->surface_alloc.memory) + surface_slot;
 
-    if(surface_has_commited(*s)) { return 0; }
+    if(surface_has_commited(s)) { return 0; }
 
     *fb = (Framebuffer*)69201920; //Some rando address. This is SUPER BAD but will work now
 
@@ -61,7 +89,7 @@ u64 surface_acquire(u64 surface_slot, Framebuffer** fb, Proccess* proccess)
 
 void surface_commit(u64 surface_slot, Proccess* proccess)
 {
-    Surface* s = &surface; //TODO: replace with slot
+    Surface* s = ((Surface*)proccess->surface_alloc.memory) + surface_slot;
 
     volatile Framebuffer* temp = s->fb_present;
     s->fb_present = s->fb_draw;

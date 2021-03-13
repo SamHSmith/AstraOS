@@ -105,8 +105,6 @@ void kmain()
     plic_interrupt_enable(10);
     plic_interrupt_set_priority(10, 1);
 
-    surface = surface_create();
-
     for(s64 i = 0; i < 5; i++) { uart_write_string("\n"); } //tells the viewer we have initialized
 
     proccess_init();
@@ -228,8 +226,9 @@ u64 m_trap(
                         uart_read_blocking(mouse_data, 3*4);
                         new_mouse_input_from_serial(mouse_data);
 
-                        surface.width = width;
-                        surface.height = height;
+                        Surface* surface = ((Surface*)KERNEL_PROCCESS_ARRAY[0]->surface_alloc.memory);
+                        surface->width = width;
+                        surface->height = height;
                         u8 frame_dropped = 1;
 
                         if(framebuffer == 0)
@@ -243,9 +242,9 @@ u64 m_trap(
                         if(surface_has_commited(surface))
                         {
                             Framebuffer* temp = framebuffer;
-                            framebuffer = surface.fb_present;
-                            surface.fb_present = temp;
-                            surface.has_commited = 0;
+                            framebuffer = surface->fb_present;
+                            surface->fb_present = temp;
+                            surface->has_commited = 0;
                             frame_dropped = 0;
                         }
 
@@ -379,9 +378,9 @@ textbuffer[0] = 0;
 
 s64 backspace_timer = -1;
 while(1) {
-    user_wait_for_surface_draw(42);
+    user_wait_for_surface_draw(0);
     Framebuffer* fb;
-    if(user_surface_acquire(42, &fb))
+    if(user_surface_acquire(0, &fb))
     {
         u64 raw_mouse_count = user_get_raw_mouse(0, 0);
         RawMouse mouses[raw_mouse_count];
@@ -483,12 +482,7 @@ while(1) {
             }
         }
  
-        user_surface_commit(42);
-    }
-    else
-    {
-        printf("there was nothing to render\n");
-        user_thread_sleep(10000000/1000);
+        user_surface_commit(0);
     }
 }
 }

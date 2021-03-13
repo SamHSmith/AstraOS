@@ -24,6 +24,11 @@ u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
     {
         // when slots are implemented we should use
         // t->surface_slot_wait
+        Surface* surface=((Surface*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory)
+                + t->surface_slot_wait;
+        assert(t->surface_slot_wait < KERNEL_PROCCESS_ARRAY[r.pid]->surface_count
+                && surface->is_initialized,
+                "the surface slot contains to a valid surface");
         if(!surface_has_commited(surface))
         {
             t->thread_state = THREAD_STATE_RUNNING;
@@ -111,6 +116,7 @@ void thread3_func();
 void proccess_init()
 {
     u64 pid = proccess_create();
+    printf("the surface_slot is: %llu\n", surface_create(KERNEL_PROCCESS_ARRAY[pid]));
 
     u64* table = KERNEL_PROCCESS_ARRAY[pid]->mmu_table;
 
