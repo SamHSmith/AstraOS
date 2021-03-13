@@ -100,6 +100,38 @@ void font9_12_get_bitmap(u64* bitmap)
             bitmap[2*c+0] = 0x180C0000000;
             bitmap[2*c+1] = 0x60300000;
         }
+ 
+          else if(c == '1') {
+            bitmap[2*c+0] = 0x402018000000000;
+            bitmap[2*c+1] = 0x40201008;
+        } else if(c == '2') {
+            bitmap[2*c+0] = 0x100803C000000000;
+            bitmap[2*c+1] = 0x1F0101010;
+        } else if(c == '3') {
+            bitmap[2*c+0] = 0x201007C000000000;
+            bitmap[2*c+1] = 0x1F100803C;
+        } else if(c == '4') {
+            bitmap[2*c+0] = 0x1109050301000000;
+            bitmap[2*c+1] = 0x10080407E;
+        } else if(c == '5') {
+            bitmap[2*c+0] = 0x1008043E0000000;
+            bitmap[2*c+1] = 0x1F100803E;
+        } else if(c == '6') {
+            bitmap[2*c+0] = 0x100838000000000;
+            bitmap[2*c+1] = 0xE088441E;
+        } else if(c == '7') {
+            bitmap[2*c+0] = 0x100F800000000000;
+            bitmap[2*c+1] = 0x10101010;
+        } else if(c == '8') {
+            bitmap[2*c+0] = 0x1108838000000000;
+            bitmap[2*c+1] = 0xE088441C;
+        } else if(c == '9') {
+            bitmap[2*c+0] = 0x1108838000000000;
+            bitmap[2*c+1] = 0x2020203C;
+        } else if(c == '0') {
+            bitmap[2*c+0] = 0x1108838000000000;
+            bitmap[2*c+1] = 0xE088442A;
+        }
 
           else if(c == 'a') {
             bitmap[2*c+0] = 0x1E00000000000000;
