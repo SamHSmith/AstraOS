@@ -24,8 +24,6 @@ typedef struct
     u16 new_events[KEYBOARD_EVENT_QUEUE_LEN];
 } KeyboardEventQueue;
 
-KeyboardEventQueue kbd_event_queue;
-
 void keyboard_put_new_event(KeyboardEventQueue* queue, u8 event, u8 scancode)
 {
     if(queue->count + 1 >= KEYBOARD_EVENT_QUEUE_LEN)
@@ -78,16 +76,14 @@ typedef struct
     u32 down;
 } RawMouse;
 
-RawMouse mouse;
-
-void new_mouse_input_from_serial(s32 mouse_data[3])
+void new_mouse_input_from_serial(RawMouse* mouse, s32 mouse_data[3])
 {
-    mouse.x += (f64)mouse_data[0];
-    mouse.y += (f64)mouse_data[1];
+    mouse->x += (f64)mouse_data[0];
+    mouse->y += (f64)mouse_data[1];
 
-    mouse.pressed |= (~mouse.down) & mouse_data[2];
-    mouse.released |= (~mouse_data[2]) & mouse.down;
-    mouse.down = mouse_data[2];
+    mouse->pressed |= (~mouse->down) & mouse_data[2];
+    mouse->released |= (~mouse_data[2]) & mouse->down;
+    mouse->down = mouse_data[2];
 }
 
 RawMouse fetch_mouse_data(RawMouse* ptr)

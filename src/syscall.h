@@ -8,7 +8,7 @@ void syscall_surface_commit(Thread** current_thread)
 
     assert(surface_slot < proccess->surface_count &&
         ((Surface*)proccess->surface_alloc.memory)[surface_slot].is_initialized,
-        "the surface slot contains to a valid surface");
+        "surface_commit: the surface slot contains to a valid surface");
 
     surface_commit(surface_slot, proccess);
     (*current_thread)->program_counter += 4;
@@ -28,7 +28,7 @@ void syscall_surface_acquire(volatile Thread** current_thread)
 
     assert(surface_slot < proccess->surface_count &&
         ((Surface*)proccess->surface_alloc.memory)[surface_slot].is_initialized,
-        "the surface slot contains to a valid surface");
+        "surface_aquire: the surface slot contains to a valid surface");
 
     frame->regs[10] = surface_acquire(surface_slot, fb, proccess);
     (*current_thread)->program_counter += 4;
@@ -56,7 +56,7 @@ void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
 
     Surface* surface=((Surface*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory) + surface_slot;
     assert(surface_slot < KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_count && surface->is_initialized,
-            "the surface slot contains to a valid surface");
+            "wait_for_surface_draw: the surface slot contains to a valid surface");
 
     if(surface_has_commited(surface)) // replace surface with slot later
     {
@@ -89,7 +89,7 @@ void syscall_get_raw_mouse(Thread** current_thread)
         if(len < mouse_count) { mouse_count = len; }
         for(u64 i = 0; i < mouse_count; i++)
         {
-            buf[i] = fetch_mouse_data(&mouse); // temporary
+            buf[i] = fetch_mouse_data(&proccess->mouse); // in the future there will be more
         }
     }
     frame->regs[10] = mouse_count;
@@ -117,7 +117,7 @@ void syscall_get_keyboard_events(Thread** current_thread)
         if(len < kbd_count) { kbd_count = len; }
         for(u64 i = 0; i < kbd_count; i++)
         {
-            keyboard_poll_events(&kbd_event_queue, buf);
+            keyboard_poll_events(&proccess->kbd_event_queue, buf);
         }
     }
     frame->regs[10] = kbd_count;

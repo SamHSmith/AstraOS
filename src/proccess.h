@@ -32,6 +32,8 @@ typedef struct
     u64* mmu_table; // does not change during the lifetime of the proccess
     Kallocation surface_alloc;
     u64 surface_count;
+    KeyboardEventQueue kbd_event_queue;
+    RawMouse mouse;
     u32 thread_count;
     Thread threads[];
 } Proccess;

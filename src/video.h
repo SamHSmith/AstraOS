@@ -103,3 +103,11 @@ void surface_commit(u64 surface_slot, Proccess* proccess)
     s->has_commited = 1;
 }
 
+typedef struct
+{
+    u64 pid;
+    u8 is_active;
+} VirtualOutput;
+
+VirtualOutput vos[4];
+u64 current_vo = 0;

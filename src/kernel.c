@@ -224,9 +224,11 @@ u64 m_trap(
 
                         s32 mouse_data[3];
                         uart_read_blocking(mouse_data, 3*4);
-                        new_mouse_input_from_serial(mouse_data);
+                        RawMouse* mouse = &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->mouse;
+                        new_mouse_input_from_serial(mouse, mouse_data);
 
-                        Surface* surface = ((Surface*)KERNEL_PROCCESS_ARRAY[0]->surface_alloc.memory);
+                        Surface* surface = ((Surface*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
+                                ->surface_alloc.memory);
                         surface->width = width;
                         surface->height = height;
                         u8 frame_dropped = 1;
@@ -265,13 +267,17 @@ u64 m_trap(
                     {
                         u8 scode;
                         uart_read_blocking(&scode, 1);
-                        keyboard_put_new_event(&kbd_event_queue, KEYBOARD_EVENT_PRESSED, scode);
+                        KeyboardEventQueue* kbd_event_queue = 
+                            &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
+                        keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_PRESSED, scode);
                     }
                     else if(character == 'u') // Key up
                     {
                         u8 scode;
                         uart_read_blocking(&scode, 1);
-                        keyboard_put_new_event(&kbd_event_queue, KEYBOARD_EVENT_RELEASED, scode);
+                        KeyboardEventQueue* kbd_event_queue =
+                            &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
+                        keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_RELEASED, scode);
                     }
                     else {
                         printf("you typed the character: %c\n", character);
@@ -505,6 +511,8 @@ void thread3_func()
     {
         user_thread_sleep(10000000*12);
         printf("<> <> <> <> <> <> <> <>  OMG ITS A THIRD THREAD!!!! #%lld times... <> <> <> \n", times);
+if(current_vo == 0) { current_vo = 1; }
+else { current_vo = 0; }
         times++;
     }
 }

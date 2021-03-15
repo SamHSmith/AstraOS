@@ -28,7 +28,7 @@ u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
                 + t->surface_slot_wait;
         assert(t->surface_slot_wait < KERNEL_PROCCESS_ARRAY[r.pid]->surface_count
                 && surface->is_initialized,
-                "the surface slot contains to a valid surface");
+                "thread_runtime_is_live: the surface slot contains to a valid surface");
         if(!surface_has_commited(surface))
         {
             t->thread_state = THREAD_STATE_RUNNING;
@@ -116,22 +116,51 @@ void thread3_func();
 void proccess_init()
 {
     u64 pid = proccess_create();
-    printf("the surface_slot is: %llu\n", surface_create(KERNEL_PROCCESS_ARRAY[pid]));
+    u64 pid2 = proccess_create();
+
+    surface_create(KERNEL_PROCCESS_ARRAY[pid]);
+    surface_create(KERNEL_PROCCESS_ARRAY[pid2]);
+
+    vos[0].pid = pid;
+    vos[0].is_active = 1;
+
+    vos[1].pid = pid2;
+    vos[1].is_active = 1;
 
     u64* table = KERNEL_PROCCESS_ARRAY[pid]->mmu_table;
+    u64* table2 = KERNEL_PROCCESS_ARRAY[pid2]->mmu_table;
 
     mmu_kernel_map_range(table, (u64*)TEXT_START, (u64*)TEXT_END,                   2 + 8); //read + execute
     mmu_kernel_map_range(table, (u64*)RODATA_START, (u64*)RODATA_END,               2    ); //readonly
     mmu_kernel_map_range(table, (u64*)DATA_START, (u64*)DATA_END,                   2 + 4); //read + write
     mmu_kernel_map_range(table, (u64*)BSS_START, (u64*)BSS_END,                     2 + 4);
+    mmu_kernel_map_range(table2, (u64*)TEXT_START, (u64*)TEXT_END,                   2 + 8); //read + execute
+    mmu_kernel_map_range(table2, (u64*)RODATA_START, (u64*)RODATA_END,               2    ); //readonly
+    mmu_kernel_map_range(table2, (u64*)DATA_START, (u64*)DATA_END,                   2 + 4); //read + write
+    mmu_kernel_map_range(table2, (u64*)BSS_START, (u64*)BSS_END,                     2 + 4);
 
 //mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
 
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
+    mmu_kernel_map_range(table2, 0x10000000, 0x10000000, 2 + 4);
 
     u32 thread1 = proccess_thread_create(pid);
     u32 thread2 = proccess_thread_create(pid);
     u32 thread3 = proccess_thread_create(pid);
+
+    u32 tp2 = proccess_thread_create(pid2);
+    Thread* tp2t = &KERNEL_PROCCESS_ARRAY[pid2]->threads[tp2];
+    tp2t->stack_alloc = kalloc_pages(4);
+    tp2t->frame.regs[2] = 
+        ((u64)tp2t->stack_alloc.memory) + tp2t->stack_alloc.page_count * PAGE_SIZE;
+    mmu_kernel_map_range(
+            table2,
+            (u64*)tp2t->stack_alloc.memory,
+            (u64*)tp2t->frame.regs[2],
+            2 + 4
+        );
+    tp2t->program_counter = (u64)thread1_func;
+    tp2t->thread_state = THREAD_STATE_RUNNING;
 
     Thread* tarr = KERNEL_PROCCESS_ARRAY[pid]->threads;
 

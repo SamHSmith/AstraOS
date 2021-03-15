@@ -15,8 +15,9 @@ int main()
 		fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
 	}
-    int size = 7;
-    SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, 66*size, 37*size, SDL_WINDOW_SHOWN);
+    int size = 256/4;
+    SDL_Window *win = SDL_CreateWindow("Hello World!", 0, 0, (1280/256) * size, (1280/256) * size,
+                                SDL_WINDOW_SHOWN);
 	if (win == NULL) {
 		fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
 		return EXIT_FAILURE;
