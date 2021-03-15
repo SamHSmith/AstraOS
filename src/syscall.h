@@ -124,6 +124,30 @@ void syscall_get_keyboard_events(Thread** current_thread)
     t->program_counter += 4;
 }
 
+void syscall_switch_vo(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
+
+    u64 new_vo = frame->regs[11];
+    u64 ret = 0;
+
+    if(vos[current_vo].pid != t->proccess_pid)
+    {
+        ret = 1; // failed, not authorized
+    }
+    else if(new_vo >= VO_COUNT || !(vos[new_vo].is_active))
+    {
+        ret = 2; // failed, invalid new_vo
+    }
+    else
+    {
+        ret = 0; //success
+        current_vo = new_vo;
+    }
+    frame->regs[10] = ret;
+    t->program_counter += 4;
+}
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -139,6 +163,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_get_raw_mouse(current_thread); }
     else if(call_num == 5)
     { syscall_get_keyboard_events(current_thread); }
+    else if(call_num == 6)
+    { syscall_switch_vo(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

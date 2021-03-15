@@ -109,5 +109,6 @@ typedef struct
     u8 is_active;
 } VirtualOutput;
 
-VirtualOutput vos[4];
+#define VO_COUNT 4
+VirtualOutput vos[VO_COUNT];
 u64 current_vo = 0;

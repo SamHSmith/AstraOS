@@ -368,6 +368,7 @@ void user_thread_sleep(u64 duration);
 void user_wait_for_surface_draw(u64 surface_slot);
 u64 user_get_raw_mouse(RawMouse* buf, u64 len);
 u64 user_get_keyboard_events(KeyboardEvent* buf, u64 len);
+u64 user_switch_vo(u64 vo_id);
 
 #include "samorak.h"
 #include "font9_12.h"
@@ -406,6 +407,11 @@ while(1) {
 
                 if(kbd_events[i].event == KEYBOARD_EVENT_PRESSED)
                 {
+                    if(kbd_events[i].scancode == 81)
+                    {
+                        if(current_vo == 0) { user_switch_vo(1); }
+                        else { user_switch_vo(0); }
+                    }
                     append_scancode_to_string(kbd_events[i].scancode,
                                 kbd_events[i].current_state, textbuffer);
                     if(kbd_events[i].scancode == 42 && strlen(textbuffer) > 0) {
@@ -511,8 +517,6 @@ void thread3_func()
     {
         user_thread_sleep(10000000*12);
         printf("<> <> <> <> <> <> <> <>  OMG ITS A THIRD THREAD!!!! #%lld times... <> <> <> \n", times);
-if(current_vo == 0) { current_vo = 1; }
-else { current_vo = 0; }
         times++;
     }
 }

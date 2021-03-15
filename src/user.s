@@ -44,3 +44,10 @@ user_get_keyboard_events:
     addi a0, x0, 5
     ecall
     ret
+
+.global user_switch_vo
+user_switch_vo:
+    mv a1, a0
+    addi a0, x0, 6
+    ecall
+    ret
