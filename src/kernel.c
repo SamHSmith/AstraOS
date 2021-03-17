@@ -442,8 +442,8 @@ while(1) {
                                         kbd_events[0].current_state.keys_down[3]);
 */
 
-        u64 column_count = (fb->width / 9) - 1;
-        u64 row_count = (fb->height / 12) - 1;
+        u64 column_count = (fb->width / 9);
+        u64 row_count = (fb->height / 12);
 
         u64 tblen = strlen(textbuffer);
 
