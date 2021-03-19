@@ -51,3 +51,10 @@ user_switch_vo:
     addi a0, x0, 6
     ecall
     ret
+
+.global user_get_vo_id
+user_get_vo_id:
+    mv a1, a0
+    addi a0, x0, 7
+    ecall
+    ret

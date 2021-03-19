@@ -369,6 +369,7 @@ void user_wait_for_surface_draw(u64 surface_slot);
 u64 user_get_raw_mouse(RawMouse* buf, u64 len);
 u64 user_get_keyboard_events(KeyboardEvent* buf, u64 len);
 u64 user_switch_vo(u64 vo_id);
+u64 user_get_vo_id(u64* vo_id);
 
 #include "samorak.h"
 #include "font9_12.h"
@@ -407,14 +408,17 @@ while(1) {
 
                 if(kbd_events[i].event == KEYBOARD_EVENT_PRESSED)
                 {
-                    if(kbd_events[i].scancode == 81)
+                    u64 scancode = kbd_events[i].scancode;
+
+                    if(scancode >= 58 && scancode <= 69)
                     {
-                        if(current_vo == 0) { user_switch_vo(1); }
-                        else { user_switch_vo(0); }
+                        u64 fkey = scancode - 58;
+                        user_switch_vo(fkey);
                     }
-                    append_scancode_to_string(kbd_events[i].scancode,
+
+                    append_scancode_to_string(scancode,
                                 kbd_events[i].current_state, textbuffer);
-                    if(kbd_events[i].scancode == 42 && strlen(textbuffer) > 0) {
+                    if(scancode == 42 && strlen(textbuffer) > 0) {
                         backspace_timer = 5;
                         textbuffer[strlen(textbuffer)-1] = 0;
                     }
@@ -444,6 +448,16 @@ while(1) {
 
         u64 column_count = (fb->width / 9);
         u64 row_count = (fb->height / 12);
+
+        char bottom_banner[256];
+        bottom_banner[0] = 0;
+        u64 cvo = 0;
+        if(user_get_vo_id(&cvo))
+        {
+            row_count -= 1;
+            sprintf(bottom_banner, "Virtual Output #%llu", cvo);
+        }
+        u64 bottom_banner_len = strlen(bottom_banner);
 
         u64 tblen = strlen(textbuffer);
 
@@ -477,7 +491,15 @@ while(1) {
             u64 here = c < column_count && r < row_count && ch_index < tblen;
 
             u64 bitmap_index = (x % 9) + (9 * (y % 12));
+            if(r < row_count && bottom_banner_len)
+            {
             here =here &&(font_bitmaps[2*font_id + (bitmap_index >>6)] & (((u64)1) << (bitmap_index & 0x3F)));
+            }
+            else if(r == row_count && c < bottom_banner_len)
+            {
+                font_id = bottom_banner[c];
+            here = (font_bitmaps[2*font_id + (bitmap_index >>6)] & (((u64)1) << (bitmap_index & 0x3F)));
+            }
 
             if(here)
             {

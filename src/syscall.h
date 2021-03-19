@@ -148,6 +148,41 @@ void syscall_switch_vo(Thread** current_thread)
     frame->regs[10] = ret;
     t->program_counter += 4;
 }
+
+/*
+    if the running proccess is in a VO
+        the VO's id will be stored in arg1 if arg1 is not null
+        the function will return true
+    if not
+        the function will return false
+*/
+void syscall_get_vo_id(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
+
+    u64 ret = 0;
+    for(u64 i = 0; i < VO_COUNT; i++)
+    {
+        if(vos[i].is_active && vos[i].pid == t->proccess_pid)
+        { ret = 1; }
+    }
+
+    u64 user_vo_id_ptr = frame->regs[11];
+    if(ret && user_vo_id_ptr != 0)
+    {
+        Proccess* proccess = KERNEL_PROCCESS_ARRAY[t->proccess_pid];
+        u64* ptr;
+        assert(
+            mmu_virt_to_phys(proccess->mmu_table, user_vo_id_ptr, (u64*)&ptr) == 0,
+            "you didn't do a memory bad"
+        );
+        *ptr = current_vo;
+    }
+    frame->regs[10] = ret;
+    t->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -165,6 +200,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_get_keyboard_events(current_thread); }
     else if(call_num == 6)
     { syscall_switch_vo(current_thread); }
+    else if(call_num == 7)
+    { syscall_get_vo_id(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }
