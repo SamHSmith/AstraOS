@@ -23,6 +23,17 @@ u64 strlen(char* str)
     while(str[i] != 0) { i++; }
     return i;
 }
+void strcat(char* dest, char* src)
+{
+    char* d = dest;
+    while(*d) { d++; }
+    char* s = src;
+    do {
+        *d = *s;
+        d++;
+        s++;
+    } while(*s);
+}
 
 void* memcpy(void* dest, const void* src, u64 n)
 {
@@ -381,6 +392,7 @@ font9_12_get_bitmap(font_bitmaps);
 
 f64 ballx = 0.0;
 f64 bally = 0.0;
+
 char textbuffer[4096];
 textbuffer[0] = 0;
 
@@ -416,6 +428,11 @@ while(1) {
                         user_switch_vo(fkey);
                     }
 
+                    if(scancode == 40)
+                    {
+                        strcat(textbuffer, "\n");
+                    }
+
                     append_scancode_to_string(scancode,
                                 kbd_events[i].current_state, textbuffer);
                     if(scancode == 42 && strlen(textbuffer) > 0) {
@@ -438,7 +455,7 @@ while(1) {
         else
         { backspace_timer--; }
 
-        printf("%s\n", textbuffer);
+//        printf("%s\n", textbuffer);
 
 /*        printf("status: %llx %llx %llx %llx\n", kbd_events[0].current_state.keys_down[0],
                                         kbd_events[0].current_state.keys_down[1],
@@ -454,7 +471,6 @@ while(1) {
         u64 cvo = 0;
         if(user_get_vo_id(&cvo))
         {
-            row_count -= 1;
             sprintf(bottom_banner, "Virtual Output #%llu", cvo);
         }
         u64 bottom_banner_len = strlen(bottom_banner);
@@ -472,6 +488,56 @@ while(1) {
         if((u64)ballx >= fb->width) { ballx = (f64)(fb->width-1); }
         if((u64)bally >= fb->height) { bally = (f64)(fb->height-1); }
 
+        u64 fontids[row_count * column_count];
+
+        {
+            s64 ch_index = strlen(textbuffer) - 1;
+            for(s64 r = row_count -1; r >= 0; r--)
+            {
+                s64 row_len = 0;
+                s64 orig_ch_index = ch_index;
+                while(ch_index >= 0)
+                {
+                    if(textbuffer[ch_index] == '\n')
+                    {
+                        ch_index -= 1;
+                        break;
+                    }
+                    else
+                    {
+                        row_len += 1;
+                        ch_index -= 1;
+                    }
+                }
+                if(row_len > column_count)
+                {
+                    row_len = row_len % column_count;
+                    if(row_len == 0) { row_len = column_count; }
+                    ch_index = orig_ch_index - row_len;
+                }
+
+                u64 skip = textbuffer[ch_index + 1] == '\n';
+                for(u64 c = 0; c < row_len; c++)
+                {
+                    fontids[c + (r*column_count)] = textbuffer[ch_index + skip + 1 + c];
+                }
+                for(u64 c = row_len; c < column_count; c++)
+                {
+                    fontids[c + (r*column_count)] = 0;
+                }
+            }
+            if(ch_index > 0)
+            {
+                char* dest = textbuffer;
+                char* src = textbuffer + ch_index + 1;
+                while(src < (textbuffer + 4096))
+                {
+                    *dest = *src;
+                    src++; dest++;
+                }
+            }
+        }
+
         for(u64 y = 0; y < fb->height; y++)
         for(u64 x = 0; x < fb->width; x++)
         {
@@ -485,20 +551,16 @@ while(1) {
             u64 c = x / 9;
             u64 r = y / 12;
 
-            u64 ch_index = c + (r * column_count);
-            u64 font_id = textbuffer[ch_index];
+            u64 here = 0;
 
-            u64 here = c < column_count && r < row_count && ch_index < tblen;
-
-            u64 bitmap_index = (x % 9) + (9 * (y % 12));
-            if(r < row_count && bottom_banner_len)
+            if(c < column_count && r < row_count)
             {
-            here =here &&(font_bitmaps[2*font_id + (bitmap_index >>6)] & (((u64)1) << (bitmap_index & 0x3F)));
-            }
-            else if(r == row_count && c < bottom_banner_len)
-            {
-                font_id = bottom_banner[c];
-            here = (font_bitmaps[2*font_id + (bitmap_index >>6)] & (((u64)1) << (bitmap_index & 0x3F)));
+                u64 font_id = fontids[c + (r*column_count)];
+                if(font_id >= 256) { font_id = 255; }
+                u64 bitmap_index = (x % 9) + (9 * (y % 12));
+                here =
+            (font_bitmaps[2*font_id + (bitmap_index >>6)] & (((u64)1) << (bitmap_index & 0x3F)));
+                here = here && font_id != 0;
             }
 
             if(here)

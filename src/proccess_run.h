@@ -150,7 +150,7 @@ void proccess_init()
 
     u32 tp2 = proccess_thread_create(pid2);
     Thread* tp2t = &KERNEL_PROCCESS_ARRAY[pid2]->threads[tp2];
-    tp2t->stack_alloc = kalloc_pages(4);
+    tp2t->stack_alloc = kalloc_pages(5000);
     tp2t->frame.regs[2] = 
         ((u64)tp2t->stack_alloc.memory) + tp2t->stack_alloc.page_count * PAGE_SIZE;
     mmu_kernel_map_range(
@@ -164,7 +164,7 @@ void proccess_init()
 
     Thread* tarr = KERNEL_PROCCESS_ARRAY[pid]->threads;
 
-    tarr[thread1].stack_alloc = kalloc_pages(4);
+    tarr[thread1].stack_alloc = kalloc_pages(5000);
     tarr[thread1].frame.regs[2] = 
         ((u64)tarr[thread1].stack_alloc.memory) + tarr[thread1].stack_alloc.page_count * PAGE_SIZE;
     mmu_kernel_map_range(

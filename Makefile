@@ -12,12 +12,12 @@ hdd:
 
 run: clean kernel.bin hdd
 	mkfifo pipe.in pipe.out
-	qemu-system-riscv64 -machine virt -cpu sifive-u54 -smp 4 -m 128M -nographic -serial pipe:./pipe -bios none -kernel kernel.bin -drive if=none,format=raw,file=$(DRIVE),id=foo -device virtio-blk-device,scsi=off,drive=foo
+	qemu-system-riscv64 -machine virt -cpu sifive-u54 -smp 4 -m 512M -nographic -serial pipe:./pipe -bios none -kernel kernel.bin -drive if=none,format=raw,file=$(DRIVE),id=foo -device virtio-blk-device,scsi=off,drive=foo
 	rm -drf pipe.in pipe.out
 
 debug: clean kernel.bin hdd
 	mkfifo pipe.in pipe.out
-	qemu-system-riscv64 -machine virt -cpu sifive-u54 -smp 4 -m 128M -nographic -serial pipe:./pipe -bios none -kernel kernel.bin -drive if=none,format=raw,file=$(DRIVE),id=foo -device virtio-blk-device,scsi=off,drive=foo -s -S
+	qemu-system-riscv64 -machine virt -cpu sifive-u54 -smp 4 -m 512M -nographic -serial pipe:./pipe -bios none -kernel kernel.bin -drive if=none,format=raw,file=$(DRIVE),id=foo -device virtio-blk-device,scsi=off,drive=foo -s -S
 	rm -drf pipe.in pipe.out
 clean:
 	rm -drf pipe.in pipe.out
