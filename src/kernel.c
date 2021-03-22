@@ -474,6 +474,7 @@ while(1) {
             sprintf(bottom_banner, "Virtual Output #%llu", cvo);
         }
         u64 bottom_banner_len = strlen(bottom_banner);
+        if(bottom_banner_len > column_count || row_count <= 1) { bottom_banner_len = column_count; }
 
         u64 tblen = strlen(textbuffer);
 
@@ -492,7 +493,7 @@ while(1) {
 
         {
             s64 ch_index = strlen(textbuffer) - 1;
-            for(s64 r = row_count -1; r >= 0; r--)
+            for(s64 r = row_count -1 - (bottom_banner_len > 0); r >= 0; r--)
             {
                 s64 row_len = 0;
                 s64 orig_ch_index = ch_index;
@@ -526,6 +527,16 @@ while(1) {
                     fontids[c + (r*column_count)] = 0;
                 }
             }
+
+            if(bottom_banner_len > 0)
+            {
+                for(u64 c = 0; c < column_count; c++)
+                {
+                    if(c < bottom_banner_len){ fontids[(row_count-1)* column_count + c] = bottom_banner[c]; }
+                    else { fontids[(row_count-1)* column_count + c] = 0; }
+                }
+            }
+
             if(ch_index > 0)
             {
                 char* dest = textbuffer;
