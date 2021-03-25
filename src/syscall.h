@@ -162,10 +162,11 @@ void syscall_get_vo_id(Thread** current_thread)
     TrapFrame* frame = &t->frame;
 
     u64 ret = 0;
+    u64 vo_id = 0;
     for(u64 i = 0; i < VO_COUNT; i++)
     {
         if(vos[i].is_active && vos[i].pid == t->proccess_pid)
-        { ret = 1; }
+        { ret = 1; vo_id = i; }
     }
 
     u64 user_vo_id_ptr = frame->regs[11];
@@ -177,7 +178,7 @@ void syscall_get_vo_id(Thread** current_thread)
             mmu_virt_to_phys(proccess->mmu_table, user_vo_id_ptr, (u64*)&ptr) == 0,
             "you didn't do a memory bad"
         );
-        *ptr = current_vo;
+        *ptr = vo_id;
     }
     frame->regs[10] = ret;
     t->program_counter += 4;
