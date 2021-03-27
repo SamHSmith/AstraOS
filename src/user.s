@@ -58,3 +58,21 @@ user_get_vo_id:
     addi a0, x0, 7
     ecall
     ret
+
+.global user_alloc_pages
+user_alloc_pages:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 8
+    ecall
+    ret
+
+.global user_shrink_allocation
+user_shrink_allocation:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 9
+    ecall
+    ret
+
+

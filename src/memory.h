@@ -198,7 +198,7 @@ void mem_debug_dump_table_counts(u64 table_count)
         printf("Memtable#%lld %lld/%lld used.\n", b, count, total);
     }
 }
- 
+
 void kfree_single_page(void* page)
 {
     Kallocation k = {0};
@@ -219,20 +219,19 @@ u64 mmu_is_entry_leaf(u64 entry)
  
 void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
 {
-    assert((bits & 0xe) != 0, "bits are not null");
- 
+
     u64 vpn[3];
     vpn[0] = (vaddr >> 12) & 0x1ff;
     vpn[1] = (vaddr >> 21) & 0x1ff;
     vpn[2] = (vaddr >> 30) & 0x1ff;
- 
+
     u64 ppn[3];
     ppn[0] = (paddr >> 12) & 0x1ff;
     ppn[1] = (paddr >> 21) & 0x1ff;
     ppn[2] = (paddr >> 30) & 0x3ffffff;
- 
+
     u64* v = root + vpn[2];
- 
+
     for(s64 i = 1; i >= level; i--)
     {
         if(!mmu_is_entry_valid(*v))
@@ -243,7 +242,7 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
         u64* entry = (u64*)((*v & (~0x3ff)) << 2);
         v = entry + vpn[i];
     }
- 
+
     u64 entry = (ppn[2] << 28) |
                 (ppn[1] << 19) |
                 (ppn[0] << 10) |

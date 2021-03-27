@@ -2,12 +2,18 @@
 
 void user_surface_commit(u64 surface_slot);
 u64 user_surface_acquire(u64 surface_slot, Framebuffer** fb);
+
 void user_thread_sleep(u64 duration);
 void user_wait_for_surface_draw(u64 surface_slot);
+
 u64 user_get_raw_mouse(RawMouse* buf, u64 len);
 u64 user_get_keyboard_events(KeyboardEvent* buf, u64 len);
+
 u64 user_switch_vo(u64 vo_id);
 u64 user_get_vo_id(u64* vo_id);
+
+u64 user_alloc_pages(void* vaddr, u64 page_count);
+u64 user_shrink_allocation(void* vaddr, u64 new_page_count);
 
 #include "samorak.h"
 #include "font9_12.h"
@@ -223,6 +229,13 @@ while(1) {
  
 void thread2_func()
 {
+
+    u64* ptr = PAGE_SIZE * 10;
+    assert(user_alloc_pages(ptr, 4), "alloc success");
+    assert(user_shrink_allocation(ptr, 4), "shrink success");
+    printf("number : %llu\n", *(ptr+5 + (PAGE_SIZE/8)*3));
+    assert(user_shrink_allocation(ptr, 0), "shrink success2");
+
     u64 times = 1;
     while(1)
     {

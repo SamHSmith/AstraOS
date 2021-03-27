@@ -184,6 +184,101 @@ void syscall_get_vo_id(Thread** current_thread)
     t->program_counter += 4;
 }
 
+void syscall_alloc_pages(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Proccess* proccess = KERNEL_PROCCESS_ARRAY[t->proccess_pid];
+    TrapFrame* frame = &t->frame;
+
+    u64 vaddr = frame->regs[11];
+    u64 page_count = frame->regs[12];
+    u64 ret = 0; //default case is failed allocation
+
+    if(page_count != 0 && vaddr % PAGE_SIZE == 0)
+    {
+        if((proccess->allocations_count + 1) * sizeof(Kallocation) >
+            proccess->allocations_alloc.page_count * PAGE_SIZE)
+        {
+            Kallocation new_alloc = kalloc_pages(proccess->allocations_alloc.page_count + 1);
+            for(u64 i = 0; i < proccess->allocations_count; i++)
+            {
+                ((Kallocation*)new_alloc.memory)[i] = ((Kallocation*)proccess->allocations_alloc.memory)[i];
+            }
+            kfree_pages(proccess->allocations_alloc);
+            proccess->allocations_alloc = new_alloc;
+        }
+        Kallocation* alloc = ((Kallocation*)proccess->allocations_alloc.memory) +
+                                proccess->allocations_count;
+        *alloc = kalloc_pages(page_count);
+        if(alloc->page_count != 0)
+        {
+            proccess->allocations_count++;
+            ret = 1;
+
+            mmu_map_kallocation(proccess->mmu_table, *alloc, vaddr, 2 + 4); // read + write
+        }
+    }
+    frame->regs[10] = ret;
+    t->program_counter += 4;
+}
+
+void syscall_shrink_allocation(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Proccess* proccess = KERNEL_PROCCESS_ARRAY[t->proccess_pid];
+    TrapFrame* frame = &t->frame;
+
+    u64 vaddr = frame->regs[11];
+    u64 new_page_count = frame->regs[12];
+    u64 ret = 0; //default case is failed shrink
+
+    void* ptr;
+    if(mmu_virt_to_phys(proccess->mmu_table, vaddr, (u64*)&ptr) == 0)
+    {
+        u64 should_remove = 0;
+        u64 remove_index = 0;
+        for(u64 i = 0; i < proccess->allocations_count; i++)
+        {
+            Kallocation* k = ((Kallocation*)proccess->allocations_alloc.memory) + i;
+            if(k->memory == ptr)
+            {
+                if(k->page_count < new_page_count)
+                { break; }
+
+                mmu_map_kallocation(proccess->mmu_table, *k, vaddr, 0);
+
+                Kallocation remove = {0};
+                remove.memory = (u64)(((u64)k->memory) + PAGE_SIZE * new_page_count);
+                remove.page_count = k->page_count - new_page_count;
+                kfree_pages(remove);
+                k->page_count = new_page_count;
+
+                mmu_map_kallocation(proccess->mmu_table, *k, vaddr, 2 + 4); // read + write
+
+                if(k->page_count == 0)
+                {
+                    should_remove = 1;
+                    remove_index = i;
+                }
+                ret = 1;
+                break;
+            }
+        }
+        Kallocation* array = ((Kallocation*)proccess->allocations_alloc.memory);
+        if(should_remove)
+        {
+            for(u64 i = proccess->allocations_count - 1; i > remove_index; i--)
+            {
+                array[i-1] = array[i];
+            }
+            proccess->allocations_count -= 1;
+        }
+    }
+printf("proc allocs count : %llu\n", proccess->allocations_count);
+    frame->regs[10] = ret;
+    t->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -203,6 +298,10 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_switch_vo(current_thread); }
     else if(call_num == 7)
     { syscall_get_vo_id(current_thread); }
+    else if(call_num == 8)
+    { syscall_alloc_pages(current_thread); }
+    else if(call_num == 9)
+    { syscall_shrink_allocation(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }
