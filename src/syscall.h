@@ -194,30 +194,16 @@ void syscall_alloc_pages(Thread** current_thread)
     u64 page_count = frame->regs[12];
     u64 ret = 0; //default case is failed allocation
 
-    if(page_count != 0 && vaddr % PAGE_SIZE == 0)
+    Kallocation a = kalloc_pages(page_count);
+    if(a.page_count > 0)
     {
-        if((proccess->allocations_count + 1) * sizeof(Kallocation) >
-            proccess->allocations_alloc.page_count * PAGE_SIZE)
-        {
-            Kallocation new_alloc = kalloc_pages(proccess->allocations_alloc.page_count + 1);
-            for(u64 i = 0; i < proccess->allocations_count; i++)
-            {
-                ((Kallocation*)new_alloc.memory)[i] = ((Kallocation*)proccess->allocations_alloc.memory)[i];
-            }
-            kfree_pages(proccess->allocations_alloc);
-            proccess->allocations_alloc = new_alloc;
-        }
-        Kallocation* alloc = ((Kallocation*)proccess->allocations_alloc.memory) +
-                                proccess->allocations_count;
-        *alloc = kalloc_pages(page_count);
-        if(alloc->page_count != 0)
-        {
-            proccess->allocations_count++;
-            ret = 1;
-
-            mmu_map_kallocation(proccess->mmu_table, *alloc, vaddr, 2 + 4); // read + write
-        }
+        ret = proccess_alloc_pages(proccess, vaddr, a);
     }
+    if(!ret)
+    {
+        kfree_pages(a);
+    }
+
     frame->regs[10] = ret;
     t->program_counter += 4;
 }
@@ -232,48 +218,13 @@ void syscall_shrink_allocation(Thread** current_thread)
     u64 new_page_count = frame->regs[12];
     u64 ret = 0; //default case is failed shrink
 
-    void* ptr;
-    if(mmu_virt_to_phys(proccess->mmu_table, vaddr, (u64*)&ptr) == 0)
+    Kallocation remove = proccess_shrink_allocation(proccess, vaddr, new_page_count);
+    if(remove.memory != 0)
     {
-        u64 should_remove = 0;
-        u64 remove_index = 0;
-        for(u64 i = 0; i < proccess->allocations_count; i++)
-        {
-            Kallocation* k = ((Kallocation*)proccess->allocations_alloc.memory) + i;
-            if(k->memory == ptr)
-            {
-                if(k->page_count < new_page_count)
-                { break; }
-
-                mmu_map_kallocation(proccess->mmu_table, *k, vaddr, 0);
-
-                Kallocation remove = {0};
-                remove.memory = (u64)(((u64)k->memory) + PAGE_SIZE * new_page_count);
-                remove.page_count = k->page_count - new_page_count;
-                kfree_pages(remove);
-                k->page_count = new_page_count;
-
-                mmu_map_kallocation(proccess->mmu_table, *k, vaddr, 2 + 4); // read + write
-
-                if(k->page_count == 0)
-                {
-                    should_remove = 1;
-                    remove_index = i;
-                }
-                ret = 1;
-                break;
-            }
-        }
-        Kallocation* array = ((Kallocation*)proccess->allocations_alloc.memory);
-        if(should_remove)
-        {
-            for(u64 i = proccess->allocations_count - 1; i > remove_index; i--)
-            {
-                array[i-1] = array[i];
-            }
-            proccess->allocations_count -= 1;
-        }
+        kfree_pages(remove);
+        ret = 1;
     }
+
 printf("proc allocs count : %llu\n", proccess->allocations_count);
     frame->regs[10] = ret;
     t->program_counter += 4;

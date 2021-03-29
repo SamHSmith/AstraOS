@@ -194,3 +194,96 @@ u32 proccess_thread_create(u64 pid)
     return tid;
 }
 
+u64 proccess_alloc_pages(Proccess* proccess, u64 vaddr, Kallocation mem)
+{
+    u64 ret = 0;
+    if(mem.page_count != 0 && vaddr % PAGE_SIZE == 0)
+    {
+        if((proccess->allocations_count + 1) * sizeof(Kallocation) >
+            proccess->allocations_alloc.page_count * PAGE_SIZE)
+        {
+            Kallocation new_alloc = kalloc_pages(proccess->allocations_alloc.page_count + 1);
+            if(new_alloc.page_count == 0) // ran out of memory
+            { return 0; }
+            for(u64 i = 0; i < proccess->allocations_count; i++)
+            {
+                ((Kallocation*)new_alloc.memory)[i] = ((Kallocation*)proccess->allocations_alloc.memory)[i];
+            }
+            kfree_pages(proccess->allocations_alloc);
+            proccess->allocations_alloc = new_alloc;
+        }
+        Kallocation* alloc = ((Kallocation*)proccess->allocations_alloc.memory) +
+                                proccess->allocations_count;
+        *alloc = mem;
+        if(alloc->page_count != 0)
+        {
+            proccess->allocations_count++;
+            ret = 1;
+
+            mmu_map_kallocation(proccess->mmu_table, *alloc, vaddr, 2 + 4); // read + write
+        }
+    }
+    return ret;
+}
+/*
+    Returns the kallocation that is no longer being tracked by the proccess.
+    If new_page_count is 0 then this is the whole kallocation at vaddr.
+
+    If the shrink fails or encounters an error state the returned kallocation
+    points to NULL.
+*/
+Kallocation proccess_shrink_allocation(Proccess* proccess, u64 vaddr, u64 new_page_count)
+{
+    Kallocation ret_a;
+    u64 ret = 0;
+    u64 should_remove = 0;
+    u64 remove_index = 0;
+
+    void* ptr;
+    if(mmu_virt_to_phys(proccess->mmu_table, vaddr, (u64*)&ptr) == 0)
+    {
+        for(u64 i = 0; i < proccess->allocations_count; i++)
+        {
+            Kallocation* k = ((Kallocation*)proccess->allocations_alloc.memory) + i;
+            if(k->memory == ptr)
+            {
+                if(k->page_count < new_page_count)
+                { break; }
+
+                mmu_map_kallocation(proccess->mmu_table, *k, vaddr, 0);
+
+                Kallocation remove = {0};
+                remove.memory = (u64)(((u64)k->memory) + PAGE_SIZE * new_page_count);
+                remove.page_count = k->page_count - new_page_count;
+                ret_a = remove;
+
+                k->page_count = new_page_count;
+
+                mmu_map_kallocation(proccess->mmu_table, *k, vaddr, 2 + 4); // read + write
+
+                if(k->page_count == 0)
+                {
+                    should_remove = 1;
+                    remove_index = i;
+                }
+                ret = 1;
+                break;
+            }
+        }
+        Kallocation* array = ((Kallocation*)proccess->allocations_alloc.memory);
+        if(should_remove)
+        {
+            for(u64 i = proccess->allocations_count - 1; i > remove_index; i--)
+            {
+                array[i-1] = array[i];
+            }
+            proccess->allocations_count -= 1;
+        }
+        if(!ret)
+        {
+            ret_a.memory = 0;
+            ret_a.page_count = 0;
+        }
+    }
+    return ret_a;
+}
