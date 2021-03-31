@@ -32,8 +32,8 @@ textbuffer[0] = 0;
 s64 backspace_timer = -1;
 while(1) {
     user_wait_for_surface_draw(0);
-    Framebuffer* fb;
-    if(user_surface_acquire(0, &fb))
+    Framebuffer* fb = 0x424242000;
+    if(user_surface_acquire(0, fb))
     {
         u64 raw_mouse_count = user_get_raw_mouse(0, 0);
         RawMouse mouses[raw_mouse_count];

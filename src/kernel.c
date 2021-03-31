@@ -238,8 +238,8 @@ u64 m_trap(
                         RawMouse* mouse = &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->mouse;
                         new_mouse_input_from_serial(mouse, mouse_data);
 
-                        Surface* surface = ((Surface*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
-                                ->surface_alloc.memory);
+                        Surface* surface = &((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
+                                ->surface_alloc.memory)->surface;
                         surface->width = width;
                         surface->height = height;
                         u8 frame_dropped = 1;
@@ -252,7 +252,7 @@ u64 m_trap(
                             framebuffer = framebuffer_create(width, height);
                         }
 
-                        if(surface_has_commited(surface))
+                        if(surface_has_commited(*surface))
                         {
                             Framebuffer* temp = framebuffer;
                             framebuffer = surface->fb_present;

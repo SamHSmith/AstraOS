@@ -33,27 +33,34 @@ typedef struct
     u8 is_initialized;
 } Surface;
 
+typedef struct
+{
+    u64 vaddr;
+    u8 has_aquired;
+    Surface surface;
+} SurfaceSlot;
+
 u64 surface_create(Proccess* p)
 {
     for(u64 i = 0; i < p->surface_count; i++)
     {
-        Surface* s = ((Surface*)p->surface_alloc.memory) + i;
-        if(!s->is_initialized)
+        SurfaceSlot* s = ((SurfaceSlot*)p->surface_alloc.memory) + i;
+        if(!s->surface.is_initialized)
         {
-            s->fb_present = framebuffer_create(0, 0);
-            s->fb_draw = framebuffer_create(0, 0);
-            s->is_initialized = 1;
+            s->surface.fb_present = framebuffer_create(0, 0);
+            s->surface.fb_draw = framebuffer_create(0, 0);
+            s->surface.is_initialized = 1;
             return i;
         }
     }
 
-    if((p->surface_count + 1) * sizeof(Surface) > p->surface_alloc.page_count * PAGE_SIZE)
+    if((p->surface_count + 1) * sizeof(SurfaceSlot) > p->surface_alloc.page_count * PAGE_SIZE)
     {
         Kallocation new_alloc = kalloc_pages(p->surface_alloc.page_count + 1);
-        Surface* new_array = (Surface*)new_alloc.memory;
+        SurfaceSlot* new_array = (SurfaceSlot*)new_alloc.memory;
         for(u64 i = 0; i < p->surface_count; i++)
         {
-            new_array[i] = ((Surface*)p->surface_alloc.memory)[i];
+            new_array[i] = ((SurfaceSlot*)p->surface_alloc.memory)[i];
         }
         if(p->surface_alloc.page_count != 0)
         {
@@ -61,46 +68,59 @@ u64 surface_create(Proccess* p)
         }
         p->surface_alloc = new_alloc;
     }
-    Surface* s = ((Surface*)p->surface_alloc.memory) + p->surface_count;
+    SurfaceSlot* s = ((SurfaceSlot*)p->surface_alloc.memory) + p->surface_count;
     p->surface_count += 1;
 
-    s->fb_present = framebuffer_create(0, 0);
-    s->fb_draw = framebuffer_create(0, 0);
-    s->is_initialized = 1;
+    s->surface.fb_present = framebuffer_create(0, 0);
+    s->surface.fb_draw = framebuffer_create(0, 0);
+    s->surface.is_initialized = 1;
+    s->has_aquired = 0;
     return p->surface_count - 1;
 }
 
-u64 surface_has_commited(Surface* s)
+u64 surface_has_commited(Surface s)
 {
-    return s->has_commited && s->fb_present->width == s->width && s->fb_present->height == s->height;
+    return s.has_commited && s.fb_present->width == s.width && s.fb_present->height == s.height;
 }
 
-u64 surface_acquire(u64 surface_slot, Framebuffer** fb, Proccess* proccess)
+u64 surface_acquire(u64 surface_slot, Framebuffer* fb_location, Proccess* proccess)
 {
-    Surface* s = ((Surface*)proccess->surface_alloc.memory) + surface_slot;
+    SurfaceSlot* s = ((SurfaceSlot*)proccess->surface_alloc.memory) + surface_slot;
 
-    if(surface_has_commited(s)) { return 0; }
+    if(surface_slot >= proccess->surface_count || surface_has_commited(s->surface)) { return 0; }
 
-    *fb = (Framebuffer*)69201920; //Some rando address. This is SUPER BAD but will work now
-
-    mmu_map_kallocation(proccess->mmu_table, s->fb_draw->alloc, *fb, 2 + 4); // read and write
-    return 1;
+    if(proccess_alloc_pages(proccess, fb_location, s->surface.fb_draw->alloc))
+    {
+        s->has_aquired = 1;
+        s->vaddr = fb_location;
+        return 1;
+    }
+    return 0;
 }
 
-void surface_commit(u64 surface_slot, Proccess* proccess)
+u64 surface_commit(u64 surface_slot, Proccess* proccess)
 {
-    Surface* s = ((Surface*)proccess->surface_alloc.memory) + surface_slot;
+    SurfaceSlot* s = ((SurfaceSlot*)proccess->surface_alloc.memory) + surface_slot;
 
-    volatile Framebuffer* temp = s->fb_present;
-    s->fb_present = s->fb_draw;
+    if(surface_slot >= proccess->surface_count || !s->has_aquired) { return 0; }
 
-    if(temp->width != s->width || temp->height != s->height)
+    Kallocation a = proccess_shrink_allocation(proccess, s->vaddr, 0);
+    if(a.memory == 0) { return 0; }
+
+    s->surface.fb_draw->alloc = a; // in case the data was tampered with
+    s->has_aquired = 0;
+
+    volatile Framebuffer* temp = s->surface.fb_present;
+    s->surface.fb_present = s->surface.fb_draw;
+
+    if(temp->width != s->surface.width || temp->height != s->surface.height)
     {
         kfree_pages(temp->alloc);
-        temp = framebuffer_create(s->width, s->height);
+        temp = framebuffer_create(s->surface.width, s->surface.height);
     }
-    s->fb_draw = temp;
-    s->has_commited = 1;
+    s->surface.fb_draw = temp;
+    s->surface.has_commited = 1;
+    return 1;
 }
 
 typedef struct

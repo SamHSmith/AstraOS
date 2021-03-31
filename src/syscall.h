@@ -7,7 +7,7 @@ void syscall_surface_commit(Thread** current_thread)
     u64 surface_slot = frame->regs[11];
 
     assert(surface_slot < proccess->surface_count &&
-        ((Surface*)proccess->surface_alloc.memory)[surface_slot].is_initialized,
+        ((SurfaceSlot*)proccess->surface_alloc.memory)[surface_slot].surface.is_initialized,
         "surface_commit: the surface slot contains to a valid surface");
 
     surface_commit(surface_slot, proccess);
@@ -20,14 +20,10 @@ void syscall_surface_acquire(volatile Thread** current_thread)
     Proccess* proccess = KERNEL_PROCCESS_ARRAY[(*current_thread)->proccess_pid];
 
     u64 surface_slot = frame->regs[11];
-    Framebuffer** fb;
-    assert(
-        mmu_virt_to_phys(proccess->mmu_table, frame->regs[12], (u64*)&fb) == 0,
-        "you didn't do a memory bad"
-    );
+    Framebuffer* fb = frame->regs[12];
 
     assert(surface_slot < proccess->surface_count &&
-        ((Surface*)proccess->surface_alloc.memory)[surface_slot].is_initialized,
+        ((SurfaceSlot*)proccess->surface_alloc.memory)[surface_slot].surface.is_initialized,
         "surface_aquire: the surface slot contains to a valid surface");
 
     frame->regs[10] = surface_acquire(surface_slot, fb, proccess);
@@ -54,11 +50,11 @@ void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
     u64 surface_slot = frame->regs[11];
     Thread* t = *current_thread;
 
-    Surface* surface=((Surface*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory) + surface_slot;
-    assert(surface_slot < KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_count && surface->is_initialized,
-            "wait_for_surface_draw: the surface slot contains to a valid surface");
+    SurfaceSlot* slot=
+        ((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory) + surface_slot;
 
-    if(surface_has_commited(surface)) // replace surface with slot later
+    if(surface_slot < KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_count &&
+            slot->surface.is_initialized && surface_has_commited(slot->surface))
     {
         t->surface_slot_wait = surface_slot;
         t->thread_state = THREAD_STATE_SURFACE_WAIT;

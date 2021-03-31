@@ -22,14 +22,12 @@ u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
     }
     else if(t->thread_state == THREAD_STATE_SURFACE_WAIT)
     {
-        // when slots are implemented we should use
-        // t->surface_slot_wait
-        Surface* surface=((Surface*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory)
+        SurfaceSlot* slot=((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory)
                 + t->surface_slot_wait;
         assert(t->surface_slot_wait < KERNEL_PROCCESS_ARRAY[r.pid]->surface_count
-                && surface->is_initialized,
+                && slot->surface.is_initialized,
                 "thread_runtime_is_live: the surface slot contains to a valid surface");
-        if(!surface_has_commited(surface))
+        if(!surface_has_commited(slot->surface))
         {
             t->thread_state = THREAD_STATE_RUNNING;
             return 1;
