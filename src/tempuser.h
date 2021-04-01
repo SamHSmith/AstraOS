@@ -1,7 +1,7 @@
 // to be user code
 
 void user_surface_commit(u64 surface_slot);
-u64 user_surface_acquire(u64 surface_slot, Framebuffer** fb);
+u64 user_surface_acquire(u64 surface_slot, Framebuffer* fb, u64 page_count);
 
 void user_thread_sleep(u64 duration);
 void user_wait_for_surface_draw(u64 surface_slot);
@@ -33,7 +33,8 @@ s64 backspace_timer = -1;
 while(1) {
     user_wait_for_surface_draw(0);
     Framebuffer* fb = 0x424242000;
-    if(user_surface_acquire(0, fb))
+    u64 fb_page_count = user_surface_acquire(0, fb, 0);
+    if(user_surface_acquire(0, fb, fb_page_count))
     {
         u64 raw_mouse_count = user_get_raw_mouse(0, 0);
         RawMouse mouses[raw_mouse_count];

@@ -14,6 +14,13 @@ void syscall_surface_commit(Thread** current_thread)
     (*current_thread)->program_counter += 4;
 }
 
+/*
+    If you pass 0 page_count the function returns the page_count
+    required for the acquire.
+    To successfully acquire surface_slot must point to a valid slot,
+    fb must be a 4096 byte aligned pointer, page_count must be
+    the page_count required for this acquire.
+*/
 void syscall_surface_acquire(volatile Thread** current_thread)
 {
     TrapFrame* frame = &(*current_thread)->frame;
@@ -21,12 +28,22 @@ void syscall_surface_acquire(volatile Thread** current_thread)
 
     u64 surface_slot = frame->regs[11];
     Framebuffer* fb = frame->regs[12];
+    u64 page_count = frame->regs[13];
+    u64 ret = 0;
 
-    assert(surface_slot < proccess->surface_count &&
-        ((SurfaceSlot*)proccess->surface_alloc.memory)[surface_slot].surface.is_initialized,
-        "surface_aquire: the surface slot contains to a valid surface");
-
-    frame->regs[10] = surface_acquire(surface_slot, fb, proccess);
+    SurfaceSlot slot = ((SurfaceSlot*)proccess->surface_alloc.memory)[surface_slot];
+    if(surface_slot < proccess->surface_count && slot.surface.is_initialized)
+    {
+        if(page_count == 0)
+        {
+            ret = slot.surface.fb_draw->alloc.page_count;
+        }
+        else if(page_count == slot.surface.fb_draw->alloc.page_count)
+        {
+            ret = surface_acquire(surface_slot, fb, proccess);
+        }
+    }
+    frame->regs[10] = ret;
     (*current_thread)->program_counter += 4;
 }
 

@@ -9,6 +9,7 @@ user_surface_commit:
 
 .global user_surface_acquire
 user_surface_acquire:
+    mv a3, a2
     mv a2, a1
     mv a1, a0
     addi a0, x0, 1
