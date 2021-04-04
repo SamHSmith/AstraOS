@@ -243,6 +243,49 @@ printf("proc allocs count : %llu\n", proccess->allocations_count);
     t->program_counter += 4;
 }
 
+void syscall_surface_consumer_has_commited(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
+    u64 consumer_slot = frame->regs[11];
+    frame->regs[10] = surface_consumer_has_commited(t->proccess_pid, consumer_slot);
+    t->program_counter += 4;
+}
+
+void syscall_surface_consumer_get_size(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Proccess* proccess = KERNEL_PROCCESS_ARRAY[t->proccess_pid];
+    TrapFrame* frame = &t->frame;
+
+    u64 consumer_slot = frame->regs[11];
+    u64 user_width = frame->regs[12];
+    u64 user_height = frame->regs[13];
+    u64 ret = 1;
+
+    u32* width;
+    u32* height;
+
+    if(user_width != 0)
+    {
+        if(!(mmu_virt_to_phys(proccess->mmu_table, user_width, (u64*)&width) == 0))
+        { ret = 0; }
+    }
+    if(user_height != 0)
+    {
+        if(!(mmu_virt_to_phys(proccess->mmu_table, user_height, (u64*)&height) == 0))
+        { ret = 0; }
+    }
+
+    if(ret)
+    {
+        ret = surface_consumer_get_size(t->proccess_pid, consumer_slot, width, height);
+    }
+
+    frame->regs[10] = ret;
+    t->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -266,6 +309,10 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_alloc_pages(current_thread); }
     else if(call_num == 9)
     { syscall_shrink_allocation(current_thread); }
+    else if(call_num == 10)
+    { syscall_surface_consumer_has_commited(current_thread); }
+    else if(call_num == 11)
+    { syscall_surface_consumer_get_size(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

@@ -1,4 +1,4 @@
-CFLAGS= -g -mcmodel=medany -Wall -O2#-Ofast
+CFLAGS= -g -mcmodel=medany -Wall #-O2#-Ofast
 CFLAGS+=-static -ffreestanding -nostdlib
 CFLAGS+=-march=rv64gc -mabi=lp64
 LDFLAGS=

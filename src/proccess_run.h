@@ -26,7 +26,7 @@ u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
                 + t->surface_slot_wait;
         assert(t->surface_slot_wait < KERNEL_PROCCESS_ARRAY[r.pid]->surface_count
                 && slot->surface.is_initialized,
-                "thread_runtime_is_live: the surface slot contains to a valid surface");
+                "thread_runtime_is_live: the surface slot contains a valid surface");
         if(!surface_has_commited(slot->surface))
         {
             t->thread_state = THREAD_STATE_RUNNING;
@@ -117,13 +117,13 @@ void proccess_init()
     u64 pid2 = proccess_create();
 
     surface_create(KERNEL_PROCCESS_ARRAY[pid]);
-    surface_create(KERNEL_PROCCESS_ARRAY[pid2]);
+//    surface_create(KERNEL_PROCCESS_ARRAY[pid2]);
 
     vos[0].pid = pid;
     vos[0].is_active = 1;
 
-    vos[1].pid = pid2;
-    vos[1].is_active = 1;
+//    vos[1].pid = pid2;
+//    vos[1].is_active = 1;
 
     u64* table = KERNEL_PROCCESS_ARRAY[pid]->mmu_table;
     u64* table2 = KERNEL_PROCCESS_ARRAY[pid2]->mmu_table;
@@ -148,7 +148,7 @@ void proccess_init()
 
     u32 tp2 = proccess_thread_create(pid2);
     Thread* tp2t = &KERNEL_PROCCESS_ARRAY[pid2]->threads[tp2];
-    tp2t->stack_alloc = kalloc_pages(5000);
+    tp2t->stack_alloc = kalloc_pages(14);
     tp2t->frame.regs[2] = 
         ((u64)tp2t->stack_alloc.memory) + tp2t->stack_alloc.page_count * PAGE_SIZE;
     mmu_kernel_map_range(
@@ -157,12 +157,18 @@ void proccess_init()
             (u64*)tp2t->frame.regs[2],
             2 + 4
         );
+    mmu_kernel_map_range(
+            table2,
+            (u64*)tp2t->stack_alloc.memory,
+            (u64*)tp2t->stack_alloc.memory + PAGE_SIZE,
+            0
+        );
     tp2t->program_counter = (u64)thread1_func;
     tp2t->thread_state = THREAD_STATE_RUNNING;
 
     Thread* tarr = KERNEL_PROCCESS_ARRAY[pid]->threads;
 
-    tarr[thread1].stack_alloc = kalloc_pages(5000);
+    tarr[thread1].stack_alloc = kalloc_pages(14);
     tarr[thread1].frame.regs[2] = 
         ((u64)tarr[thread1].stack_alloc.memory) + tarr[thread1].stack_alloc.page_count * PAGE_SIZE;
     mmu_kernel_map_range(
@@ -170,6 +176,12 @@ void proccess_init()
             (u64*)tarr[thread1].stack_alloc.memory,
             (u64*)tarr[thread1].frame.regs[2],
             2 + 4
+        );
+    mmu_kernel_map_range(
+            table,
+            (u64*)tarr[thread1].stack_alloc.memory,
+            (u64*)tarr[thread1].stack_alloc.memory + PAGE_SIZE,
+            0
         );
 
     tarr[thread2].stack_alloc = kalloc_pages(4);
@@ -199,6 +211,12 @@ void proccess_init()
     tarr[thread1].thread_state = THREAD_STATE_RUNNING;
     tarr[thread2].thread_state = THREAD_STATE_RUNNING;
     tarr[thread3].thread_state = THREAD_STATE_RUNNING;
+
+    u64 cs;
+    if(surface_consumer_create(pid, pid2, &cs))
+    {
+        printf("consumer slot: %llu\n", cs);
+    }
 
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;

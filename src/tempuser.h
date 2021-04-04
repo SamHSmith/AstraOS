@@ -15,6 +15,9 @@ u64 user_get_vo_id(u64* vo_id);
 u64 user_alloc_pages(void* vaddr, u64 page_count);
 u64 user_shrink_allocation(void* vaddr, u64 new_page_count);
 
+u64 user_surface_consumer_has_commited(u64 consumer_slot);
+u64 user_surface_consumer_get_size(u64 consumer_slot, u32* width, u32* height);
+
 #include "samorak.h"
 #include "font9_12.h"
 
@@ -36,6 +39,13 @@ while(1) {
     u64 fb_page_count = user_surface_acquire(0, fb, 0);
     if(user_surface_acquire(0, fb, fb_page_count))
     {
+if(user_surface_consumer_has_commited(0))
+{
+    printf("hi\n");
+    u32 width, height;
+    user_surface_consumer_get_size(0, &width, &height);
+    printf("The consumer is %u by %u\n", width, height);
+}else { printf("no\n"); }
         u64 raw_mouse_count = user_get_raw_mouse(0, 0);
         RawMouse mouses[raw_mouse_count];
         user_get_raw_mouse(mouses, raw_mouse_count);

@@ -37,6 +37,9 @@ typedef struct
     Kallocation surface_alloc;
     u64 surface_count;
 
+    Kallocation surface_consumer_alloc;
+    u64 surface_consumer_count;
+
     KeyboardEventQueue kbd_event_queue;
     RawMouse mouse;
 
@@ -52,12 +55,11 @@ u64 proccess_create()
 {
     Kallocation _proc = kalloc_pages(1);
     Proccess* proccess = (Proccess*)_proc.memory;
+    memset(proccess, 0, sizeof(Proccess));
     proccess->proc_alloc = _proc;
 
     proccess->mmu_table = (u64*)kalloc_single_page();
-    proccess->surface_alloc.page_count = 0;
     for(u64 i = 0; i < 512; i++) { proccess->mmu_table[i] = 0; }
-    proccess->thread_count = 0;
 
     for(u64 i = 0; i < KERNEL_PROCCESS_ARRAY_LEN; i++)
     {
@@ -67,7 +69,8 @@ u64 proccess_create()
             return i;
         }
     }
-    if(KERNEL_PROCCESS_ARRAY_LEN % 512 == 0)
+    if((KERNEL_PROCCESS_ARRAY_LEN+1) * sizeof(Proccess*)
+        > KERNEL_PROCCESS_ARRAY_ALLOCATION.page_count*PAGE_SIZE)
     {
         Kallocation new_alloc=kalloc_pages(KERNEL_PROCCESS_ARRAY_ALLOCATION.page_count+1);
         Proccess** new_array = (Proccess**)new_alloc.memory;

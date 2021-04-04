@@ -1,6 +1,32 @@
 #include "types.h"
 #include "random.h"
 
+void* memcpy(void* dest, const void* src, u64 n)
+{
+    void* orig_dest = dest;
+    u64 n8 = (n >> 3) << 3;
+    for(u64 i = 0; i < (n8 >> 3); i++)
+    { ((u64*)dest)[i] = ((u64*)src)[i]; }
+ 
+    dest += n8;
+    src += n8;
+    n -= n8;
+    for(u64 i = 0; i < n; i++)
+    { ((u8*)dest)[i] = ((u8*)src)[i]; }
+    return orig_dest;
+}
+void* memset(void* str, int c, u64 n)
+{
+    u8* s = str;
+    u8 ch = *((u8*)&c);
+    for(u64 i = 0; i < n; i++)
+    {
+        *s = ch;
+        s++;
+    }
+    return str;
+}
+
 #include "uart.h"
 #include "printf.h"
 void _putchar(char c)
@@ -35,21 +61,6 @@ void strcat(char* dest, char* src)
     } while(*s);
 }
 
-void* memcpy(void* dest, const void* src, u64 n)
-{
-    void* orig_dest = dest;
-    u64 n8 = (n >> 3) << 3;
-    for(u64 i = 0; i < (n8 >> 3); i++)
-    { ((u64*)dest)[i] = ((u64*)src)[i]; }
-
-    dest += n8;
-    src += n8;
-    n -= n8;
-    for(u64 i = 0; i < n; i++)
-    { ((u8*)dest)[i] = ((u8*)src)[i]; }
-    return orig_dest;
-}
-
 void uart_write_string(char* str)
 {
     uart_write((u8*)str, strlen(str));
@@ -62,7 +73,8 @@ void assert(u64 stat, char* error)
         uart_write_string("assertion failed: \"");
         uart_write_string(error);
         uart_write_string("\"\n");
-        while(1) {};
+        u8 freeze = 1;
+        while(freeze) {};
     }
 }
 

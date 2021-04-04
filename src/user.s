@@ -76,4 +76,19 @@ user_shrink_allocation:
     ecall
     ret
 
+.global user_surface_consumer_has_commited
+user_surface_consumer_has_commited:
+    mv a1, a0
+    addi a0, x0, 10
+    ecall
+    ret
+
+.global user_surface_consumer_get_size
+user_surface_consumer_get_size:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 11
+    ecall
+    ret
 

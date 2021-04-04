@@ -248,7 +248,8 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
                 (ppn[0] << 10) |
                 bits |
                 1;
-    *v = entry;
+    if(bits) { *v = entry; }
+    else     { *v = 0; }
 }
 
 void mmu_kernel_map_range(u64* root, void* start, void* end, u64 bits)
