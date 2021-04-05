@@ -117,13 +117,13 @@ void proccess_init()
     u64 pid2 = proccess_create();
 
     surface_create(KERNEL_PROCCESS_ARRAY[pid]);
-//    surface_create(KERNEL_PROCCESS_ARRAY[pid2]);
+    surface_create(KERNEL_PROCCESS_ARRAY[pid2]);
 
     vos[0].pid = pid;
     vos[0].is_active = 1;
 
-//    vos[1].pid = pid2;
-//    vos[1].is_active = 1;
+    vos[1].pid = pid2;
+    vos[1].is_active = 1;
 
     u64* table = KERNEL_PROCCESS_ARRAY[pid]->mmu_table;
     u64* table2 = KERNEL_PROCCESS_ARRAY[pid2]->mmu_table;

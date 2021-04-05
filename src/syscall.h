@@ -31,14 +31,16 @@ void syscall_surface_acquire(volatile Thread** current_thread)
     u64 page_count = frame->regs[13];
     u64 ret = 0;
 
-    SurfaceSlot slot = ((SurfaceSlot*)proccess->surface_alloc.memory)[surface_slot];
-    if(surface_slot < proccess->surface_count && slot.surface.is_initialized)
+    SurfaceSlot* slot = &((SurfaceSlot*)proccess->surface_alloc.memory)[surface_slot];
+
+    if(surface_slot < proccess->surface_count && slot->surface.is_initialized && !slot->has_aquired)
     {
+        surface_prepare_draw_framebuffer(surface_slot, proccess);
         if(page_count == 0)
         {
-            ret = slot.surface.fb_draw->alloc.page_count;
+            ret = slot->surface.fb_draw->alloc.page_count;
         }
-        else if(page_count == slot.surface.fb_draw->alloc.page_count)
+        else if(page_count == slot->surface.fb_draw->alloc.page_count)
         {
             ret = surface_acquire(surface_slot, fb, proccess);
         }
@@ -286,6 +288,21 @@ void syscall_surface_consumer_get_size(Thread** current_thread)
     t->program_counter += 4;
 }
 
+void syscall_surface_consumer_set_size(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
+ 
+    u64 consumer_slot = frame->regs[11];
+    u32 width = frame->regs[12];
+    u32 height = frame->regs[13];
+
+    u64 ret = surface_consumer_set_size(t->proccess_pid, consumer_slot, width, height);
+
+    frame->regs[10] = ret;
+    t->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -313,6 +330,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_surface_consumer_has_commited(current_thread); }
     else if(call_num == 11)
     { syscall_surface_consumer_get_size(current_thread); }
+    else if(call_num == 12)
+    { syscall_surface_consumer_set_size(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

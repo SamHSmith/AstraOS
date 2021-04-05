@@ -159,12 +159,26 @@ u64 surface_has_commited(Surface s)
         (s.has_commited && s.fb_present->width == s.width && s.fb_present->height == s.height);
 }
 
+void surface_prepare_draw_framebuffer(u64 surface_slot, Proccess* proccess)
+{
+    SurfaceSlot* s = ((SurfaceSlot*)proccess->surface_alloc.memory) + surface_slot;
+
+    Framebuffer* draw = s->surface.fb_draw;
+
+    if(draw->width != s->surface.width || draw->height != s->surface.height)
+    {
+        kfree_pages(draw->alloc);
+        draw = framebuffer_create(s->surface.width, s->surface.height);
+    }
+    s->surface.fb_draw = draw;
+}
+
 u64 surface_acquire(u64 surface_slot, Framebuffer* fb_location, Proccess* proccess)
 {
     SurfaceSlot* s = ((SurfaceSlot*)proccess->surface_alloc.memory) + surface_slot;
 
     if(surface_slot >= proccess->surface_count || surface_has_commited(s->surface)) { return 0; }
-
+printf("fb draw : %llu\n", s->surface.fb_draw->width);
     if(proccess_alloc_pages(proccess, fb_location, s->surface.fb_draw->alloc))
     {
         s->has_aquired = 1;
@@ -189,11 +203,6 @@ u64 surface_commit(u64 surface_slot, Proccess* proccess)
     volatile Framebuffer* temp = s->surface.fb_present;
     s->surface.fb_present = s->surface.fb_draw;
 
-    if(temp->width != s->surface.width || temp->height != s->surface.height)
-    {
-        kfree_pages(temp->alloc);
-        temp = framebuffer_create(s->surface.width, s->surface.height);
-    }
     s->surface.fb_draw = temp;
     s->surface.has_commited = 1;
     return 1;
@@ -237,6 +246,17 @@ u64 surface_consumer_get_size(u64 pid, u64 consumer_slot, u32* width, u32* heigh
 
     *width = s->width;
     *height = s->height;
+    return 1;
+}
+
+u64 surface_consumer_set_size(u64 pid, u64 consumer_slot, u32 width, u32 height)
+{
+    SurfaceConsumer* con; Surface* s;
+    if(!get_consumer_and_surface(pid, consumer_slot, &con, &s))
+    { return 0; }
+
+    s->width = width;
+    s->height = height;
     return 1;
 }
 

@@ -17,6 +17,7 @@ u64 user_shrink_allocation(void* vaddr, u64 new_page_count);
 
 u64 user_surface_consumer_has_commited(u64 consumer_slot);
 u64 user_surface_consumer_get_size(u64 consumer_slot, u32* width, u32* height);
+u64 user_surface_consumer_set_size(u64 consumer_slot, u32 width, u32 height);
 
 #include "samorak.h"
 #include "font9_12.h"
@@ -34,11 +35,14 @@ textbuffer[0] = 0;
 
 s64 backspace_timer = -1;
 while(1) {
-    user_wait_for_surface_draw(0);
+//    user_wait_for_surface_draw(0);
+for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
+{
     Framebuffer* fb = 0x424242000;
-    u64 fb_page_count = user_surface_acquire(0, fb, 0);
-    if(user_surface_acquire(0, fb, fb_page_count))
+    u64 fb_page_count = user_surface_acquire(surface_slot, fb, 0);
+    if(user_surface_acquire(surface_slot, fb, fb_page_count))
     {
+user_surface_consumer_set_size(0, 100, 100);
 if(user_surface_consumer_has_commited(0))
 {
     printf("hi\n");
@@ -233,8 +237,9 @@ if(user_surface_consumer_has_commited(0))
             }
         }
  
-        user_surface_commit(0);
+        user_surface_commit(surface_slot);
     }
+}
 }
 }
  
