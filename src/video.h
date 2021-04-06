@@ -29,6 +29,7 @@ typedef struct
     u32 height;
     volatile Framebuffer* fb_present;
     volatile Framebuffer* fb_draw;
+    Framebuffer fb_draw_control;
     u8 has_commited;
 
     u64 consumer_pid;
@@ -50,6 +51,11 @@ typedef struct
     u64 surface_slot;
     u8 has_surface;
     u8 is_initialized;
+
+    volatile Framebuffer* fb_fetched;
+    Framebuffer fb_fetched_control;
+    u8 has_fetched;
+    u64 vaddr;
 } SurfaceConsumer;
 
 u64 surface_create(Proccess* p)
@@ -113,6 +119,8 @@ u64 surface_consumer_create(u64 pid, u64 surface_pid, u64* consumer)
             con->surface_slot = surface_slot;
             con->has_surface = 1;
             con->is_initialized = 1;
+            con->has_fetched = 0;
+            con->fb_fetched = framebuffer_create(0,0);
             Surface* surface = &(((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[surface_pid]->surface_alloc.memory)
                                 + surface_slot)->surface;
             surface->consumer_pid = pid;
@@ -144,6 +152,8 @@ u64 surface_consumer_create(u64 pid, u64 surface_pid, u64* consumer)
     con->surface_slot = surface_slot;
     con->has_surface = 1;
     con->is_initialized = 1;
+    con->has_fetched = 0;
+    con->fb_fetched = framebuffer_create(0,0);
     Surface* surface = &(((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[surface_pid]->surface_alloc.memory)
                         + surface_slot)->surface;
     surface->consumer_pid = pid;
@@ -178,7 +188,7 @@ u64 surface_acquire(u64 surface_slot, Framebuffer* fb_location, Proccess* procce
     SurfaceSlot* s = ((SurfaceSlot*)proccess->surface_alloc.memory) + surface_slot;
 
     if(surface_slot >= proccess->surface_count || surface_has_commited(s->surface)) { return 0; }
-printf("fb draw : %llu\n", s->surface.fb_draw->width);
+
     if(proccess_alloc_pages(proccess, fb_location, s->surface.fb_draw->alloc))
     {
         s->has_aquired = 1;
@@ -258,6 +268,42 @@ u64 surface_consumer_set_size(u64 pid, u64 consumer_slot, u32 width, u32 height)
     s->width = width;
     s->height = height;
     return 1;
+}
+
+u64 surface_consumer_fetch(u64 pid, u64 consumer_slot, Framebuffer* fb_location, u64 page_count)
+{
+    Proccess* proccess = KERNEL_PROCCESS_ARRAY[pid];
+    SurfaceConsumer* con; Surface* s;
+    if(!get_consumer_and_surface(pid, consumer_slot, &con, &s))
+    { return 0; }
+
+    if(!s->has_commited)
+    { return 0; }
+
+    if(page_count == 0)
+    { return s->fb_present->alloc.page_count; }
+
+    if(((u64)fb_location % PAGE_SIZE) != 0 || page_count < s->fb_present->alloc.page_count)
+    { return 0; }
+
+    if(con->has_fetched)
+    {
+        Kallocation a = proccess_shrink_allocation(proccess, con->vaddr, 0);
+        con->has_fetched = 0;
+        *con->fb_fetched = con->fb_fetched_control;
+    }
+    Framebuffer* temp = s->fb_present;
+    s->fb_present = con->fb_fetched;
+    con->fb_fetched = temp;
+    con->fb_fetched_control = *con->fb_fetched;
+    s->has_commited = 0;
+    if(proccess_alloc_pages(proccess, fb_location, con->fb_fetched->alloc))
+    {
+        con->has_fetched = 1;
+        con->vaddr = fb_location;
+        return 1;
+    }
+    return 0;
 }
 
 typedef struct

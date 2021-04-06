@@ -40,7 +40,7 @@ void syscall_surface_acquire(volatile Thread** current_thread)
         {
             ret = slot->surface.fb_draw->alloc.page_count;
         }
-        else if(page_count == slot->surface.fb_draw->alloc.page_count)
+        else if(page_count >= slot->surface.fb_draw->alloc.page_count)
         {
             ret = surface_acquire(surface_slot, fb, proccess);
         }
@@ -303,6 +303,23 @@ void syscall_surface_consumer_set_size(Thread** current_thread)
     t->program_counter += 4;
 }
 
+void syscall_surface_consumer_fetch(volatile Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
+    Proccess* proccess = KERNEL_PROCCESS_ARRAY[t->proccess_pid];
+
+    u64 consumer_slot = frame->regs[11];
+    Framebuffer* fb = frame->regs[12];
+    u64 page_count = frame->regs[13];
+    u64 ret = 0;
+
+    ret = surface_consumer_fetch(t->proccess_pid, consumer_slot, fb, page_count);
+
+    frame->regs[10] = ret;
+    (*current_thread)->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -332,6 +349,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_surface_consumer_get_size(current_thread); }
     else if(call_num == 12)
     { syscall_surface_consumer_set_size(current_thread); }
+    else if(call_num == 13)
+    { syscall_surface_consumer_fetch(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

@@ -18,6 +18,7 @@ u64 user_shrink_allocation(void* vaddr, u64 new_page_count);
 u64 user_surface_consumer_has_commited(u64 consumer_slot);
 u64 user_surface_consumer_get_size(u64 consumer_slot, u32* width, u32* height);
 u64 user_surface_consumer_set_size(u64 consumer_slot, u32 width, u32 height);
+u64 user_surface_consumer_fetch(u64 consumer_slot, Framebuffer* fb, u64 page_count);
 
 #include "samorak.h"
 #include "font9_12.h"
@@ -33,6 +34,10 @@ f64 bally = 0.0;
 char textbuffer[4096];
 textbuffer[0] = 0;
 
+Framebuffer* sample_buffer = 0x323232000;
+u64 sample_buffer_page_count = 0;
+u32 sample_buffer_width = 0; u32 sample_buffer_height = 0;
+
 s64 backspace_timer = -1;
 while(1) {
 //    user_wait_for_surface_draw(0);
@@ -42,14 +47,25 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
     u64 fb_page_count = user_surface_acquire(surface_slot, fb, 0);
     if(user_surface_acquire(surface_slot, fb, fb_page_count))
     {
-user_surface_consumer_set_size(0, 100, 100);
-if(user_surface_consumer_has_commited(0))
-{
-    printf("hi\n");
-    u32 width, height;
-    user_surface_consumer_get_size(0, &width, &height);
-    printf("The consumer is %u by %u\n", width, height);
-}else { printf("no\n"); }
+
+        user_surface_consumer_set_size(0, 200, 200);
+        if(user_surface_consumer_has_commited(0))
+        {
+            printf("hi\n");
+            user_surface_consumer_get_size(0, &sample_buffer_width, &sample_buffer_height);
+            printf("The consumer is %u by %u\n", sample_buffer_width, sample_buffer_height);
+            sample_buffer_page_count = user_surface_consumer_fetch(0, 0, 0);
+            if(user_surface_consumer_fetch(0, sample_buffer, sample_buffer_page_count))
+            {
+                printf("yay! we fetched \\o/\n");
+            }
+        }
+        else
+        {
+            printf("no\n");
+        }
+
+
         u64 raw_mouse_count = user_get_raw_mouse(0, 0);
         RawMouse mouses[raw_mouse_count];
         user_get_raw_mouse(mouses, raw_mouse_count);
@@ -234,6 +250,16 @@ if(user_surface_consumer_has_commited(0))
                 fb->data[i*4 + 0] = 1.0 - fb->data[i*4 + 0];
                 fb->data[i*4 + 1] = 1.0 - fb->data[i*4 + 1];
                 fb->data[i*4 + 2] = 1.0 - fb->data[i*4 + 2];
+            }
+
+            // draw window
+            if(sample_buffer_width > 0 && sample_buffer_height > 0 &&
+                x < sample_buffer->width && y < sample_buffer->height)
+            {
+                u64 j = x + (y * sample_buffer->width);
+                fb->data[i*4 + 0] = sample_buffer->data[j*4 + 0];
+                fb->data[i*4 + 1] = sample_buffer->data[j*4 + 1];
+                fb->data[i*4 + 2] = sample_buffer->data[j*4 + 2];
             }
         }
  
