@@ -1,0 +1,27 @@
+
+ # First clone the repository
+git clone https://github.com/samhsmith/rivos.git
+
+ # Clone the risc-v gnu toolchain
+git clone https://github.com/riscv/riscv-gnu-toolchain.git
+
+ # Install dependancies required for build
+sudo pacman -Syyu autoconf automake curl python3 mpc mpfr gmp gawk base-devel bison flex texinfo gperf libtool patchutils bc zlib expat
+
+ # Build the toolchain and install to /opt/riscv/ this will take a while
+cd riscv-gnu-toolchain
+sudo mkdir /opt/riscv
+PATH=/opt/riscv/bin:$PATH
+./configure --prefix=/opt/riscv && sudo make
+cd ..
+
+ # Now install the dependancies of running rivos
+sudo pacman -S qemu qemu-arch-extra sdl2
+
+ # To run the virtual machine
+cd rivos
+make run
+
+ # (Then in a seperate terminal) To run the viewer
+cd rivos/viewer
+make run
