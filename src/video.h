@@ -29,7 +29,6 @@ typedef struct
     u32 height;
     volatile Framebuffer* fb_present;
     volatile Framebuffer* fb_draw;
-    Framebuffer fb_draw_control;
     u8 has_commited;
 
     u64 consumer_pid;
@@ -42,6 +41,7 @@ typedef struct
 {
     u64 vaddr;
     u8 has_aquired;
+    Framebuffer fb_draw_control;
     Surface surface;
 } SurfaceSlot;
 
@@ -189,6 +189,7 @@ u64 surface_acquire(u64 surface_slot, Framebuffer* fb_location, Proccess* procce
 
     if(surface_slot >= proccess->surface_count || surface_has_commited(s->surface)) { return 0; }
 
+    s->fb_draw_control = *s->surface.fb_draw;
     if(proccess_alloc_pages(proccess, fb_location, s->surface.fb_draw->alloc))
     {
         s->has_aquired = 1;
@@ -207,7 +208,7 @@ u64 surface_commit(u64 surface_slot, Proccess* proccess)
     Kallocation a = proccess_shrink_allocation(proccess, s->vaddr, 0);
     if(a.memory == 0) { return 0; }
 
-    s->surface.fb_draw->alloc = a; // in case the data was tampered with
+    *s->surface.fb_draw = s->fb_draw_control;
     s->has_aquired = 0;
 
     volatile Framebuffer* temp = s->surface.fb_present;
