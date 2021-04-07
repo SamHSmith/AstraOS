@@ -1,8 +1,12 @@
-CFLAGS= -g -mcmodel=medany -Wall -Ofast
+CFLAGS= -g -mcmodel=medany -Wall #-Ofast
 CFLAGS+=-static -ffreestanding -nostdlib
 CFLAGS+=-march=rv64gc -mabi=lp64
 LDFLAGS=
 DRIVE=hdd.dsk
+
+QEMU=./qemu/build/qemu-system-riscv64
+
+QEMU_FLAGS=-machine virt -cpu rv64 -smp 4 -m 512M -drive if=none,format=raw,file=hdd.dsk,id=foo -device virtio-blk-device,scsi=off,drive=foo -nographic -serial pipe:./pipe -bios none -device virtio-rng-device -device virtio-gpu-device -device virtio-net-device -device virtio-tablet-device -device virtio-keyboard-device -kernel kernel.bin
 
 kernel.bin: virt.lds
 		riscv64-unknown-elf-gcc $(CFLAGS) $(LDFLAGS) -T $< -o $@ $(wildcard src/*.s) $(wildcard src/*.c)
@@ -12,12 +16,12 @@ hdd:
 
 run: clean kernel.bin hdd
 	mkfifo pipe.in pipe.out
-	qemu-system-riscv64 -machine virt -cpu sifive-u54 -smp 4 -m 512M -nographic -serial pipe:./pipe -bios none -kernel kernel.bin -drive if=none,format=raw,file=$(DRIVE),id=foo -device virtio-blk-device,scsi=off,drive=foo
+	$(QEMU) $(QEMU_FLAGS)
 	rm -drf pipe.in pipe.out
 
 debug: clean kernel.bin hdd
 	mkfifo pipe.in pipe.out
-	qemu-system-riscv64 -machine virt -cpu sifive-u54 -smp 4 -m 512M -nographic -serial pipe:./pipe -bios none -kernel kernel.bin -drive if=none,format=raw,file=$(DRIVE),id=foo -device virtio-blk-device,scsi=off,drive=foo -s -S
+	$(QEMU) $(QEMU_FLAGS) -s -S
 	rm -drf pipe.in pipe.out
 clean:
 	rm -drf pipe.in pipe.out
