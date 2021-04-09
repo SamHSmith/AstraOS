@@ -20,6 +20,8 @@ u64 user_surface_consumer_get_size(u64 consumer_slot, u32* width, u32* height);
 u64 user_surface_consumer_set_size(u64 consumer_slot, u32 width, u32 height);
 u64 user_surface_consumer_fetch(u64 consumer_slot, Framebuffer* fb, u64 page_count);
 
+f64 user_time_get_seconds();
+
 #include "samorak.h"
 #include "font9_12.h"
 
@@ -48,21 +50,23 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
     if(user_surface_acquire(surface_slot, fb, fb_page_count))
     {
         ballx += 1.0;
+        double time_frame_start = user_time_get_seconds();
+
         user_surface_consumer_set_size(0, 200, 200);
         if(user_surface_consumer_has_commited(0))
         {
-            printf("hi\n");
+//            printf("hi\n");
             user_surface_consumer_get_size(0, &sample_buffer_width, &sample_buffer_height);
             printf("The consumer is %u by %u\n", sample_buffer_width, sample_buffer_height);
             sample_buffer_page_count = user_surface_consumer_fetch(0, 0, 0);
             if(user_surface_consumer_fetch(0, sample_buffer, sample_buffer_page_count))
             {
-                printf("yay! we fetched \\o/\n");
+//                printf("yay! we fetched \\o/\n");
             }
         }
         else
         {
-            printf("no\n");
+//            printf("no\n");
         }
 
 
@@ -262,6 +266,9 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
                 fb->data[i*4 + 2] = sample_buffer->data[j*4 + 2];
             }
         }
+
+        double time_frame_end = user_time_get_seconds();
+        printf("frame time is %lf ms\n", (time_frame_end-time_frame_start) *1000.0);
  
         user_surface_commit(surface_slot);
     }

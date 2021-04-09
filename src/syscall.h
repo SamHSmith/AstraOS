@@ -303,7 +303,7 @@ void syscall_surface_consumer_set_size(Thread** current_thread)
     t->program_counter += 4;
 }
 
-void syscall_surface_consumer_fetch(volatile Thread** current_thread)
+void syscall_surface_consumer_fetch(Thread** current_thread)
 {
     Thread* t = *current_thread;
     TrapFrame* frame = &t->frame;
@@ -317,7 +317,15 @@ void syscall_surface_consumer_fetch(volatile Thread** current_thread)
     ret = surface_consumer_fetch(t->proccess_pid, consumer_slot, fb, page_count);
 
     frame->regs[10] = ret;
-    (*current_thread)->program_counter += 4;
+    t->program_counter += 4;
+}
+
+void syscall_time_get_seconds(Thread** current_thread, u64 mtime)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
+    *((f64*)&frame->regs[10]) = ((f64)mtime) / 10000000.0;
+    t->program_counter += 4;
 }
 
 void do_syscall(Thread** current_thread, u64 mtime)
@@ -351,6 +359,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_surface_consumer_set_size(current_thread); }
     else if(call_num == 13)
     { syscall_surface_consumer_fetch(current_thread); }
+    else if (call_num == 14)
+    { syscall_time_get_seconds(current_thread, mtime); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

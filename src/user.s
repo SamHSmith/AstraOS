@@ -109,3 +109,9 @@ user_surface_consumer_fetch:
     addi a0, x0, 13
     ecall
     ret
+
+.global user_time_get_seconds
+user_time_get_seconds:
+    addi a0, x0, 14
+    ecall
+    ret

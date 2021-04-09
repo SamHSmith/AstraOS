@@ -165,6 +165,7 @@ void trap_hang_kernel(
 }
 
 Framebuffer* framebuffer = 0;
+u8 frame_has_been_requested = 0;
 
 u64 m_trap(
     u64 epc,
@@ -218,6 +219,9 @@ u64 m_trap(
             volatile u8* viewer = 0x10000100;
             volatile u8* viewer_should_read = 0x10000101;
 
+            Surface* surface = &((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
+                               ->surface_alloc.memory)->surface;
+
             if(*viewer_should_read)
             {
                 u8 message = *viewer;
@@ -231,11 +235,8 @@ u64 m_trap(
                     u32 height = sizes[1];
                     printf("width : %llu, height : %llu\n", width, height);
 
-                    Surface* surface = &((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
-                                        ->surface_alloc.memory)->surface;
                     surface->width = width;
                     surface->height = height;
-                    u8 frame_dropped = 1;
 
                     if(framebuffer == 0)
                     { framebuffer = framebuffer_create(width, height); }
@@ -244,27 +245,28 @@ u64 m_trap(
                         kfree_pages(framebuffer->alloc);
                         framebuffer = framebuffer_create(width, height);
                     }
-
-                    if(surface_has_commited(*surface))
-                    {
-                        Framebuffer* temp = framebuffer;
-                        framebuffer = surface->fb_present;
-                        surface->fb_present = temp;
-                        surface->has_commited = 0;
-                        frame_dropped = 0;
-                    }
-                    for(u64 j = 0; j < (width*height) >> 3; j++)
-                    {
-                        u8 send = 0;
-                        for(u64 i = 0; i < 8; i++)
-                        {
-                            send |= (u8)((framebuffer->data[(j*8 +i)*4 + 0] > 0.0) << i);
-                            send |= (u8)((framebuffer->data[(j*8 +i)*4 + 1] > 0.0) << i);
-                            send |= (u8)((framebuffer->data[(j*8 +i)*4 + 2] > 0.0) << i);
-                        }
-                        *viewer = send;
-                    }
+                    frame_has_been_requested = 1;
                 }
+            }
+            if(frame_has_been_requested && surface_has_commited(*surface))
+            {
+                Framebuffer* temp = framebuffer;
+                framebuffer = surface->fb_present;
+                surface->fb_present = temp;
+                surface->has_commited = 0;
+
+                for(u64 j = 0; j < (surface->width*surface->height) >> 3; j++)
+                {
+                    u8 send = 0;
+                    for(u64 i = 0; i < 8; i++)
+                    {
+                        send |= (u8)((framebuffer->data[(j*8 +i)*4 + 0] > 0.0) << i);
+                        send |= (u8)((framebuffer->data[(j*8 +i)*4 + 1] > 0.0) << i);
+                        send |= (u8)((framebuffer->data[(j*8 +i)*4 + 2] > 0.0) << i);
+                    }
+                    *viewer = send;
+                }
+                frame_has_been_requested = 0;
             }
 
             // Reset the Machine Timer
