@@ -213,6 +213,60 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
+
+            // talk to viewer
+            volatile u8* viewer = 0x10000100;
+            volatile u8* viewer_should_read = 0x10000101;
+
+            if(*viewer_should_read)
+            {
+                u8 message = *viewer;
+                if(message == 1)
+                {
+                    printf("frame requested\n");
+                    u32 sizes[2];
+                    for(u64 i = 0; i < 8; i++)
+                    { *(((u8*)sizes) + i) = *viewer; }
+                    u32 width = sizes[0];
+                    u32 height = sizes[1];
+                    printf("width : %llu, height : %llu\n", width, height);
+
+                    Surface* surface = &((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
+                                        ->surface_alloc.memory)->surface;
+                    surface->width = width;
+                    surface->height = height;
+                    u8 frame_dropped = 1;
+
+                    if(framebuffer == 0)
+                    { framebuffer = framebuffer_create(width, height); }
+                    else if(framebuffer->width != width || framebuffer->height != height)
+                    {
+                        kfree_pages(framebuffer->alloc);
+                        framebuffer = framebuffer_create(width, height);
+                    }
+
+                    if(surface_has_commited(*surface))
+                    {
+                        Framebuffer* temp = framebuffer;
+                        framebuffer = surface->fb_present;
+                        surface->fb_present = temp;
+                        surface->has_commited = 0;
+                        frame_dropped = 0;
+                    }
+                    for(u64 j = 0; j < (width*height) >> 3; j++)
+                    {
+                        u8 send = 0;
+                        for(u64 i = 0; i < 8; i++)
+                        {
+                            send |= (u8)((framebuffer->data[(j*8 +i)*4 + 0] > 0.0) << i);
+                            send |= (u8)((framebuffer->data[(j*8 +i)*4 + 1] > 0.0) << i);
+                            send |= (u8)((framebuffer->data[(j*8 +i)*4 + 2] > 0.0) << i);
+                        }
+                        *viewer = send;
+                    }
+                }
+            }
+
             // Reset the Machine Timer
             volatile u64* mtimecmp = (u64*)0x02004000;
             volatile u64* mtime = (u64*)0x0200bff8;
@@ -250,7 +304,7 @@ u64 m_trap(
                         RawMouse* mouse = &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->mouse;
                         new_mouse_input_from_serial(mouse, mouse_data);
 
-                        Surface* surface = &((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
+/*                        Surface* surface = &((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
                                 ->surface_alloc.memory)->surface;
                         surface->width = width;
                         surface->height = height;
@@ -272,19 +326,19 @@ u64 m_trap(
                             surface->has_commited = 0;
                             frame_dropped = 0;
                         }
-
+*/
                         for(u64 i = 0; i < (width * height) >> 3; i++)
                         {
                             u8 r=0;
-                            for(u64 j = 0; j < 8; j++)
+/*                            for(u64 j = 0; j < 8; j++)
                             {
                                 r |= (framebuffer->data[4*(i*8 + j) + 0] > 0.0) << j;
                                 r |= (framebuffer->data[4*(i*8 + j) + 1] > 0.0) << j;
                                 r |= (framebuffer->data[4*(i*8 + j) + 2] > 0.0) << j;
                             }
-                            uart_write(&r, 1);
+*/                            uart_write(&r, 1);
                         }
-                        if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
+//                        if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
                     }
                     else if(character == 'd') // Key down
                     {
