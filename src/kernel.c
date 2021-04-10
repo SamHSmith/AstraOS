@@ -166,6 +166,7 @@ void trap_hang_kernel(
 
 Framebuffer* framebuffer = 0;
 u8 frame_has_been_requested = 0;
+#define VIEWBUFF_SIZE (4096*1024)
 
 u64 m_trap(
     u64 epc,
@@ -178,18 +179,6 @@ u64 m_trap(
 {
     u64 async = (cause >> 63) & 1 == 1;
     u64 cause_num = cause & 0xfff;
-
-    // Store thread
-    if(kernel_current_thread != 0)
-    {
-        kernel_current_thread->frame = *frame;
-        kernel_current_thread->program_counter = epc;
-    }
-    else // Store kernel thread
-    {
-        KERNEL_THREAD.frame = *frame;
-        KERNEL_THREAD.program_counter = epc;
-    }
 
     if(async)
     {
@@ -215,6 +204,18 @@ u64 m_trap(
         }
         else if(cause_num == 7) {
 
+            // Store thread
+            if(kernel_current_thread != 0)
+            {
+                kernel_current_thread->frame = *frame;
+                kernel_current_thread->program_counter = epc;
+            }
+            else // Store kernel thread
+            {
+                KERNEL_THREAD.frame = *frame;
+                KERNEL_THREAD.program_counter = epc;
+            }
+
             // talk to viewer
             volatile u8* viewer = 0x10000100;
             volatile u8* viewer_should_read = 0x10000101;
@@ -227,7 +228,6 @@ u64 m_trap(
                 u8 message = *viewer;
                 if(message == 1)
                 {
-                    printf("frame requested\n");
                     u32 sizes[2];
                     for(u64 i = 0; i < 8; i++)
                     { *(((u8*)sizes) + i) = *viewer; }
@@ -254,20 +254,15 @@ u64 m_trap(
                 framebuffer = surface->fb_present;
                 surface->fb_present = temp;
                 surface->has_commited = 0;
+                u64 data_send[2];
+                data_send[0] = framebuffer->width * framebuffer->height * 4 * 4;
+                data_send[1] = framebuffer->data;
+                for(u64 i = 0; i < 8*2; i++)
+                { *viewer = *(((u8*)data_send) + i); }
 
-                for(u64 j = 0; j < (surface->width*surface->height) >> 3; j++)
-                {
-                    u8 send = 0;
-                    for(u64 i = 0; i < 8; i++)
-                    {
-                        send |= (u8)((framebuffer->data[(j*8 +i)*4 + 0] > 0.0) << i);
-                        send |= (u8)((framebuffer->data[(j*8 +i)*4 + 1] > 0.0) << i);
-                        send |= (u8)((framebuffer->data[(j*8 +i)*4 + 2] > 0.0) << i);
-                    }
-                    *viewer = send;
-                }
                 frame_has_been_requested = 0;
             }
+
 
             // Reset the Machine Timer
             volatile u64* mtimecmp = (u64*)0x02004000;
@@ -275,6 +270,18 @@ u64 m_trap(
 
             kernel_current_thread = kernel_choose_new_thread(*mtime, kernel_current_thread != 0);
             *mtimecmp = *mtime + (10000000 / 1000);
+
+            if(kernel_current_thread != 0)
+            {
+                // Load thread
+                *frame = kernel_current_thread->frame;
+                return kernel_current_thread->program_counter;
+            }
+            else // Load kernel thread
+            {
+                *frame = KERNEL_THREAD.frame;
+                return KERNEL_THREAD.program_counter;
+            }
         }
         else if(cause_num == 8) {
                 printf("User external interrupt CPU%lld\n", hart);
@@ -287,6 +294,18 @@ u64 m_trap(
         else if(cause_num == 11)
         {
 //            printf("Machine external interrupt CPU%lld\n", hart);
+            // Store thread
+            if(kernel_current_thread != 0)
+            {
+                kernel_current_thread->frame = *frame;
+                kernel_current_thread->program_counter = epc;
+            }
+            else // Store kernel thread
+            {
+                KERNEL_THREAD.frame = *frame;
+                KERNEL_THREAD.program_counter = epc;
+            }
+
             u32 interrupt;
             char character;
             while(plic_interrupt_next(&interrupt))
@@ -306,41 +325,11 @@ u64 m_trap(
                         RawMouse* mouse = &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->mouse;
                         new_mouse_input_from_serial(mouse, mouse_data);
 
-/*                        Surface* surface = &((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
-                                ->surface_alloc.memory)->surface;
-                        surface->width = width;
-                        surface->height = height;
-                        u8 frame_dropped = 1;
-
-                        if(framebuffer == 0)
-                        { framebuffer = framebuffer_create(width, height); }
-                        else if(framebuffer->width != width || framebuffer->height != height)
-                        {
-                            kfree_pages(framebuffer->alloc);
-                            framebuffer = framebuffer_create(width, height);
-                        }
-
-                        if(surface_has_commited(*surface))
-                        {
-                            Framebuffer* temp = framebuffer;
-                            framebuffer = surface->fb_present;
-                            surface->fb_present = temp;
-                            surface->has_commited = 0;
-                            frame_dropped = 0;
-                        }
-*/
                         for(u64 i = 0; i < (width * height) >> 3; i++)
                         {
                             u8 r=0;
-/*                            for(u64 j = 0; j < 8; j++)
-                            {
-                                r |= (framebuffer->data[4*(i*8 + j) + 0] > 0.0) << j;
-                                r |= (framebuffer->data[4*(i*8 + j) + 1] > 0.0) << j;
-                                r |= (framebuffer->data[4*(i*8 + j) + 2] > 0.0) << j;
-                            }
-*/                            uart_write(&r, 1);
+                            uart_write(&r, 1);
                         }
-//                        if(frame_dropped) { printf("KERNEL: A frame was dropped.\n"); }
                     }
                     else if(character == 'd') // Key down
                     {
@@ -363,6 +352,17 @@ u64 m_trap(
                     }
                 }
                 plic_interrupt_complete(interrupt);
+            }
+            if(kernel_current_thread != 0)
+            {
+                // Load thread
+                *frame = kernel_current_thread->frame;
+                return kernel_current_thread->program_counter;
+            }
+            else // Load kernel thread
+            {
+                *frame = KERNEL_THREAD.frame;
+                return KERNEL_THREAD.program_counter;
             }
         }
     }
@@ -405,8 +405,32 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 9) {
+            // Store thread
+            if(kernel_current_thread != 0)
+            {
+                kernel_current_thread->frame = *frame;
+                kernel_current_thread->program_counter = epc;
+            }
+            else // Store kernel thread
+            {
+                KERNEL_THREAD.frame = *frame;
+                KERNEL_THREAD.program_counter = epc;
+            }
+
             volatile u64* mtime = (u64*)0x0200bff8;
             do_syscall(&kernel_current_thread, *mtime);
+
+            if(kernel_current_thread != 0)
+            {
+                // Load thread
+                *frame = kernel_current_thread->frame;
+                return kernel_current_thread->program_counter;
+            }
+            else // Load kernel thread
+            {
+                *frame = KERNEL_THREAD.frame;
+                return KERNEL_THREAD.program_counter;
+            }
         }
         else if(cause_num == 11) {
                 printf("Interrupt: Environment call from M-mode CPU%lld -> 0x%x\n", hart, epc);
@@ -425,18 +449,7 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
     }
-
-    if(kernel_current_thread != 0)
-    {
-        // Load thread
-        *frame = kernel_current_thread->frame;
-        return kernel_current_thread->program_counter;
-    }
-    else // Load kernel thread
-    {
-        *frame = KERNEL_THREAD.frame;
-        return KERNEL_THREAD.program_counter;
-    }
+    return 0;
 }
 
 #include "tempuser.h"
