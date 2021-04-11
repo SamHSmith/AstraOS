@@ -86,6 +86,12 @@ void new_mouse_input_from_serial(RawMouse* mouse, s32 mouse_data[3])
     mouse->down = mouse_data[2];
 }
 
+void new_mouse_input_delta(RawMouse* mouse, s32 x, s32 y)
+{
+    mouse->x += (f64)x;
+    mouse->y += (f64)y;
+}
+
 RawMouse fetch_mouse_data(RawMouse* ptr)
 {
     RawMouse ret = *ptr;

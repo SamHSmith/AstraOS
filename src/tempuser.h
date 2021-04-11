@@ -222,9 +222,9 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
         {
             u64 i = x + (y * fb->width);
 
-            fb->data[i*4 + 0] = 0.0;
-            fb->data[i*4 + 1] = 0.0;
-            fb->data[i*4 + 2] = 0.0;
+            fb->data[i*4 + 0] = 0.149;
+            fb->data[i*4 + 1] = 0.254;
+            fb->data[i*4 + 2] = 0.368;
             fb->data[i*4 + 3] = 1.0;
 
             u64 c = x / 9;
@@ -244,9 +244,9 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
 
             if(here)
             {
-                fb->data[i*4 + 0] = 1.0;
-                fb->data[i*4 + 1] = 1.0;
-                fb->data[i*4 + 2] = 0.0;
+                fb->data[i*4 + 0] = 0.909;
+                fb->data[i*4 + 1] = 0.89;
+                fb->data[i*4 + 2] = 0.772;
             }
 
             if(x == (u64)ballx || y == (u64)bally)
