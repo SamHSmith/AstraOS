@@ -49,7 +49,6 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
     u64 fb_page_count = user_surface_acquire(surface_slot, fb, 0);
     if(user_surface_acquire(surface_slot, fb, fb_page_count))
     {
-        ballx += 1.0;
         double time_frame_start = user_time_get_seconds();
 
         user_surface_consumer_set_size(0, 200, 200);
