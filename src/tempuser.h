@@ -42,7 +42,7 @@ u32 sample_buffer_width = 0; u32 sample_buffer_height = 0;
 
 s64 backspace_timer = -1;
 while(1) {
-    user_wait_for_surface_draw(0);
+//    user_wait_for_surface_draw(0);
 for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
 {
     Framebuffer* fb = 0x424242000;
@@ -89,27 +89,27 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
                 {
                     u64 scancode = kbd_events[i].scancode;
 
-                    if(scancode >= 58 && scancode <= 69)
+                    if(scancode >= 62 && scancode <= 71)
                     {
-                        u64 fkey = scancode - 58;
+                        u64 fkey = scancode - 62;
                         user_switch_vo(fkey);
                     }
 
-                    if(scancode == 40)
+                    if(scancode == 35)
                     {
                         strcat(textbuffer, "\n");
                     }
 
                     append_scancode_to_string(scancode,
                                 kbd_events[i].current_state, textbuffer);
-                    if(scancode == 42 && strlen(textbuffer) > 0) {
-                        backspace_timer = 5;
+                    if(scancode == 21 && strlen(textbuffer) > 0) {
+                        backspace_timer = 22;
                         textbuffer[strlen(textbuffer)-1] = 0;
                     }
                 }
                 else
                 {
-                    if(kbd_events[i].scancode == 42)
+                    if(kbd_events[i].scancode == 21)
                     { backspace_timer = -1; }
                 }
 
@@ -246,6 +246,7 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
                 fb->data[i*4 + 0] = 0.909;
                 fb->data[i*4 + 1] = 0.89;
                 fb->data[i*4 + 2] = 0.772;
+                fb->data[i*4 + 3] = 1.0;
             }
 
             if(x == (u64)ballx || y == (u64)bally)
@@ -253,6 +254,7 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
                 fb->data[i*4 + 0] = 1.0 - fb->data[i*4 + 0];
                 fb->data[i*4 + 1] = 1.0 - fb->data[i*4 + 1];
                 fb->data[i*4 + 2] = 1.0 - fb->data[i*4 + 2];
+                fb->data[i*4 + 3] = 1.0;
             }
 
             // draw window
@@ -267,7 +269,7 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
         }
 
         double time_frame_end = user_time_get_seconds();
-        printf("frame time is %lf ms\n", (time_frame_end-time_frame_start) *1000.0);
+//        printf("frame time is %lf ms\n", (time_frame_end-time_frame_start) *1000.0);
  
         user_surface_commit(surface_slot);
     }

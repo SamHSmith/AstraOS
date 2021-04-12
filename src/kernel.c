@@ -233,7 +233,6 @@ u64 m_trap(
                     { *(((u8*)sizes) + i) = *viewer; }
                     u32 width = sizes[0];
                     u32 height = sizes[1];
-                    printf("width : %llu, height : %llu\n", width, height);
 
                     surface->width = width;
                     surface->height = height;
