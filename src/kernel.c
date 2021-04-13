@@ -80,11 +80,13 @@ void assert(u64 stat, char* error)
 
 u64 KERNEL_MMU_TABLE;
 Thread KERNEL_THREAD;
-
+u64 KERNEL_TRAP_STACK = 0; // will need more when we have multicore
 u64 kinit()
 {
     uart_init();
     KERNEL_MMU_TABLE = (u64)mem_init();
+    Kallocation stack = kalloc_pages(8);
+    KERNEL_TRAP_STACK = stack.memory + (PAGE_SIZE * stack.page_count);
 
     u64 satp_val = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
 

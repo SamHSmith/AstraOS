@@ -4,7 +4,7 @@ void user_surface_commit(u64 surface_slot);
 u64 user_surface_acquire(u64 surface_slot, Framebuffer* fb, u64 page_count);
 
 void user_thread_sleep(u64 duration);
-void user_wait_for_surface_draw(u64 surface_slot);
+void user_wait_for_surface_draw(u64* surface_slots, u64 count);
 
 u64 user_get_raw_mouse(RawMouse* buf, u64 len);
 u64 user_get_keyboard_events(KeyboardEvent* buf, u64 len);
@@ -42,7 +42,10 @@ u32 sample_buffer_width = 0; u32 sample_buffer_height = 0;
 
 s64 backspace_timer = -1;
 while(1) {
-//    user_wait_for_surface_draw(0);
+    u64 user_wait_surfaces[2];
+    user_wait_surfaces[0] = 0;
+    user_wait_surfaces[1] = 1;
+    user_wait_for_surface_draw(user_wait_surfaces, 2);
 for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
 {
     Framebuffer* fb = 0x424242000;
@@ -220,7 +223,9 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
         for(u64 x = 0; x < fb->width; x++)
         {
             u64 i = x + (y * fb->width);
-
+//printf("ptr0 : %llx\n", fb->data + i*4 + 0);
+//printf("ptr1 : %llx\n", fb->data + i*4 + 1);
+//printf("ptr2 : %llx\n", fb->data + i*4 + 2);
             fb->data[i*4 + 0] = 0.149;
             fb->data[i*4 + 1] = 0.254;
             fb->data[i*4 + 2] = 0.368;

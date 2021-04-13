@@ -14,6 +14,11 @@ typedef struct
 
 typedef struct
 {
+    u64 count;
+    u64 surface_slot[512];
+} ThreadSurfaceSlotWait;
+typedef struct
+{
     TrapFrame frame;
     Kallocation stack_alloc;
     u64 program_counter;
@@ -22,7 +27,7 @@ typedef struct
     union
     {
         u64 sleep_time;
-        u64 surface_slot_wait;
+        ThreadSurfaceSlotWait surface_slot_wait;
     }
 } Thread;
 
@@ -53,7 +58,7 @@ u64 KERNEL_PROCCESS_ARRAY_LEN = 0;
 
 u64 proccess_create()
 {
-    Kallocation _proc = kalloc_pages(1);
+    Kallocation _proc = kalloc_pages((sizeof(Proccess)/PAGE_SIZE) + 1);
     Proccess* proccess = (Proccess*)_proc.memory;
     memset(proccess, 0, sizeof(Proccess));
     proccess->proc_alloc = _proc;
@@ -139,7 +144,10 @@ u32 proccess_thread_create(u64 pid)
         if(sizeof(Proccess) + (KERNEL_PROCCESS_ARRAY[pid]->thread_count + 1) * sizeof(Thread) > 
             KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.page_count * PAGE_SIZE)
         {
-            Kallocation new_alloc = kalloc_pages(KERNEL_PROCCESS_ARRAY[pid]->proc_alloc.page_count + 1);
+            Kallocation new_alloc = kalloc_pages(
+            ((sizeof(Proccess) + (KERNEL_PROCCESS_ARRAY[pid]->thread_count + 1) * sizeof(Thread))/PAGE_SIZE)
+            + 1
+            );
             for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
             {
                 *(((u64*)new_alloc.memory) + i) =

@@ -65,17 +65,51 @@ void syscall_thread_sleep(Thread** current_thread, u64 mtime)
 
 void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
 {
-    TrapFrame* frame = &(*current_thread)->frame;
-    u64 surface_slot = frame->regs[11];
     Thread* t = *current_thread;
+    Proccess* proccess = KERNEL_PROCCESS_ARRAY[t->proccess_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_surface_slots = frame->regs[11];
+    u64 count = frame->regs[12];
 
-    SurfaceSlot* slot=
-        ((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory) + surface_slot;
+    u64 surface_slot_array[512];
+    u64 surface_slot_count = 0;
 
-    if(surface_slot < KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_count &&
-            slot->surface.is_initialized && surface_has_commited(slot->surface))
+    for(u64 i = 0; i < count; i++)
     {
-        t->surface_slot_wait = surface_slot;
+        u64* surface_slot;
+        if(mmu_virt_to_phys(proccess->mmu_table, user_surface_slots + i*8, (u64*)&surface_slot) == 0)
+        {
+            SurfaceSlot* slot=
+        ((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory) + *surface_slot;
+
+            if(*surface_slot < KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_count &&
+                slot->surface.is_initialized)
+            {
+                surface_slot_array[surface_slot_count] = *surface_slot;
+                surface_slot_count++;
+            }
+        }
+    }
+
+    u8 should_sleep = surface_slot_count > 0;
+
+    for(u64 i = 0; i < surface_slot_count; i++)
+    {
+        SurfaceSlot* slot=
+            ((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory) + surface_slot_array[i];
+        if(!surface_has_commited(slot->surface))
+        { should_sleep = 0; }
+    }
+
+    if(should_sleep)
+    {
+        ThreadSurfaceSlotWait surface_slot_wait = {0};
+        surface_slot_wait.count = surface_slot_count;
+        for(u64 i = 0; i < surface_slot_count; i++)
+        {
+            surface_slot_wait.surface_slot[i] = surface_slot_array[i];
+        }
+        t->surface_slot_wait = surface_slot_wait;
         t->thread_state = THREAD_STATE_SURFACE_WAIT;
         *current_thread = kernel_choose_new_thread(mtime, 1);
     }

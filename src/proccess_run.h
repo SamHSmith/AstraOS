@@ -22,12 +22,17 @@ u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
     }
     else if(t->thread_state == THREAD_STATE_SURFACE_WAIT)
     {
-        SurfaceSlot* slot=((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory)
-                + t->surface_slot_wait;
-        assert(t->surface_slot_wait < KERNEL_PROCCESS_ARRAY[r.pid]->surface_count
-                && slot->surface.is_initialized,
-                "thread_runtime_is_live: the surface slot contains a valid surface");
-        if(!surface_has_commited(slot->surface))
+        u8 wake = 0;
+        for(u64 i = 0; i < t->surface_slot_wait.count; i++)
+        {
+            SurfaceSlot* slot=((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory)
+                    + t->surface_slot_wait.surface_slot[i];
+            assert(t->surface_slot_wait.surface_slot[i] < KERNEL_PROCCESS_ARRAY[r.pid]->surface_count
+                    && slot->surface.is_initialized,
+                    "thread_runtime_is_live: the surface slot contains a valid surface");
+            if(!surface_has_commited(slot->surface)) { wake = 1; }
+        }
+        if(wake || t->surface_slot_wait.count == 0)
         {
             t->thread_state = THREAD_STATE_RUNNING;
             return 1;
@@ -157,12 +162,6 @@ void proccess_init()
             (u64*)tp2t->frame.regs[2],
             2 + 4
         );
-    mmu_kernel_map_range(
-            table2,
-            (u64*)tp2t->stack_alloc.memory,
-            (u64*)tp2t->stack_alloc.memory + PAGE_SIZE,
-            0
-        );
     tp2t->program_counter = (u64)thread1_func;
     tp2t->thread_state = THREAD_STATE_RUNNING;
 
@@ -176,12 +175,6 @@ void proccess_init()
             (u64*)tarr[thread1].stack_alloc.memory,
             (u64*)tarr[thread1].frame.regs[2],
             2 + 4
-        );
-    mmu_kernel_map_range(
-            table,
-            (u64*)tarr[thread1].stack_alloc.memory,
-            (u64*)tarr[thread1].stack_alloc.memory + PAGE_SIZE,
-            0
         );
 
     tarr[thread2].stack_alloc = kalloc_pages(4);

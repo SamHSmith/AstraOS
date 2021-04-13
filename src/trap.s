@@ -26,10 +26,10 @@ m_trap_vector:
 	# We use t6 as the temporary register because it is the very
 	# bottom register (x31)
 
-    addi sp, sp, -65*8
-
     csrrw t6, mscratch, t6
-    mv t6, sp
+    la t6, KERNEL_TRAP_STACK
+    ld t6, (t6)
+    addi t6, t6, -65*8
 
 .altmacro
 .macro intreg_cpy num
@@ -59,7 +59,10 @@ m_trap_vector:
 
     csrr a0, satp
     sd a0, (t6)
+    addi t6, t6, 8
 
+    addi t6, t6, -65*8
+    mv sp, t6
 	# Get ready to go into Rust (trap.rs)
 	# We don't want to write into the user's stack or whomever
 	# messed with us here.
@@ -68,7 +71,7 @@ m_trap_vector:
     csrr	a2, mcause
     csrr	a3, mhartid
     csrr	a4, mstatus
-    mv      a5, sp
+    mv      a5, t6
 	call	m_trap
 
 	# When we get here, we've returned from m_trap, restore registers
@@ -76,7 +79,9 @@ m_trap_vector:
 	# m_trap will return the return address via a0.
 
     csrw	mepc, a0
-    mv t6, sp
+    la t6, KERNEL_TRAP_STACK
+    ld t6, (t6)
+    addi t6, t6, -65*8
  
 .altmacro
 .macro intreg_place num
@@ -110,8 +115,6 @@ m_trap_vector:
 
     # Now swap the real t6 into t6
     csrr	t6, mscratch
-
-    addi sp, sp, 65*8
 
     sfence.vma
 

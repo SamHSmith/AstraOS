@@ -25,6 +25,7 @@ user_thread_sleep:
 
 .global user_wait_for_surface_draw
 user_wait_for_surface_draw:
+    mv a2, a1
     mv a1, a0
     addi a0, x0, 3
     ecall
