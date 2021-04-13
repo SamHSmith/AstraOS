@@ -24,12 +24,11 @@ f64 user_time_get_seconds();
 
 #include "samorak.h"
 //#include "qwerty.h"
-#include "font9_12.h"
+
+#include "font8_16.h"
 
 void thread1_func()
 {
-u64 font_bitmaps[256*2];
-font9_12_get_bitmap(font_bitmaps);
 
 f64 ballx = 0.0;
 f64 bally = 0.0;
@@ -134,8 +133,8 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
                                         kbd_events[0].current_state.keys_down[3]);
 */
 
-        u64 column_count = (fb->width / 9);
-        u64 row_count = (fb->height / 12);
+        u64 column_count = (fb->width / 8);
+        u64 row_count = (fb->height / 16);
 
         char bottom_banner[256];
         bottom_banner[0] = 0;
@@ -224,27 +223,22 @@ for(u64 surface_slot = 0; surface_slot < 2; surface_slot++)
         for(u64 x = 0; x < fb->width; x++)
         {
             u64 i = x + (y * fb->width);
-//printf("ptr0 : %llx\n", fb->data + i*4 + 0);
-//printf("ptr1 : %llx\n", fb->data + i*4 + 1);
-//printf("ptr2 : %llx\n", fb->data + i*4 + 2);
+
             fb->data[i*4 + 0] = 0.149;
             fb->data[i*4 + 1] = 0.254;
             fb->data[i*4 + 2] = 0.368;
             fb->data[i*4 + 3] = 1.0;
 
-            u64 c = x / 9;
-            u64 r = y / 12;
+            u64 c = x / 8;
+            u64 r = y / 16;
 
             u64 here = 0;
 
             if(c < column_count && r < row_count)
             {
                 u64 font_id = fontids[c + (r*column_count)];
-                if(font_id >= 256) { font_id = 255; }
-                u64 bitmap_index = (x % 9) + (9 * (y % 12));
-                here =
-            (font_bitmaps[2*font_id + (bitmap_index >>6)] & (((u64)1) << (bitmap_index & 0x3F)));
-                here = here && font_id != 0;
+                if(font_id >= 256) { font_id = 206; }
+                here = font8_16_pixel_filled(font_id, x - (c*8), y - (r*16));
             }
 
             if(here)
