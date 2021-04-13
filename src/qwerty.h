@@ -36,7 +36,7 @@ void append_scancode_to_string(u8 c, KeyboardState ks, char* s)
     if(c == 39) { to_add = 'F'; }
     if(c == 40) { to_add = 'G'; }
     if(c == 41) { to_add = 'H'; }
-    if(c == 42) { to_add = 'K'; }
+    if(c == 42) { to_add = 'J'; }
     if(c == 43) { to_add = 'K'; }
     if(c == 44) { to_add = 'L'; }
     if(c == 45) { to_add = ':'; }
@@ -69,7 +69,7 @@ void append_scancode_to_string(u8 c, KeyboardState ks, char* s)
     if(c == 19) { to_add = '-'; }
     if(c == 20) { to_add = '='; }
 
-    if(c == 23) { to_add = 'q''; }
+    if(c == 23) { to_add = 'q'; }
     if(c == 24) { to_add = 'w'; }
     if(c == 25) { to_add = 'e'; }
     if(c == 26) { to_add = 'r'; }
@@ -92,8 +92,8 @@ void append_scancode_to_string(u8 c, KeyboardState ks, char* s)
     if(c == 42) { to_add = 'j'; }
     if(c == 43) { to_add = 'k'; }
     if(c == 44) { to_add = 'l'; }
-    if(c == 45) { to_add = 'l'; }
-    if(c == 46) { to_add = ';'; }
+    if(c == 45) { to_add = ';'; }
+    if(c == 46) { to_add = '\''; }
  
     if(c == 49) { to_add = 'z'; }
     if(c == 50) { to_add = 'x'; }

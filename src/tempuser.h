@@ -22,7 +22,8 @@ u64 user_surface_consumer_fetch(u64 consumer_slot, Framebuffer* fb, u64 page_cou
 
 f64 user_time_get_seconds();
 
-#include "samorak.h"
+//#include "samorak.h"
+#include "qwerty.h"
 #include "font9_12.h"
 
 void thread1_func()
