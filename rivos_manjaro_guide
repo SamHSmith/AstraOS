@@ -1,4 +1,6 @@
 
+
+
  # First clone the repository
 git clone https://github.com/samhsmith/rivos.git
 cd rivos
@@ -31,4 +33,17 @@ cd ../..
 
  # To run the virtual machine
 make run
+
+ # By default you're gonna get my super gnarly ultra custom keyboard layout that you probably
+ # don't want to use.
+ # To switch to sensible US Qwerty do the following:
+ # In src/tempuser.h do the following change.
+
+sam's custom layout:
+#include "samorak.h"
+//#include "qwerty.h"
+
+US Qwerty:
+//#include "samorak.h"
+#include "qwerty.h"
 
