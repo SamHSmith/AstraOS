@@ -25,7 +25,8 @@ debug: clean kernel.bin hdd
 	$(QEMU) $(QEMU_FLAGS) -s -S &
 	cat pipe.out
 	rm -drf pipe.in pipe.out
+
 clean:
 	rm -drf pipe.in pipe.out
 	rm -drf kernel.bin hdd.dsk
-	make -C viewer clean
+

@@ -1,6 +1,9 @@
 
  # First clone the repository
 git clone https://github.com/samhsmith/rivos.git
+cd rivos
+git submodule update --init --recursive
+cd ..
 
  # Clone the risc-v gnu toolchain
 git clone https://github.com/riscv/riscv-gnu-toolchain.git
@@ -16,12 +19,16 @@ PATH=/opt/riscv/bin:$PATH
 cd ..
 
  # Now install the dependancies of running rivos
-sudo pacman -S qemu qemu-arch-extra sdl2
+sudo pacman -S ninja ceph glusterfs libiscsi python python-sphinx spice-protocol xfsprogs
+
+ # Now build the virtual machine that is used to run rivos
+cd rivos
+mkdir qemu/build
+cd qemu/build
+../configure --target-list=riscv64-softmmu
+make -j$(nproc)
+cd ../..
 
  # To run the virtual machine
-cd rivos
 make run
 
- # (Then in a seperate terminal) To run the viewer
-cd rivos/viewer
-make run
