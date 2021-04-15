@@ -11,7 +11,7 @@ cd ..
 git clone https://github.com/riscv/riscv-gnu-toolchain.git
 
  # Install dependancies required for build
-sudo pacman -Syyu autoconf automake curl python3 mpc mpfr gmp gawk base-devel bison flex texinfo gperf libtool patchutils bc zlib expat
+sudo pacman -Sy autoconf automake curl python3 mpc mpfr gmp gawk base-devel bison flex texinfo gperf libtool patchutils bc zlib expat
 
  # Build the toolchain and install to /opt/riscv/ this will take a while
 cd riscv-gnu-toolchain
@@ -21,7 +21,7 @@ PATH=/opt/riscv/bin:$PATH
 cd ..
 
  # Now install the dependancies of running rivos
-sudo pacman -S ninja ceph glusterfs libiscsi python python-sphinx spice-protocol xfsprogs
+sudo pacman -Sy ninja ceph glusterfs libiscsi python python-sphinx spice-protocol xfsprogs
 
  # Now build the virtual machine that is used to run rivos
 cd rivos
