@@ -42,6 +42,8 @@ void _putchar(char c)
 #include "proccess_run.h"
 #include "syscall.h"
 
+#include "oak.h"
+
 // --- Lib maybe? ---
 u64 strlen(char* str)
 {
@@ -285,11 +287,7 @@ u64 m_trap(
                 framebuffer = surface->fb_present;
                 surface->fb_present = temp;
                 surface->has_commited = 0;
-                u64 data_send[2];
-                data_send[0] = framebuffer->width * framebuffer->height * 4 * 4;
-                data_send[1] = framebuffer->data;
-                for(u64 i = 0; i < 8*2; i++)
-                { *viewer = *(((u8*)data_send) + i); }
+                oak_send_video(framebuffer);
 
                 frame_has_been_requested = 0;
             }
