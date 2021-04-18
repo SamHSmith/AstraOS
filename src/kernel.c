@@ -42,6 +42,10 @@ void _putchar(char c)
 #include "proccess_run.h"
 #include "syscall.h"
 
+//for rendering
+Framebuffer* framebuffer = 0;
+u8 frame_has_been_requested = 0;
+
 #include "oak.h"
 
 // --- Lib maybe? ---
@@ -168,8 +172,6 @@ void trap_hang_kernel(
     while(1) {}
 }
 
-Framebuffer* framebuffer = 0;
-u8 frame_has_been_requested = 0;
 #define VIEWBUFF_SIZE (4096*1024)
 
 u64 m_trap(
@@ -229,57 +231,7 @@ u64 m_trap(
 
             while(*viewer_should_read)
             {
-                u8 message = *viewer;
-                if(message == 1)
-                {
-                    u32 sizes[2];
-                    for(u64 i = 0; i < 8; i++)
-                    { *(((u8*)sizes) + i) = *viewer; }
-                    u32 width = sizes[0];
-                    u32 height = sizes[1];
-
-                    surface->width = width;
-                    surface->height = height;
-
-                    if(framebuffer == 0)
-                    { framebuffer = framebuffer_create(width, height); }
-                    else if(framebuffer->width != width || framebuffer->height != height)
-                    {
-                        kfree_pages(framebuffer->alloc);
-                        framebuffer = framebuffer_create(width, height);
-                    }
-                    frame_has_been_requested = 1;
-                }
-                else if(message == 2)
-                {
-                    s32 sizes[2];
-                    for(u64 i = 0; i < 8; i++)
-                    { *(((u8*)sizes) + i) = *viewer; }
-                    RawMouse* mouse = &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->mouse;
-                    new_mouse_input_delta(mouse, sizes[0], sizes[1]);
-                }
-                else if(message == 3)
-                {
-                    u8 button_up = *viewer;
-                }
-                else if(message == 4)
-                {
-                    u8 button_down = *viewer;
-                }
-                else if(message == 5)
-                {
-                    u8 key_up = *viewer;
-                    KeyboardEventQueue* kbd_event_queue =
-                        &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
-                    keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_RELEASED, key_up);
-                }
-                else if(message == 6)
-                {
-                    u8 key_down = *viewer;
-                    KeyboardEventQueue* kbd_event_queue = 
-                        &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
-                    keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_PRESSED, key_down);
-                }
+                recieve_oak_packet();
             }
             if(frame_has_been_requested && surface_has_commited(*surface))
             {
