@@ -98,6 +98,42 @@ void oak_recieve_video_out_request(OakPacketVideoOutRequest* packet)
     frame_has_been_requested = 1;
 }
 
+typedef struct
+{
+    OakPacket base;
+    u64 transaction_number;
+    u8 write;
+    u64 block_address_pairs[];
+} OakPacketBlockFetch;
+ 
+typedef struct
+{
+    OakPacket base;
+    u64 transaction_number;
+} OakPacketBlockFetchComplete;
+
+void oak_send_block_fetch(u8 write, u64* block_address_pairs, u64 pair_count)
+{
+    assert(sizeof(OakPacketBlockFetch) + pair_count*2*sizeof(u64) <= 256, "block fetch isn't too big");
+    u8 scratch[sizeof(OakPacketBlockFetch) + pair_count*2];
+    OakPacketBlockFetch* packet = scratch;
+    packet->base.size = sizeof(*packet) + pair_count*2*sizeof(u64);
+    packet->base.device = 8;
+
+    packet->transaction_number = 0; // temp
+    packet->write = write;
+    for(u64 i = 0; i < pair_count*2; i++)
+    {
+        packet->block_address_pairs[i] = block_address_pairs[i];
+    }
+    send_oak_packet(packet);
+}
+
+void oak_recieve_block_fetch_complete(OakPacketBlockFetchComplete* packet)
+{
+    printf("the block fetch #%lu is complete\n", packet->transaction_number);
+}
+
 void recieve_oak_packet()
 {
     volatile u8* viewer_read = 0x10000101;
@@ -109,7 +145,11 @@ void recieve_oak_packet()
     { *viewer_read = *(((u8*)data_send) + i); }
 
     OakPacket* packet = scratch;
-    if(packet->device == 9)
+    if(packet->device == 8)
+    {
+        oak_recieve_block_fetch_complete(packet);
+    }
+    else if(packet->device == 9)
     {
         oak_recieve_video_out_request(packet);
     }

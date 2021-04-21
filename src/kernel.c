@@ -96,6 +96,22 @@ u64 kinit()
 
     u64 satp_val = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
 
+// TEMP
+    u64 pair[2];
+    pair[0] = 0;
+    char* scratch = kalloc_single_page(); // 1 block
+    pair[1] = scratch;
+    oak_send_block_fetch(0, pair, 1);
+    scratch[4096-1] = 0;
+    printf("block 1 : %s\n", scratch);
+    printf("adding a peronal touch to block1\n");
+    char* grafiti = "dave the legend was here.   ";
+    if(strlen(grafiti) + strlen(scratch) < 4096)
+    {
+        strcat(scratch, grafiti);
+        oak_send_block_fetch(1, pair, 1); // write
+    }
+
     printf("Entering supervisor mode...");
     return satp_val;
 }
