@@ -1,31 +1,7 @@
 #include "types.h"
 #include "random.h"
 
-void* memcpy(void* dest, const void* src, u64 n)
-{
-    void* orig_dest = dest;
-    u64 n8 = (n >> 3) << 3;
-    for(u64 i = 0; i < (n8 >> 3); i++)
-    { ((u64*)dest)[i] = ((u64*)src)[i]; }
- 
-    dest += n8;
-    src += n8;
-    n -= n8;
-    for(u64 i = 0; i < n; i++)
-    { ((u8*)dest)[i] = ((u8*)src)[i]; }
-    return orig_dest;
-}
-void* memset(void* str, int c, u64 n)
-{
-    u8* s = str;
-    u8 ch = *((u8*)&c);
-    for(u64 i = 0; i < n; i++)
-    {
-        *s = ch;
-        s++;
-    }
-    return str;
-}
+#include "libfuncs.h"
 
 #include "uart.h"
 #include "printf.h"
@@ -42,30 +18,14 @@ void _putchar(char c)
 #include "proccess_run.h"
 #include "syscall.h"
 
+#include "libfuncs2.h"
+#include "cyclone_crypto/hash/sha512.h"
+
 //for rendering
 Framebuffer* framebuffer = 0;
 u8 frame_has_been_requested = 0;
 
 #include "oak.h"
-
-// --- Lib maybe? ---
-u64 strlen(char* str)
-{
-    u64 i = 0;
-    while(str[i] != 0) { i++; }
-    return i;
-}
-void strcat(char* dest, char* src)
-{
-    char* d = dest;
-    while(*d) { d++; }
-    char* s = src;
-    do {
-        *d = *s;
-        d++;
-        s++;
-    } while(*s);
-}
 
 void uart_write_string(char* str)
 {
@@ -111,6 +71,12 @@ u64 kinit()
         strcat(scratch, grafiti);
         oak_send_block_fetch(1, pair, 1); // write
     }
+    u8 shasum[64];
+    sha512Compute(scratch, 4096, shasum);
+    printf("sha512sum of block is : ");
+    for(u64 i = 0; i < 64; i++)
+    { printf("%x", shasum[i]); }
+    printf("\n");
 
     printf("Entering supervisor mode...");
     return satp_val;
