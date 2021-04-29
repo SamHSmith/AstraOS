@@ -26,6 +26,7 @@ debug: clean kernel.bin
 
 clean:
 	make -C fsmake clean
+	make -C fsread clean
 	rm -drf pipe.in pipe.out
 	rm -drf kernel.bin
 
