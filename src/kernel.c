@@ -1,8 +1,6 @@
 #include "types.h"
 #include "random.h"
 
-#include "libfuncs.h"
-
 #include "uart.h"
 #include "printf.h"
 void _putchar(char c)
@@ -10,7 +8,25 @@ void _putchar(char c)
     uart_write(&c, 1);
 }
 
+void assert(u64 stat, char* error)
+{
+    if(!stat)
+    {
+        printf("assertion failed: \"");
+        printf(error);
+        printf("\"\n");
+        u8 freeze = 1;
+        while(freeze) {};
+    }
+}
+
+#include "libfuncs.h"
+
+
 #include "memory.h"
+#include "libfuncs2.h"
+#include "cyclone_crypto/hash/sha512.h"
+
 #include "plic.h"
 #include "input.h"
 #include "proccess.h"
@@ -18,8 +34,7 @@ void _putchar(char c)
 #include "proccess_run.h"
 #include "syscall.h"
 
-#include "libfuncs2.h"
-#include "cyclone_crypto/hash/sha512.h"
+#include "disk.h"
 
 //for rendering
 Framebuffer* framebuffer = 0;
@@ -30,18 +45,6 @@ u8 frame_has_been_requested = 0;
 void uart_write_string(char* str)
 {
     uart_write((u8*)str, strlen(str));
-}
-
-void assert(u64 stat, char* error)
-{
-    if(!stat)
-    {
-        uart_write_string("assertion failed: \"");
-        uart_write_string(error);
-        uart_write_string("\"\n");
-        u8 freeze = 1;
-        while(freeze) {};
-    }
 }
 
 u64 KERNEL_MMU_TABLE;
@@ -55,28 +58,6 @@ u64 kinit()
     KERNEL_TRAP_STACK = stack.memory + (PAGE_SIZE * stack.page_count);
 
     u64 satp_val = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
-
-// TEMP
-    u64 pair[2];
-    pair[0] = 0;
-    char* scratch = kalloc_single_page(); // 1 block
-    pair[1] = scratch;
-    oak_send_block_fetch(0, pair, 1);
-    scratch[4096-1] = 0;
-    printf("block 1 : %s\n", scratch);
-    printf("adding a peronal touch to block1\n");
-    char* grafiti = "dave the legend was here.   ";
-    if(strlen(grafiti) + strlen(scratch) < 4096)
-    {
-        strcat(scratch, grafiti);
-        oak_send_block_fetch(1, pair, 1); // write
-    }
-    u8 shasum[64];
-    sha512Compute(scratch, 4096, shasum);
-    printf("sha512sum of block is : ");
-    for(u64 i = 0; i < 64; i++)
-    { printf("%x", shasum[i]); }
-    printf("\n");
 
     printf("Entering supervisor mode...");
     return satp_val;
