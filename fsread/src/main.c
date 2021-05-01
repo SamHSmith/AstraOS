@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <openssl/sha.h>
 
@@ -31,6 +32,8 @@ typedef struct
 void main(int argc, char** argv)
 {
     if(argc < 3) { printf("usage: fsmake drive_file output_directory\n"); return; }
+
+    if(argv[2][strlen(argv[2])-1] != '/') { printf("output_directory must end in /\n"); return; }
 
     int drive_fd = open(argv[1], O_RDWR, S_IRUSR|S_IWUSR | S_IRGRP|S_IWGRP);
     if(drive_fd < 0) { printf("%s does not exists or there was an error opening the file\n"); return; }
@@ -78,9 +81,12 @@ void main(int argc, char** argv)
     read(drive_fd, table, sizeof(*table));
     printf("Using table#%lu as reference\n", reference_table);
 
+    mkdir(argv[2], ~0);
+    u8 block[4096];
+
     for(u64 i = 0; i < 63; i++)
     {
-        u64 next_partition_start = drive_block_count; // temp should be disk size
+        u64 next_partition_start = drive_block_count;
         if(i < 62) { next_partition_start = table->entries[i+1].start_block; }
 
         if(table->entries[i].partition_type != 0)
@@ -91,6 +97,21 @@ void main(int argc, char** argv)
                     next_partition_start - table->entries[i].start_block,
                     table->entries[i].name
             );
+            char* filepath = malloc(strlen(argv[2]) + strlen(table->entries[i].name) + 1);
+            strcpy(filepath, argv[2]);
+            strcat(filepath, table->entries[i].name);
+
+            int partition_fd = open(filepath, O_TRUNC | O_CREAT | O_RDWR, S_IRUSR|S_IWUSR | S_IRGRP|S_IWGRP);
+            if(partition_fd < 0) { printf("%s already exists or there was an error opening the file\n", filepath); return; }
+            free(filepath);
+
+            lseek(drive_fd, 4096 * table->entries[i].start_block, SEEK_SET);
+            for(u64 j = 0; j < (next_partition_start - table->entries[i].start_block); j++)
+            {
+                read(drive_fd, block, 4096);
+                write(partition_fd, block, 4096);
+            }
+            close(partition_fd);
         }
     }
 

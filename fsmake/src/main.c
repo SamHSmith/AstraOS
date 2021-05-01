@@ -37,7 +37,7 @@ void main(int argc, char** argv)
     if(argv[2][strlen(argv[2]) - 1] != '/') { printf("source_directory must end with /\n"); return; }
 
     int drive_fd = open(argv[1], O_EXCL | O_CREAT | O_RDWR, S_IRUSR|S_IWUSR | S_IRGRP|S_IWGRP);
-    if(drive_fd < 0) { printf("%s already exists or there was an error opening the file\n"); return; }
+    if(drive_fd < 0) { printf("%s already exists or there was an error opening the file\n", argv[1]); return; }
 
     u8 block[4096];
     for(u64 i = 0; i < 2048*32; i++)
@@ -146,9 +146,9 @@ void main(int argc, char** argv)
         if(i < 62) { next_partition_start = table->entries[i+1].start_block; }
         u64 partition_block_count = next_partition_start - table->entries[i].start_block;
 
-        int partition_fd = open(partition_filepath, O_RDONLY);
-        if(lseek(partition_fd, 0, SEEK_END) != partition_block_count * 4096)
-        { close(partition_fd); partition_fd = -1; }
+        int partition_fd = open(partition_filepath, O_RDWR);
+        if(partition_fd >0 && lseek(partition_fd, 0, SEEK_END) != partition_block_count * 4096)
+        { ftruncate(partition_fd, 4096 * partition_block_count); }
 
         if(partition_fd < 0)
         {
