@@ -91,9 +91,60 @@ u8 block[PAGE_SIZE];
             );
 
             read_blocks(table->entries[i].start_block, 1, block);
-            block[PAGE_SIZE-1] = 0;
-            printf("%s", block);
-            printf("\n");
+            ELF_Header* header = block;
+
+            if(header->magic != ELF_MAGIC)
+            { printf("NOT ELF\n"); continue; }
+            if(header->machine != ELF_MACHINE_RISCV)
+            { printf("WRONG ARCH\n"); continue; }
+            if(header->obj_type != ELF_TYPE_EXEC)
+            { printf("NOT AN EXECTUTABLE ELF\n"); continue; }
+
+            Kallocation elf_alloc = kalloc_pages(next_partition_start - table->entries[i].start_block);
+            header = elf_alloc.memory;
+            read_blocks(table->entries[i].start_block, next_partition_start - table->entries[i].start_block, header);
+
+            ELF_ProgramHeader* ph_tab = ((u8*)header) + header->phoff;
+            u64 phnum = header->phnum;
+
+            if(phnum == 0) { continue; }
+
+            u64 pid = proccess_create();
+#define proc KERNEL_PROCCESS_ARRAY[pid]
+
+            for(u64 i = 0; i < phnum; i++)
+            {
+                ELF_ProgramHeader* ph = ph_tab + i;
+
+                if(ph->seg_type != ELF_PH_SEG_TYPE_LOAD || ph->memsz == 0)
+                { continue; }
+
+                u64 bits = 0;
+                if(ph->flags & ELF_PROG_READ != 0)  { bits |= 2; }
+                if(ph->flags & ELF_PROG_WRITE != 0) { bits |= 4; }
+                if(ph->flags & ELF_PROG_EXECUTE !=0){ bits |= 8; }
+
+                Kallocation section_alloc = kalloc_pages((ph->memsz + PAGE_SIZE) / PAGE_SIZE);
+                memcpy(section_alloc.memory, ((u64)header) + ph->off, ph->memsz);
+                mmu_map_kallocation(proc->mmu_table, section_alloc, ph->vaddr, bits);
+            }
+
+            u32 thread1 = proccess_thread_create(pid);
+            proc->threads[thread1].stack_alloc = kalloc_pages(8);
+            proc->threads[thread1].frame.regs[2] = U64_MAX & (~0xfff);
+            u64 stack_start =
+                proc->threads[thread1].frame.regs[2] - (PAGE_SIZE * proc->threads[thread1].stack_alloc.page_count);
+            mmu_map_kallocation(
+                proc->mmu_table,
+                proc->threads[thread1].stack_alloc,
+                stack_start,
+                2 + 4
+            );
+
+            mmu_kernel_map_range(proc->mmu_table, 0x10000000, 0x10000000, 2 + 4); // UART
+
+            proc->threads[thread1].program_counter = header->entry_addr;
+            proc->threads[thread1].thread_state = THREAD_STATE_RUNNING;
         }
     }
 }

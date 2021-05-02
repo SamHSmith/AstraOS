@@ -34,10 +34,10 @@ u64 strlen(char* str)
 
 void _start()
 {
-    char* dave = "Hi I'm dave and I live in an elf file on a partition on the RADICAL PARTITION SYSTEM";
+    char* dave = "Hi I'm dave and I live in an elf file on a partition on the RADICAL PARTITION SYSTEM\n";
     while(1)
     {
         uart_write(dave, strlen(dave));
-        user_thread_sleep(11000);
+        user_thread_sleep(110000);
     }
 }

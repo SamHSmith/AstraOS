@@ -1,4 +1,4 @@
-CFLAGS= -g -mcmodel=medany -Ofast
+CFLAGS= -g -mcmodel=medany #-Ofast
 CFLAGS+=-static -ffreestanding -nostdlib -static-libgcc
 CFLAGS+=-march=rv64gc -mabi=lp64 -Isrc/cyclone_crypto -Isrc/cyclone_crypto/common
 LDFLAGS=
@@ -34,5 +34,5 @@ clean:
 	make -C fsread clean
 	rm -drf pipe.in pipe.out
 	rm -drf kernel.bin
-	rm elf
+	rm -f elf
 

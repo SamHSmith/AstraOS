@@ -34,6 +34,7 @@ void assert(u64 stat, char* error)
 #include "proccess_run.h"
 #include "syscall.h"
 
+#include "elf.h"
 #include "disk.h"
 
 //for rendering
@@ -124,12 +125,12 @@ void trap_hang_kernel(
     TrapFrame* frame
     )
 {
-    printf("args:\n  epc: %x\n  tval: %x\n  cause: %x\n  hart: %x\n  status: %x\n  frame: %x\n",
+    printf("args:\n  epc: %llx\n  tval: %llx\n  cause: %llx\n  hart: %llx\n  status: %llx\n  frame: %llx\n",
             epc, tval, cause, hart, status, frame);
     printf("frame:\n regs:\n");
-    for(u64 i = 0; i < 32; i++) { printf("  x%lld: %lx\n", i, frame->regs[i]); }
+    for(u64 i = 0; i < 32; i++) { printf("  x%lld: %llx\n", i, frame->regs[i]); }
     printf(" fregs:\n");
-    for(u64 i = 0; i < 32; i++) { printf("  f%lld: %lx\n", i, frame->fregs[i]); }
+    for(u64 i = 0; i < 32; i++) { printf("  f%lld: %llx\n", i, frame->fregs[i]); }
     printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
     printf("Kernel has hung.");
     while(1) {}
@@ -313,39 +314,39 @@ u64 m_trap(
     else
     {
              if(cause_num == 0) {
-                printf("Interrupt: Instruction address misaligned CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Instruction address misaligned CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 1) {
-                printf("Interrupt: Instruction access fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Instruction access fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 2) {
-                printf("Interrupt: Illegal instruction CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Illegal instruction CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 3) {
-                printf("Interrupt: Breakpoint CPU%lld -> 0x%x\n", hart, epc);
+                printf("Interrupt: Breakpoint CPU%lld -> 0x%llx\n", hart, epc);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 4) {
-                printf("Interrupt: Load access misaligned CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Load access misaligned CPU%lld -> 0x%llx: 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 5) {
-                printf("Interrupt: Load access fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Load access fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 6) {
-                printf("Interrupt: Store/AMO address misaligned CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Store/AMO address misaligned CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
-                printf("Interrupt: Store/AMO access fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Store/AMO access fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 8) {
-                printf("Interrupt: Environment call from U-mode CPU%lld -> 0x%x\n", hart, epc);
+                printf("Interrupt: Environment call from U-mode CPU%lld -> 0x%llx\n", hart, epc);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 9) {
@@ -377,19 +378,19 @@ u64 m_trap(
             }
         }
         else if(cause_num == 11) {
-                printf("Interrupt: Environment call from M-mode CPU%lld -> 0x%x\n", hart, epc);
+                printf("Interrupt: Environment call from M-mode CPU%lld -> 0x%llx\n", hart, epc);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 12) {
-                printf("Interrupt: Instruction page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Instruction page fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 13) {
-                printf("Interrupt: Load page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Load page fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 15) {
-                printf("Interrupt: Store/AMO page fault CPU%lld -> 0x%x: 0x%x\n", hart, epc, tval);
+                printf("Interrupt: Store/AMO page fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
     }
