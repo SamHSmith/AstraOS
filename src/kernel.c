@@ -22,7 +22,6 @@ void assert(u64 stat, char* error)
 
 #include "libfuncs.h"
 
-
 #include "memory.h"
 #include "libfuncs2.h"
 #include "cyclone_crypto/hash/sha512.h"
@@ -31,6 +30,7 @@ void assert(u64 stat, char* error)
 #include "input.h"
 #include "proccess.h"
 #include "video.h"
+#include "file.h"
 #include "proccess_run.h"
 #include "syscall.h"
 
@@ -68,6 +68,15 @@ void kmain()
 {
     printf("done.\n    Successfully entered kmain with supervisor mode enabled.\n\n");
     uart_write_string("Hello there, welcome to the ROS operating system\nYou have no idea the pain I went through to make these characters you type appear on screen\n\n");
+
+
+    /* TESTING */
+    u64 dir_id = kernel_directory_create_imaginary("Über directory");
+    u64 dir_name_len = kernel_directory_get_name(dir_id, 0, 0) + 1;
+    char dir_name[dir_name_len];
+    kernel_directory_get_name(dir_id, dir_name, dir_name_len);
+    printf("The directory created is called : %s\n", dir_name);
+
 
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)

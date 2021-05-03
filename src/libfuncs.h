@@ -123,6 +123,25 @@ u64 strlen(char* str)
     return i;
 }
 
+u64 strnlen_s(char* str, u64 max_len)
+{
+    u64 i = 0;
+    while(str[i] != 0 && i < max_len) { i++; }
+    return i;
+}
+
+char* strcpy(char* dest, char* src)
+{
+    memcpy(dest, src, strlen(src));
+    return dest;
+}
+
+char* strncpy(char* dest, char* src, u64 max_len)
+{
+    memcpy(dest, src, strnlen_s(src, max_len));
+    return dest;
+}
+
 int strcmp(const char* s1, const char* s2)
 {
     while(*s1 && (*s1 == *s2))
