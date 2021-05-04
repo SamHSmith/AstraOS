@@ -72,11 +72,21 @@ void kmain()
 
     /* TESTING */
     u64 dir_id = kernel_directory_create_imaginary("Über directory");
-    u64 dir_name_len = kernel_directory_get_name(dir_id, 0, 0) + 1;
+    u64 dir_name_len = kernel_directory_get_name(dir_id, 0, 0);
     char dir_name[dir_name_len];
     kernel_directory_get_name(dir_id, dir_name, dir_name_len);
     printf("The directory created is called : %s\n", dir_name);
 
+    kernel_directory_add_subdirectory(dir_id, kernel_directory_create_imaginary("smõl directory"));
+    u64 full_dir_id = kernel_directory_create_imaginary("filled directory");
+    kernel_directory_add_subdirectory(dir_id, full_dir_id);
+
+    kernel_directory_add_subdirectory(full_dir_id, kernel_directory_create_imaginary("another small directory"));
+    kernel_directory_add_subdirectory(full_dir_id, kernel_directory_create_imaginary("another small directory"));
+    kernel_directory_add_subdirectory(full_dir_id, kernel_directory_create_imaginary("another small directory"));
+
+    debug_print_directory_tree(dir_id, "");
+    debug_print_directory_tree(full_dir_id, "");
 
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)
