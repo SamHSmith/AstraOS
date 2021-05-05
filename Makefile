@@ -1,6 +1,7 @@
-CFLAGS= -g -mcmodel=medany #-Ofast
+CFLAGS= -g
+CFLAGS+= -mcmodel=medany #-Ofast
 CFLAGS+=-static -ffreestanding -nostdlib -static-libgcc
-CFLAGS+=-march=rv64gc -mabi=lp64 -Isrc/cyclone_crypto -Isrc/cyclone_crypto/common
+CFLAGS+=-march=rv64g -mabi=lp64 -Isrc/cyclone_crypto -Isrc/cyclone_crypto/common
 LDFLAGS=
 
 QEMU=./qemu/build/qemu-system-riscv64

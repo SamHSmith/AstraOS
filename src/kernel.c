@@ -77,16 +77,34 @@ void kmain()
     kernel_directory_get_name(dir_id, dir_name, dir_name_len);
     printf("The directory created is called : %s\n", dir_name);
 
-    kernel_directory_add_subdirectory(dir_id, kernel_directory_create_imaginary("smõl directory"));
+    u64 smol_dir = kernel_directory_create_imaginary("smõl directory");
+    kernel_directory_add_file(smol_dir, kernel_file_create_imaginary("an imaginary file"));
+    kernel_directory_add_subdirectory(dir_id, smol_dir);
+
     u64 full_dir_id = kernel_directory_create_imaginary("filled directory");
+    kernel_directory_increment_reference_count(full_dir_id);
     kernel_directory_add_subdirectory(dir_id, full_dir_id);
 
     kernel_directory_add_subdirectory(full_dir_id, kernel_directory_create_imaginary("another small directory"));
     kernel_directory_add_subdirectory(full_dir_id, kernel_directory_create_imaginary("another small directory"));
     kernel_directory_add_subdirectory(full_dir_id, kernel_directory_create_imaginary("another small directory"));
 
+    for(u64 i = 0; i < 10; i++)
+    {
+        char name[32];
+        sprintf(name, "file#%lld", 10-i);
+        u64 file = kernel_file_create_imaginary(name);
+        if(!kernel_directory_add_file(full_dir_id, file))
+        {
+//          kernel_file_free(file);
+            if(is_valid_file_id(file)) { printf("file free failed for %s\n", name); }
+        }
+    }
+
     debug_print_directory_tree(dir_id, "");
+    kernel_directory_free(dir_id);
     debug_print_directory_tree(full_dir_id, "");
+    kernel_directory_free(full_dir_id);
 
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)
