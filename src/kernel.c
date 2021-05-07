@@ -37,9 +37,9 @@ void _putchar(char c)
 #include "memory.h"
 #include "plic.h"
 #include "input.h"
-#include "proccess.h"
+#include "process.h"
 #include "video.h"
-#include "proccess_run.h"
+#include "process_run.h"
 #include "syscall.h"
 
 // --- Lib maybe? ---
@@ -132,7 +132,7 @@ void kmain()
 
     for(s64 i = 0; i < 5; i++) { uart_write_string("\n"); } //tells the viewer we have initialized
 
-    proccess_init();
+    process_init();
 
     while(1)
     {
@@ -222,7 +222,7 @@ u64 m_trap(
             volatile u8* viewer = 0x10000100;
             volatile u8* viewer_should_read = 0x10000101;
 
-            Surface* surface = &((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
+            Surface* surface = &((SurfaceSlot*)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]
                                ->surface_alloc.memory)->surface;
 
             while(*viewer_should_read)
@@ -253,7 +253,7 @@ u64 m_trap(
                     s32 sizes[2];
                     for(u64 i = 0; i < 8; i++)
                     { *(((u8*)sizes) + i) = *viewer; }
-                    RawMouse* mouse = &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->mouse;
+                    RawMouse* mouse = &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->mouse;
                     new_mouse_input_delta(mouse, sizes[0], sizes[1]);
                 }
                 else if(message == 3)
@@ -268,14 +268,14 @@ u64 m_trap(
                 {
                     u8 key_up = *viewer;
                     KeyboardEventQueue* kbd_event_queue =
-                        &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
+                        &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
                     keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_RELEASED, key_up);
                 }
                 else if(message == 6)
                 {
                     u8 key_down = *viewer;
                     KeyboardEventQueue* kbd_event_queue = 
-                        &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
+                        &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
                     keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_PRESSED, key_down);
                 }
             }
@@ -353,7 +353,7 @@ u64 m_trap(
 
                         s32 mouse_data[3];
                         uart_read_blocking(mouse_data, 3*4);
-                        RawMouse* mouse = &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->mouse;
+                        RawMouse* mouse = &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->mouse;
                         new_mouse_input_from_serial(mouse, mouse_data);
 
                         for(u64 i = 0; i < (width * height) >> 3; i++)
@@ -367,7 +367,7 @@ u64 m_trap(
                         u8 scode;
                         uart_read_blocking(&scode, 1);
                         KeyboardEventQueue* kbd_event_queue = 
-                            &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
+                            &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
                         keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_PRESSED, scode);
                     }
                     else if(character == 'u') // Key up
@@ -375,7 +375,7 @@ u64 m_trap(
                         u8 scode;
                         uart_read_blocking(&scode, 1);
                         KeyboardEventQueue* kbd_event_queue =
-                            &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
+                            &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
                         keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_RELEASED, scode);
                     }
                     else {
