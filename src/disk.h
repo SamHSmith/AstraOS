@@ -109,8 +109,8 @@ u8 block[PAGE_SIZE];
 
             if(phnum == 0) { continue; }
 
-            u64 pid = proccess_create();
-#define proc KERNEL_PROCCESS_ARRAY[pid]
+            u64 pid = process_create();
+#define proc KERNEL_PROCESS_ARRAY[pid]
 
             for(u64 i = 0; i < phnum; i++)
             {
@@ -129,7 +129,7 @@ u8 block[PAGE_SIZE];
                 mmu_map_kallocation(proc->mmu_table, section_alloc, ph->vaddr, bits);
             }
 
-            u32 thread1 = proccess_thread_create(pid);
+            u32 thread1 = process_thread_create(pid);
             proc->threads[thread1].stack_alloc = kalloc_pages(8);
             proc->threads[thread1].frame.regs[2] = U64_MAX & (~0xfff);
             u64 stack_start =

@@ -2,7 +2,7 @@
 
 u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
 {
-    Thread* t = &KERNEL_PROCCESS_ARRAY[r.pid]->threads[r.tid];
+    Thread* t = &KERNEL_PROCESS_ARRAY[r.pid]->threads[r.tid];
  
          if(t->thread_state == THREAD_STATE_RUNNING)
     {  return 1;  }
@@ -25,9 +25,9 @@ u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
         u8 wake = 0;
         for(u64 i = 0; i < t->surface_slot_wait.count; i++)
         {
-            SurfaceSlot* slot=((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[t->proccess_pid]->surface_alloc.memory)
+            SurfaceSlot* slot=((SurfaceSlot*)KERNEL_PROCESS_ARRAY[t->process_pid]->surface_alloc.memory)
                     + t->surface_slot_wait.surface_slot[i];
-            assert(t->surface_slot_wait.surface_slot[i] < KERNEL_PROCCESS_ARRAY[r.pid]->surface_count
+            assert(t->surface_slot_wait.surface_slot[i] < KERNEL_PROCESS_ARRAY[r.pid]->surface_count
                     && slot->surface.is_initialized,
                     "thread_runtime_is_live: the surface slot contains a valid surface");
             if(!surface_has_commited(slot->surface)) { wake = 1; }
@@ -108,7 +108,7 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
     current_thread_runtime = new_thread_runtime;
 
     ThreadRuntime runtime = KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime];
-    return &KERNEL_PROCCESS_ARRAY[runtime.pid]->threads[runtime.tid];
+    return &KERNEL_PROCESS_ARRAY[runtime.pid]->threads[runtime.tid];
 }
 
 
@@ -116,13 +116,13 @@ void thread1_func();
 void thread2_func();
 void thread3_func();
 
-void proccess_init()
+void process_init()
 {
-    u64 pid = proccess_create();
-    u64 pid2 = proccess_create();
+    u64 pid = process_create();
+    u64 pid2 = process_create();
 
-    surface_create(KERNEL_PROCCESS_ARRAY[pid]);
-    surface_create(KERNEL_PROCCESS_ARRAY[pid2]);
+    surface_create(KERNEL_PROCESS_ARRAY[pid]);
+    surface_create(KERNEL_PROCESS_ARRAY[pid2]);
 
     vos[0].pid = pid;
     vos[0].is_active = 1;
@@ -130,8 +130,8 @@ void proccess_init()
     vos[1].pid = pid2;
     vos[1].is_active = 1;
 
-    u64* table = KERNEL_PROCCESS_ARRAY[pid]->mmu_table;
-    u64* table2 = KERNEL_PROCCESS_ARRAY[pid2]->mmu_table;
+    u64* table = KERNEL_PROCESS_ARRAY[pid]->mmu_table;
+    u64* table2 = KERNEL_PROCESS_ARRAY[pid2]->mmu_table;
 
     mmu_kernel_map_range(table, (u64*)TEXT_START, (u64*)TEXT_END,                   2 + 8); //read + execute
     mmu_kernel_map_range(table, (u64*)RODATA_START, (u64*)RODATA_END,               2    ); //readonly
@@ -147,12 +147,12 @@ void proccess_init()
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
     mmu_kernel_map_range(table2, 0x10000000, 0x10000000, 2 + 4);
 
-    u32 thread1 = proccess_thread_create(pid);
-    u32 thread2 = proccess_thread_create(pid);
-    u32 thread3 = proccess_thread_create(pid);
+    u32 thread1 = process_thread_create(pid);
+    u32 thread2 = process_thread_create(pid);
+    u32 thread3 = process_thread_create(pid);
 
-    u32 tp2 = proccess_thread_create(pid2);
-    Thread* tp2t = &KERNEL_PROCCESS_ARRAY[pid2]->threads[tp2];
+    u32 tp2 = process_thread_create(pid2);
+    Thread* tp2t = &KERNEL_PROCESS_ARRAY[pid2]->threads[tp2];
     tp2t->stack_alloc = kalloc_pages(60);
     tp2t->frame.regs[2] = 
         ((u64)tp2t->stack_alloc.memory) + tp2t->stack_alloc.page_count * PAGE_SIZE;
@@ -165,7 +165,7 @@ void proccess_init()
     tp2t->program_counter = (u64)thread1_func;
     tp2t->thread_state = THREAD_STATE_RUNNING;
 
-    Thread* tarr = KERNEL_PROCCESS_ARRAY[pid]->threads;
+    Thread* tarr = KERNEL_PROCESS_ARRAY[pid]->threads;
 
     tarr[thread1].stack_alloc = kalloc_pages(60);
     tarr[thread1].frame.regs[2] = 

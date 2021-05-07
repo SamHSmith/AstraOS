@@ -49,7 +49,7 @@ typedef struct
 void oak_recieve_keyboard(OakPacketKeyboard* packet)
 {
     KeyboardEventQueue* kbd_event_queue =
-        &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
+        &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
     if(packet->was_pressed)
     {
         keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_PRESSED, packet->scancode);
@@ -69,7 +69,7 @@ typedef struct
 
 void oak_recieve_mouse(OakPacketMouse* packet)
 {
-    RawMouse* mouse = &KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]->mouse;
+    RawMouse* mouse = &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->mouse;
     new_mouse_input_delta(mouse, packet->delta_x, packet->delta_y);
 }
 
@@ -82,7 +82,7 @@ typedef struct
 
 void oak_recieve_video_out_request(OakPacketVideoOutRequest* packet)
 {
-    Surface* surface = &((SurfaceSlot*)KERNEL_PROCCESS_ARRAY[vos[current_vo].pid]
+    Surface* surface = &((SurfaceSlot*)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]
                        ->surface_alloc.memory)->surface;
 
     surface->width = packet->width;

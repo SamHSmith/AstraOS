@@ -1,5 +1,8 @@
 
+## Warning: this project doesn't actually have a readme yet. I don't believe in creating such things before there is more substance to the project. a-p-petrosyan insisted however on renaming the rivos_manjaro_guide as a temporary readme.
 
+# rivos manjaro guide
+```
 
  # First clone the repository
 git clone https://github.com/samhsmith/rivos.git
