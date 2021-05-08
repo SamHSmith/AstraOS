@@ -1,4 +1,4 @@
-
+## AstraOS's development is hosted on [source hut](https://sr.ht/~samhsmith/AstraOS/). Talk to us and report bugs there.
 ## Warning: this project doesn't actually have a readme yet. I don't believe in creating such things before there is more substance to the project. 
 
 a-p-petrosyan insisted however on renaming the rivos_manjaro_guide as a temporary readme.
