@@ -136,6 +136,49 @@ u64 kernel_file_get_block_count(u64 file_id)
     }
 }
 
+// returns true if the operation was successful.
+u64 kernel_file_set_size(u64 file_id, u64 new_size)
+{
+    if(!is_valid_file_id(file_id)) { return 0; }
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    u64 new_block_count = (new_size + PAGE_SIZE) / PAGE_SIZE;
+    if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
+    {
+        KernelFileImaginary* imaginary = &file->imaginary;
+
+        if(new_block_count < imaginary->page_array_len)
+        {
+            void** page_array = page_array_alloc.memory;
+            for(u64 i = new_block_count; i < imaginary->page_array_len; i++)
+            {
+                kfree_single_page(page_array[i]);
+            }
+            imaginary->page_array_len = new_block_count;
+
+            u64 needed_pages = (imaginary->page_array_len * sizeof(void*) + PAGE_SIZE) / PAGE_SIZE;
+            if(needed_pages < imaginary->page_array_alloc.page_count)
+            {
+                Kallocation to_free = {0};
+                to_free->page_count = imaginary->page_array_alloc.page_count - needed_pages;
+                to_free->memory = imaginary->page_array_alloc.memory + needed_pages * PAGE_SIZE;
+                kfree_pages(to_free);
+                imaginary->page_array_alloc.page_count = needed_pages;
+            }
+            return 1;
+        }
+        else
+        {
+            // not implemented yet
+            return 0;
+        }
+    }
+    else
+    {
+        printf("kernel_file_set_size: Unknown file type: %llu\n", file->type);
+        return 0;
+    }
+}
+
 ///////////////////////// START DIRECTORY
 
 typedef struct
