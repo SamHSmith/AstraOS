@@ -56,6 +56,7 @@ u64 kernel_file_create()
         KERNEL_FILE_ARRAY_LEN += 1;
     }
     KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    memset(file, 0, sizeof(*file));
     file->reference_count = 1;
     return file_id;
 }
@@ -103,6 +104,37 @@ u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
     }
 }
 
+u64 kernel_file_get_size(u64 file_id)
+{
+    if(!is_valid_file_id(file_id)) { return 0; }
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
+    {
+        KernelFileImaginary* imaginary = &file->imaginary;
+        return imaginary->file_size;
+    }
+    else
+    {
+        printf("kernel_file_get_size: Unknown file type: %llu\n", file->type);
+        return 0;
+    }
+}
+
+u64 kernel_file_get_block_count(u64 file_id)
+{
+    if(!is_valid_file_id(file_id)) { return 0; }
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
+    {
+        KernelFileImaginary* imaginary = &file->imaginary;
+        return imaginary->page_array_len;
+    }
+    else
+    {
+        printf("kernel_file_get_block_count: Unknown file type: %llu\n", file->type);
+        return 0;
+    }
+}
 
 ///////////////////////// START DIRECTORY
 
@@ -360,12 +392,31 @@ void debug_print_directory_tree(u64 dir_id, char* prefix)
     u64 file_count = kernel_directory_get_files(dir_id, 0, 0);
     u64 files[file_count];
     kernel_directory_get_files(dir_id, files, file_count);
+    u64 longest_name = 0;
     for(u64 i = 0; i < file_count; i++)
     {
-        u64 file_name_len = kernel_file_get_name(files[i], 0, 0);
-        char file_name[file_name_len];
-        kernel_file_get_name(files[i], file_name, file_name_len);
-        printf("%s|+ %s\n", sub_prefix, file_name);
+        u64 filename_len = kernel_file_get_name(files[i], 0, 0);
+        if(filename_len > longest_name) { longest_name = filename_len; }
+    }
+    if(longest_name > 512) { longest_name = 512; } // in case there's a bad actor
+    char filename[longest_name];
+    char pad[longest_name];
+    for(u64 i = 0; i < file_count; i++)
+    {
+        u64 filename_len = kernel_file_get_name(files[i], 0, 0);
+        if(filename_len > longest_name) { filename_len = longest_name; }
+        kernel_file_get_name(files[i], filename, filename_len);
+
+        u64 pad_len = longest_name - filename_len;
+        for(u64 i = 0; i < pad_len; i++) { pad[i] = ' '; }
+        pad[pad_len] = 0;
+        printf("%s|+ file: \"%s\",%s block_count: %llu, file_size: %llu B\n",
+            sub_prefix,
+            filename,
+            pad,
+            kernel_file_get_block_count(files[i]),
+            kernel_file_get_size(files[i])
+        );
     }
 
     u64 sub_dir_count = kernel_directory_get_subdirectories(dir_id, 0, 0);
