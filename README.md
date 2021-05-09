@@ -28,7 +28,7 @@ sudo pacman -S autoconf automake curl python3 mpc mpfr gmp gawk base-devel bison
 cd riscv-gnu-toolchain
 sudo mkdir /opt/riscv
 PATH=/opt/riscv/bin:$PATH
-./configure --prefix=/opt/riscv && sudo make
+./configure --prefix=/opt/riscv && sudo make -j$(nproc)
 cd ..
 ```
 
