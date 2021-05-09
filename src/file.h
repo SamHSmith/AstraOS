@@ -148,7 +148,7 @@ u64 kernel_file_set_size(u64 file_id, u64 new_size)
 
         if(new_block_count < imaginary->page_array_len)
         {
-            void** page_array = page_array_alloc.memory;
+            void** page_array = imaginary->page_array_alloc.memory;
             for(u64 i = new_block_count; i < imaginary->page_array_len; i++)
             {
                 kfree_single_page(page_array[i]);
@@ -159,17 +159,35 @@ u64 kernel_file_set_size(u64 file_id, u64 new_size)
             if(needed_pages < imaginary->page_array_alloc.page_count)
             {
                 Kallocation to_free = {0};
-                to_free->page_count = imaginary->page_array_alloc.page_count - needed_pages;
-                to_free->memory = imaginary->page_array_alloc.memory + needed_pages * PAGE_SIZE;
+                to_free.page_count = imaginary->page_array_alloc.page_count - needed_pages;
+                to_free.memory = imaginary->page_array_alloc.memory + needed_pages * PAGE_SIZE;
                 kfree_pages(to_free);
                 imaginary->page_array_alloc.page_count = needed_pages;
             }
+            imaginary->file_size = new_size;
             return 1;
         }
         else
         {
-            // not implemented yet
-            return 0;
+            void** page_array = imaginary->page_array_alloc.memory;
+            u64 needed_pages = (new_block_count * sizeof(void*) + PAGE_SIZE) / PAGE_SIZE;
+            if(needed_pages > imaginary->page_array_alloc.page_count)
+            {
+                Kallocation new_alloc = kalloc_pages(needed_pages);
+                void** new_array = new_alloc.memory;
+                for(u64 i = 0; i < imaginary->page_array_len; i++)
+                {
+                    new_array[i] = page_array[i];
+                }
+                if(imaginary->page_array_alloc.page_count != 0) { kfree_pages(imaginary->page_array_alloc); }
+                imaginary->page_array_alloc = new_alloc;
+                page_array = new_array;
+            }
+            for(u64 i = imaginary->page_array_len; i < new_block_count; i++)
+            { page_array[i] = kalloc_single_page(); }
+            imaginary->page_array_len = new_block_count;
+            imaginary->file_size = new_size;
+            return 1;
         }
     }
     else

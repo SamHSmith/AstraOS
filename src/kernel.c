@@ -109,6 +109,17 @@ void kmain()
     debug_print_directory_tree(full_dir_id, "");
     kernel_directory_free(full_dir_id);
 
+    u64 file_id = kernel_file_create_imaginary("special file");
+    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    kernel_file_set_size(file_id, 100);
+    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    kernel_file_set_size(file_id, 10000);
+    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    kernel_file_set_size(file_id, 6100);
+    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    kernel_file_set_size(file_id, 100000);
+    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)
     {
