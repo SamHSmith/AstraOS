@@ -197,6 +197,59 @@ u64 kernel_file_set_size(u64 file_id, u64 new_size)
     }
 }
 
+// op_array is filled with (block_num, memory_ptr) pairs.
+// op_count is the amount of pairs so for a op_count of N, op_array has N*2 elements
+// return true on success
+u64 kernel_file_read_blocks(u64 file_id, u64* op_array, u64 op_count)
+{
+    if(!is_valid_file_id(file_id)) { return 0; }
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
+    {
+        KernelFileImaginary* imaginary = &file->imaginary;
+        void** page_array = imaginary->page_array_alloc.memory;
+        for(u64 i = 0; i < op_count*2; i+=2)
+        {
+            u64 block_num = op_array[i];
+            void* destination = op_array[i+1];
+            if(block_num >= imaginary->page_array_len)
+            { continue; }
+            memcpy(destination, page_array[block_num], PAGE_SIZE);
+        }
+        return 1;
+    }
+    else
+    {
+        printf("kernel_file_read_blocks: Unknown file type: %llu\n", file->type);
+        return 0;
+    }
+}
+
+u64 kernel_file_write_blocks(u64 file_id, u64* op_array, u64 op_count)
+{
+    if(!is_valid_file_id(file_id)) { return 0; }
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
+    {
+        KernelFileImaginary* imaginary = &file->imaginary;
+        void** page_array = imaginary->page_array_alloc.memory;
+        for(u64 i = 0; i < op_count*2; i+=2)
+        {
+            u64 block_num = op_array[i];
+            void* src = op_array[i+1];
+            if(block_num >= imaginary->page_array_len)
+            { continue; }
+            memcpy(page_array[block_num], src, PAGE_SIZE);
+        }
+        return 1;
+    }
+    else
+    {
+        printf("kernel_file_write_blocks: Unknown file type: %llu\n", file->type);
+        return 0;
+    }
+}
+
 ///////////////////////// START DIRECTORY
 
 typedef struct

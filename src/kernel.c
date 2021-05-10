@@ -120,6 +120,22 @@ void kmain()
     kernel_file_set_size(file_id, 100000);
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
 
+    u8 block[PAGE_SIZE];
+    u64 op_arr[2];
+    op_arr[0] = 0;
+    op_arr[1] = block;
+    kernel_file_write_blocks(file_id, op_arr, 1);
+    u8* compare = kalloc_single_page();
+    op_arr[1] = compare;
+    kernel_file_read_blocks(file_id, op_arr, 1);
+    for(u64 i = 0; i < PAGE_SIZE; i++)
+    {
+        assert(
+            block[i] == compare[i],
+            "what we wrote to the imaginary file is the same as what we read back"
+        );
+    }
+
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)
     {
