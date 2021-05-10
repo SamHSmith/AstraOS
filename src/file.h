@@ -250,6 +250,37 @@ u64 kernel_file_write_blocks(u64 file_id, u64* op_array, u64 op_count)
     }
 }
 
+void kernel_file_increment_reference_count(u64 file_id)
+{
+    if(!is_valid_file_id(file_id)) { return; }
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    file->reference_count++;
+}
+
+void kernel_file_free(u64 file_id)
+{
+    if(!is_valid_file_id(file_id)) { return; }
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+
+    if(file->reference_count > 1) { file->reference_count--; return; }
+
+    if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
+    {
+        KernelFileImaginary* imaginary = &file->imaginary;
+        void** page_array = imaginary->page_array_alloc.memory;
+        for(u64 i = 0; i < imaginary->page_array_len; i++)
+        {
+            kfree_single_page(page_array[i]);
+        }
+        kfree_pages(imaginary->page_array_alloc);
+        file->reference_count = 0;
+    }
+    else
+    {
+        printf("kernel_file_free: Unknown file type: %llu\n", file->type);
+    }
+}
+
 ///////////////////////// START DIRECTORY
 
 typedef struct
@@ -463,8 +494,15 @@ void kernel_directory_free(u64 dir_id)
     if(!is_valid_dir_id(dir_id)) { return; }
     KernelDirectory* dir = KERNEL_DIRECTORY_ARRAY + dir_id;
 
-    if(dir->reference_count == 0) { return; }
-    else if(dir->reference_count > 1) { dir->reference_count--; return 1; }
+    if(dir->reference_count > 1) { dir->reference_count--; return; }
+
+    u64 file_count = kernel_directory_get_files(dir_id, 0, 0);
+    u64 files[file_count];
+    kernel_directory_get_files(dir_id, files, file_count);
+    for(u64 i = 0; i < file_count; i++)
+    {
+        kernel_file_free(files[i]);
+    }
 
     u64 sub_dir_count = kernel_directory_get_subdirectories(dir_id, 0, 0);
     u64 sub_dirs[sub_dir_count];
@@ -524,13 +562,20 @@ void debug_print_directory_tree(u64 dir_id, char* prefix)
         u64 pad_len = longest_name - filename_len;
         for(u64 i = 0; i < pad_len; i++) { pad[i] = ' '; }
         pad[pad_len] = 0;
-        printf("%s|+ file: \"%s\",%s block_count: %llu, file_size: %llu B\n",
-            sub_prefix,
-            filename,
-            pad,
-            kernel_file_get_block_count(files[i]),
-            kernel_file_get_size(files[i])
-        );
+        if(is_valid_file_id(files[i]))
+        {
+            printf("%s|+ file: \"%s\",%s block_count: %llu, file_size: %llu B\n",
+                sub_prefix,
+                filename,
+                pad,
+                kernel_file_get_block_count(files[i]),
+                kernel_file_get_size(files[i])
+            );
+        }
+        else
+        {
+            printf("%s!+ invalid file!\n", sub_prefix);
+        }
     }
 
     u64 sub_dir_count = kernel_directory_get_subdirectories(dir_id, 0, 0);

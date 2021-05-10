@@ -81,7 +81,9 @@ void kmain()
     printf("The directory created is called : %s\n", dir_name);
 
     u64 smol_dir = kernel_directory_create_imaginary("smõl directory");
-    kernel_directory_add_file(smol_dir, kernel_file_create_imaginary("an imaginary file"));
+    u64 file_id = kernel_file_create_imaginary("an imaginary file");
+    kernel_file_increment_reference_count(file_id);
+    kernel_directory_add_file(smol_dir, file_id);
     kernel_directory_add_subdirectory(dir_id, smol_dir);
 
     u64 full_dir_id = kernel_directory_create_imaginary("filled directory");
@@ -99,7 +101,7 @@ void kmain()
         u64 file = kernel_file_create_imaginary(name);
         if(!kernel_directory_add_file(full_dir_id, file))
         {
-//          kernel_file_free(file);
+//            kernel_file_free(file);
             if(is_valid_file_id(file)) { printf("file free failed for %s\n", name); }
         }
     }
@@ -109,7 +111,6 @@ void kmain()
     debug_print_directory_tree(full_dir_id, "");
     kernel_directory_free(full_dir_id);
 
-    u64 file_id = kernel_file_create_imaginary("special file");
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     kernel_file_set_size(file_id, 100);
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
@@ -119,7 +120,7 @@ void kmain()
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     kernel_file_set_size(file_id, 100000);
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
-
+mem_debug_dump_table_counts(1);
     u8 block[PAGE_SIZE];
     u64 op_arr[2];
     op_arr[0] = 0;
@@ -135,6 +136,9 @@ void kmain()
             "what we wrote to the imaginary file is the same as what we read back"
         );
     }
+    kfree_single_page(compare);
+    kernel_file_free(file_id);
+mem_debug_dump_table_counts(1);
 
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)

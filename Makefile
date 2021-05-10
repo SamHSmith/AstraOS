@@ -1,4 +1,4 @@
-CFLAGS= -g
+CFLAGS+= -g
 CFLAGS+= -mcmodel=medany #-Ofast
 CFLAGS+=-static -ffreestanding -nostdlib -static-libgcc
 CFLAGS+=-march=rv64g -mabi=lp64 -Isrc/cyclone_crypto -Isrc/cyclone_crypto/common
