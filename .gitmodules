@@ -1,3 +1,3 @@
 [submodule "qemu"]
 	path = qemu
-	url = https://github.com/SamHSmith/qemu.git
+	url = https://git.sr.ht/~samhsmith/AstraOS-qemu
