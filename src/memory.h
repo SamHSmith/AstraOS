@@ -358,7 +358,7 @@ u64* mem_init()
     printf("RODATA:      0x%x <-> 0x%x\n", RODATA_START, RODATA_END);
     printf("DATA:        0x%x <-> 0x%x\n", DATA_START, DATA_END);
     printf("BSS:         0x%x <-> 0x%x\n", BSS_START, BSS_END);
-    printf("STACK:       0x%x <-> 0x%x\n", KERNEL_STACK_END, KERNEL_STACK_START);
+    printf("STACK:       0x%x <-> 0x%x\n", KERNEL_STACK_START, KERNEL_STACK_END);
     printf("HEAP META:   0x%x <-> 0x%x\n", HEAP_START, K_HEAP_START);
     printf("HEAP:        0x%x <-> 0x%x\n", K_HEAP_START, HEAP_START + HEAP_SIZE);
     printf("\n\n");
@@ -371,7 +371,7 @@ u64* mem_init()
     mmu_kernel_map_range(table, (u64*)RODATA_START, (u64*)RODATA_END,               2    ); //readonly
     mmu_kernel_map_range(table, (u64*)DATA_START, (u64*)DATA_END,                   2 + 4); //read + write
     mmu_kernel_map_range(table, (u64*)BSS_START, (u64*)BSS_END,                     2 + 4);
-    mmu_kernel_map_range(table, (u64*)KERNEL_STACK_END, (u64*)KERNEL_STACK_END,     2 + 4);
+    mmu_kernel_map_range(table, (u64*)KERNEL_STACK_START, (u64*)KERNEL_STACK_END,     2 + 4);
     mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
 
     //Map the uart

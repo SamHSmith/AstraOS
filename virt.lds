@@ -49,9 +49,9 @@ SECTIONS
     . = ALIGN(4096);
 
     PROVIDE(_memory_start = ORIGIN(ram));
-    PROVIDE(_stack_end = .);
-    PROVIDE(_stack_start = . + 0x80000);
+    PROVIDE(_stack_start = .);
+    PROVIDE(_stack_end = . + 0x80000);
     PROVIDE(_memory_end = ORIGIN(ram) + LENGTH(ram));
-    PROVIDE(_heap_start = _stack_start);
+    PROVIDE(_heap_start = _stack_end);
     PROVIDE(_heap_size = _memory_end - _heap_start);
 }
