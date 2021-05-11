@@ -1,15 +1,15 @@
-## AstraOS's development is hosted on [source hut](https://sr.ht/~samhsmith/AstraOS/). Talk to us and report bugs there.
-## Warning: this project doesn't actually have a readme yet. I don't believe in creating such things before there is more substance to the project. 
+### AstraOS's development is hosted on [source hut](https://sr.ht/~samhsmith/AstraOS/). Talk to us and report bugs there.
+### Warning: this project doesn't actually have a readme yet. I don't believe in creating such things before there is more substance to the project. 
 
 a-p-petrosyan insisted however on renaming the rivos_manjaro_guide as a temporary readme.
 
-## rivos Arch-based guide. 
+## Arch-based guide for bulding and running Astra
 
 - First clone the repository
 ```
-git clone https://github.com/samhsmith/rivos.git
-cd rivos
-git submodule update --init --recursive
+git clone https://git.sr.ht/~samhsmith/AstraOS
+cd AstraOS
+git submodule update --init
 cd ..
 ```
 
@@ -39,7 +39,7 @@ sudo pacman -Sy ninja ceph glusterfs libiscsi python python-sphinx spice-protoco
 
 - Now build the virtual machine that is used to run rivos
 ```
-cd rivos
+cd AstraOS
 mkdir qemu/build
 cd qemu/build
 ../configure --target-list=riscv64-softmmu
