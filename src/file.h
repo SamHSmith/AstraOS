@@ -234,6 +234,7 @@ u64 kernel_file_set_size(u64 file_id, u64 new_size)
 
 // op_array is filled with (block_num, memory_ptr) pairs.
 // op_count is the amount of pairs so for a op_count of N, op_array has N*2 elements
+// the function will use op_array as a scratch buffer and potentially mess it up
 // return true on success
 u64 kernel_file_read_blocks(u64 file_id, u64* op_array, u64 op_count)
 {
@@ -252,6 +253,35 @@ u64 kernel_file_read_blocks(u64 file_id, u64* op_array, u64 op_count)
             memcpy(destination, page_array[block_num], PAGE_SIZE);
         }
         return 1;
+    }
+    else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
+    {
+        KernelFileDrivePartition* part = &file->drive_partition;
+        u64 write_index = 0;
+        for(u64 i = 0; i < op_count; i++)
+        {
+            u64 block_num = op_array[i*2];
+            if(block_num >= part->block_count)
+            { continue; }
+            block_num += part->start_block;
+            u64 addr = op_array[i*2 +1];
+            op_array[write_index*2] = block_num;
+            op_array[write_index*2 + 1] = addr;
+            write_index++;
+        }
+        if(write_index > 0)
+        {
+            u64 send_times = (write_index + 10 - 1) / 10; // change 10 to something exact later
+            for(u64 i = 0; i < send_times - 1; i++)
+            {
+                oak_send_block_fetch(0, op_array, 10);
+                op_array += 10*2;
+                write_index -= 10;
+            }
+            if(write_index > 0) { oak_send_block_fetch(0, op_array, write_index); }
+            return 1;
+        }
+        return 0;
     }
     else
     {
@@ -277,6 +307,35 @@ u64 kernel_file_write_blocks(u64 file_id, u64* op_array, u64 op_count)
             memcpy(page_array[block_num], src, PAGE_SIZE);
         }
         return 1;
+    }
+    else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
+    {
+        KernelFileDrivePartition* part = &file->drive_partition;
+        u64 write_index = 0;
+        for(u64 i = 0; i < op_count; i++)
+        {
+            u64 block_num = op_array[i*2];
+            if(block_num >= part->block_count)
+            { continue; }
+            block_num += part->start_block;
+            u64 addr = op_array[i*2 +1];
+            op_array[write_index*2] = block_num;
+            op_array[write_index*2 + 1] = addr;
+            write_index++;
+        }
+        if(write_index > 0)
+        {
+            u64 send_times = (write_index + 10 - 1) / 10; // change 10 to something exact later
+            for(u64 i = 0; i < send_times - 1; i++)
+            {
+                oak_send_block_fetch(1, op_array, 10);
+                op_array += 10*2;
+                write_index -= 10;
+            }
+            if(write_index > 0) { oak_send_block_fetch(1, op_array, write_index); }
+            return 1;
+        }
+        return 0;
     }
     else
     {

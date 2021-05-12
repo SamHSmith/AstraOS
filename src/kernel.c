@@ -141,8 +141,23 @@ mem_debug_dump_table_counts(1);
     kernel_file_free(file_id);
 mem_debug_dump_table_counts(1);
 
-   load_drive_partitions();
+    load_drive_partitions();
     debug_print_directory_tree(drive1_partition_directory, "");
+    {
+        u64 partition_count = kernel_directory_get_files(drive1_partition_directory, 0, 0);
+        u64 partitions[partition_count];
+        kernel_directory_get_files(drive1_partition_directory, partitions, partition_count);
+
+        for(u64 i = 0; i < partition_count; i++)
+        {
+            u64 pid;
+            if(!create_proccess_from_file(partitions[i], &pid)) { continue; }
+            u64 name_len = kernel_file_get_name(partitions[i], 0, 0);
+            u8 name[name_len];
+            kernel_file_get_name(partitions[i], name, name_len);
+            printf("Loaded elf file from partition \"%s\"\n", name);
+        }
+    }
 
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)

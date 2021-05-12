@@ -115,7 +115,7 @@ typedef struct
 void oak_send_block_fetch(u8 write, u64* block_address_pairs, u64 pair_count)
 {
     assert(sizeof(OakPacketBlockFetch) + pair_count*2*sizeof(u64) <= 256, "block fetch isn't too big");
-    u8 scratch[sizeof(OakPacketBlockFetch) + pair_count*2];
+    u8 scratch[sizeof(OakPacketBlockFetch) + 8*pair_count*2];
     OakPacketBlockFetch* packet = scratch;
     packet->base.size = sizeof(*packet) + pair_count*2*sizeof(u64);
     packet->base.device = 8;
