@@ -26,19 +26,20 @@ void assert(u64 stat, char* error)
 #include "libfuncs2.h"
 #include "cyclone_crypto/hash/sha512.h"
 
+#include "disk.h"
+#include "file.h"
+
 #include "plic.h"
 #include "input.h"
 #include "process.h"
 
 #include "video.h"
-#include "file.h"
+#include "elf.h"
 
 #include "process_run.h"
 
 #include "syscall.h"
 
-#include "elf.h"
-#include "disk.h"
 
 //for rendering
 Framebuffer* framebuffer = 0;
@@ -139,6 +140,9 @@ mem_debug_dump_table_counts(1);
     kfree_single_page(compare);
     kernel_file_free(file_id);
 mem_debug_dump_table_counts(1);
+
+   load_drive_partitions();
+    debug_print_directory_tree(drive1_partition_directory, "");
 
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)

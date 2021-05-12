@@ -11,10 +11,22 @@ typedef struct
 
 typedef struct
 {
+    u8 name[54];
+    u64 start_block;
+    u64 block_count;
+} KernelFileDrivePartition;
+#define KERNEL_FILE_TYPE_DRIVE_PARTITION 1
+
+u8 has_loaded_drive1_partitions = 0;
+u64 drive1_partition_directory = 0;
+
+typedef struct
+{
     u64 type;
     u64 reference_count; // zero is uninitialized
     union {
         KernelFileImaginary imaginary;
+        KernelFileDrivePartition drive_partition;
     }
 } KernelFile;
 
@@ -97,6 +109,17 @@ u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
         else if(buf_size > 0) { buf[buf_size-1] = 0; }
         return name_len + 1;
     }
+    else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
+    {
+        KernelFileDrivePartition* part = &file->drive_partition;
+        u64 name_len = strnlen_s(part->name, 54);
+ 
+        u64 cpy_len = name_len; if(cpy_len > buf_size) { cpy_len = buf_size; }
+        strncpy(buf, part->name, cpy_len);
+        if(buf_size > 54) { buf[54] = 0; }
+        else if(buf_size > 0) { buf[buf_size-1] = 0; }
+        return name_len + 1;
+    }
     else
     {
         printf("kernel_file_get_name: Unknown file type: %llu\n", file->type);
@@ -113,6 +136,11 @@ u64 kernel_file_get_size(u64 file_id)
         KernelFileImaginary* imaginary = &file->imaginary;
         return imaginary->file_size;
     }
+    else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
+    {
+        KernelFileDrivePartition* part = &file->drive_partition;
+        return part->block_count * PAGE_SIZE;
+    }
     else
     {
         printf("kernel_file_get_size: Unknown file type: %llu\n", file->type);
@@ -128,6 +156,11 @@ u64 kernel_file_get_block_count(u64 file_id)
     {
         KernelFileImaginary* imaginary = &file->imaginary;
         return imaginary->page_array_len;
+    }
+    else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
+    {
+        KernelFileDrivePartition* part = &file->drive_partition;
+        return part->block_count;
     }
     else
     {
@@ -190,6 +223,8 @@ u64 kernel_file_set_size(u64 file_id, u64 new_size)
             return 1;
         }
     }
+    else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
+    { return 0; }
     else
     {
         printf("kernel_file_set_size: Unknown file type: %llu\n", file->type);
@@ -350,7 +385,8 @@ u64 kernel_directory_create_imaginary(char* name)
     KernelDirectory* dir = KERNEL_DIRECTORY_ARRAY + dir_id;
     dir->type = KERNEL_DIRECTORY_TYPE_IMAGINARY;
     KernelDirectoryImaginary* imaginary = &dir->imaginary;
-    memset(imaginary, 0, sizeof(imaginary));
+    imaginary->subdir_count = 0;
+    imaginary->file_count = 0;
     strncpy(imaginary->name, name, 56);
     return dir_id;
 }
@@ -524,8 +560,6 @@ void kernel_directory_free(u64 dir_id)
 
 
 
-
-
 void debug_print_directory_tree(u64 dir_id, char* prefix)
 {
     if(!is_valid_dir_id(dir_id)) { printf("%s>] NOT VALID DIR\n", prefix); return; }
@@ -586,3 +620,78 @@ void debug_print_directory_tree(u64 dir_id, char* prefix)
         debug_print_directory_tree(sub_dirs[i], sub_prefix);
     }
 }
+
+void load_drive_partitions()
+{
+    if(has_loaded_drive1_partitions)
+    { printf("drive1 partitions are already loaded!\n"); return; }
+
+    assert(sizeof(RAD_PartitionTable) == PAGE_SIZE*2, "partition table struct is the right size");
+
+    Kallocation table_alloc = kalloc_pages(2);
+    RAD_PartitionTable* table = table_alloc.memory;
+    assert(table != 0, "table alloc failed");
+
+    u64 reference_table = U64_MAX;
+    for(s64 i = TABLE_COUNT-1; i >= 0; i--)
+    {
+        read_blocks(i*2, 2, table);
+
+        u8 hash[64];
+        assert(sha512Compute(((u8*)table) + 64, sizeof(RAD_PartitionTable) -64, hash) == 0, "sha stuff");
+
+        u8 is_valid = 1;
+        for(u64 i = 0; i < 64; i++) { if(hash[i] != table->sha512sum[i]) { is_valid = 0; } }
+
+        if(!is_valid)
+        {
+            printf("Table#%ld is not valid\n", i);
+        }
+        else
+        {
+            printf("Table#%ld is valid \n", i);
+            reference_table = i;
+        }
+    }
+    if(reference_table == U64_MAX)
+    {
+        printf("There are no valid tables. Either the drive is not formatted or you are in a very unfortunate situation.\n");
+        return;
+    }
+
+    read_blocks(reference_table*2, 2, table);
+    printf("Using table#%ld as reference\n", reference_table);
+
+    drive1_partition_directory = kernel_directory_create_imaginary("drive1");
+    has_loaded_drive1_partitions = 1;
+
+    for(u64 i = 0; i < 63; i++)
+    {
+        u64 next_partition_start = U64_MAX; // drive_block_count; do this later
+        if(i < 62) { next_partition_start = table->entries[i+1].start_block; }
+
+        if(table->entries[i].partition_type != 0)
+        {
+            printf("Partition, type = %u, start = %llu, size = %llu, name = %s\n",
+                    table->entries[i].partition_type,
+                    table->entries[i].start_block,
+                    next_partition_start - table->entries[i].start_block,
+                    table->entries[i].name
+            );
+            RAD_PartitionTableEntry* entry = table->entries + i;
+
+            u64 file_id = kernel_file_create();
+            KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+            file->type = KERNEL_FILE_TYPE_DRIVE_PARTITION;
+            KernelFileDrivePartition* part = &file->drive_partition;
+
+            for(u64 i = 0; i < 54; i++)
+            { part->name[i] = entry->name[i]; }
+            part->start_block = entry->start_block;
+            part->block_count = next_partition_start - entry->start_block;
+
+            kernel_directory_add_file(drive1_partition_directory, file_id);
+        }
+    }
+}
+

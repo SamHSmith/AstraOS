@@ -211,7 +211,7 @@ void process_init()
         printf("consumer slot: %llu\n", cs);
     }
 
-    load_elf_from_partition();
+//    load_elf_from_partition();
 
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;

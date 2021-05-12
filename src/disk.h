@@ -38,6 +38,8 @@ typedef struct
 
 #define TABLE_COUNT 8
 
+
+/*
 void load_elf_from_partition()
 {
     assert(sizeof(RAD_PartitionTable) == PAGE_SIZE*2, "partition table struct is the right size");
@@ -148,3 +150,4 @@ u8 block[PAGE_SIZE];
         }
     }
 }
+*/
