@@ -148,7 +148,7 @@ mem_debug_dump_table_counts(1);
         u64 partitions[partition_count];
         kernel_directory_get_files(drive1_partition_directory, partitions, partition_count);
 
-        for(u64 i = 0; i < partition_count; i++)
+        for(u64 i = 0; i < 0/*partition_count*/; i++)
         {
             u64 pid;
             if(!create_proccess_from_file(partitions[i], &pid)) { continue; }

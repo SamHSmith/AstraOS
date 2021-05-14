@@ -112,58 +112,27 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
 }
 
 
-void thread1_func();
-void thread2_func();
-void thread3_func();
+void program_loader_program(u64 drive1_partitions_directory);
 
 void process_init()
 {
     u64 pid = process_create();
-    u64 pid2 = process_create();
 
     surface_create(KERNEL_PROCESS_ARRAY[pid]);
-    surface_create(KERNEL_PROCESS_ARRAY[pid2]);
 
     vos[0].pid = pid;
     vos[0].is_active = 1;
 
-    vos[1].pid = pid2;
-    vos[1].is_active = 1;
-
     u64* table = KERNEL_PROCESS_ARRAY[pid]->mmu_table;
-    u64* table2 = KERNEL_PROCESS_ARRAY[pid2]->mmu_table;
 
     mmu_kernel_map_range(table, (u64*)TEXT_START, (u64*)TEXT_END,                   2 + 8); //read + execute
     mmu_kernel_map_range(table, (u64*)RODATA_START, (u64*)RODATA_END,               2    ); //readonly
     mmu_kernel_map_range(table, (u64*)DATA_START, (u64*)DATA_END,                   2 + 4); //read + write
     mmu_kernel_map_range(table, (u64*)BSS_START, (u64*)BSS_END,                     2 + 4);
-    mmu_kernel_map_range(table2, (u64*)TEXT_START, (u64*)TEXT_END,                   2 + 8); //read + execute
-    mmu_kernel_map_range(table2, (u64*)RODATA_START, (u64*)RODATA_END,               2    ); //readonly
-    mmu_kernel_map_range(table2, (u64*)DATA_START, (u64*)DATA_END,                   2 + 4); //read + write
-    mmu_kernel_map_range(table2, (u64*)BSS_START, (u64*)BSS_END,                     2 + 4);
-
-//mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
 
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
-    mmu_kernel_map_range(table2, 0x10000000, 0x10000000, 2 + 4);
 
     u32 thread1 = process_thread_create(pid);
-    u32 thread2 = process_thread_create(pid);
-    u32 thread3 = process_thread_create(pid);
-
-    u32 tp2 = process_thread_create(pid2);
-    Thread* tp2t = &KERNEL_PROCESS_ARRAY[pid2]->threads[tp2];
-    tp2t->stack_alloc = kalloc_pages(60);
-    tp2t->frame.regs[2] = 
-        ((u64)tp2t->stack_alloc.memory) + tp2t->stack_alloc.page_count * PAGE_SIZE;
-    mmu_kernel_map_range(
-            table2,
-            (u64*)tp2t->stack_alloc.memory,
-            (u64*)tp2t->frame.regs[2],
-            2 + 4
-        );
-    tp2t->program_counter = (u64)thread1_func;
-    tp2t->thread_state = THREAD_STATE_RUNNING;
 
     Thread* tarr = KERNEL_PROCESS_ARRAY[pid]->threads;
 
@@ -177,41 +146,9 @@ void process_init()
             2 + 4
         );
 
-    tarr[thread2].stack_alloc = kalloc_pages(4);
-    tarr[thread2].frame.regs[2] = 
-        ((u64)tarr[thread2].stack_alloc.memory) + tarr[thread2].stack_alloc.page_count * PAGE_SIZE;
-    mmu_kernel_map_range(
-            table,
-            (u64*)tarr[thread2].stack_alloc.memory,
-            (u64*)tarr[thread2].frame.regs[2],
-            2 + 4
-        );
-
-    tarr[thread3].stack_alloc = kalloc_pages(4);
-    tarr[thread3].frame.regs[2] = 
-        ((u64)tarr[thread3].stack_alloc.memory) + tarr[thread3].stack_alloc.page_count * PAGE_SIZE;
-    mmu_kernel_map_range(
-            table,
-            (u64*)tarr[thread3].stack_alloc.memory,
-            (u64*)tarr[thread3].frame.regs[2],
-            2 + 4
-        );
-
-    tarr[thread1].program_counter = (u64)thread1_func;
-    tarr[thread2].program_counter = (u64)thread2_func;
-    tarr[thread3].program_counter = (u64)thread3_func;
+    tarr[thread1].program_counter = (u64)program_loader_program;
 
     tarr[thread1].thread_state = THREAD_STATE_RUNNING;
-    tarr[thread2].thread_state = THREAD_STATE_RUNNING;
-    tarr[thread3].thread_state = THREAD_STATE_RUNNING;
-
-    u64 cs;
-    if(surface_consumer_create(pid, pid2, &cs))
-    {
-        printf("consumer slot: %llu\n", cs);
-    }
-
-//    load_elf_from_partition();
 
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;
