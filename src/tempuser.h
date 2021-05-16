@@ -22,6 +22,28 @@ u64 user_surface_consumer_fetch(u64 consumer_slot, Framebuffer* fb, u64 page_cou
 
 f64 user_time_get_seconds();
 
+u64 user_is_valid_file_id(u64 file_id);
+u64 user_is_valid_dir_id(u64 directory_id);
+
+u64 user_file_get_name(u64 file_id, u8* buf, u64 buf_size);
+u64 user_file_git_size(u64 file_id); // not done
+u64 user_file_get_block_count(u64 file_id); // not done
+u64 user_file_set_size(u64 file_id, u64 new_size); // not done
+u64 user_file_read_blocks(u64 file_id, u64* op_array, u64 op_count); // not done
+u64 user_file_write_blocks(u64 file_id, u64* op_array, u64 op_count); // not done
+
+u64 user_directory_get_name(u64 dir_id, u8* buf, u64 buf_size); // not done
+u64 user_directory_get_subdirectories(u64 dir_id, u64* buf, u64 buf_size); // not done
+u64 user_directory_get_files(u64 dir_id, u64* buf, u64 buf_size);
+u64 user_directory_add_subdirectory(u64 dir_id, u64 subdirectory); // not done
+u64 user_directory_add_file(u64 dir_id, u64 file_id); // not done
+
+// give file to proccess
+// give directory to proccess
+
+// create file
+// create directory
+
 #include "samorak.h"
 //#include "qwerty.h"
 
@@ -29,7 +51,18 @@ f64 user_time_get_seconds();
 
 void program_loader_program(u64 drive1_partitions_directory)
 {
-    u64 slot_count = 5;
+    u64 slot_count = user_directory_get_files(drive1_partitions_directory, 0, 0);
+    u64 partitions[slot_count];
+    u8 partition_names[slot_count][64];
+    u64 partition_name_lens[slot_count];
+    slot_count = user_directory_get_files(drive1_partitions_directory, partitions, slot_count);
+    for(u64 i = 0; i < slot_count; i++)
+    {
+        partition_names[i][0] = 0;
+        user_file_get_name(partitions[i], partition_names[i], 64);
+        partition_name_lens[i] = strlen(partition_names[i]);
+        printf("tempuser has found %s\n", partition_names[i]);
+    }
     u64 slot_index = 0;
 
 while(1) {
@@ -121,6 +154,11 @@ while(1) {
             }
 
             u64 here = 0;
+            if(r < slot_count && c < partition_name_lens[r])
+            {
+                u64 font_id = partition_names[r][c];
+                here = font8_16_pixel_filled(font_id, x - c*8, y - r*16);
+            }
 
             if(y >= bottom_banner_y && c < bottom_banner_len)
             {

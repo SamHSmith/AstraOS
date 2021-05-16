@@ -116,3 +116,37 @@ user_time_get_seconds:
     addi a0, x0, 14
     ecall
     ret
+
+/*
+u64 user_file_get_name(u64 file_id, u8* buf, u64 buf_size); // done 15
+u64 user_file_git_size(u64 file_id); // not done 16
+u64 user_file_get_block_count(u64 file_id); // not done 17
+u64 user_file_set_size(u64 file_id, u64 new_size); // not done 18
+u64 user_file_read_blocks(u64 file_id, u64* op_array, u64 op_count); // not done 19
+u64 user_file_write_blocks(u64 file_id, u64* op_array, u64 op_count); // not done 20
+ 
+u64 user_directory_get_name(u64 dir_id, u8* buf, u64 buf_size); // not done 21
+u64 user_directory_get_subdirectories(u64 dir_id, u64* buf, 64 buf_size); // not done 22
+u64 user_directory_get_files(u64 dir_id, u64* buf, u64 buf_size); // sorta done 23
+u64 user_directory_add_subdirectory(u64 dir_id, u64 subdirectory); // not done 24
+u64 user_directory_add_file(u64 dir_id, u64 file_id); // not done 25
+*/
+
+.global user_file_get_name
+user_file_get_name:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 15
+    ecall
+    ret
+
+.global user_directory_get_files
+user_directory_get_files:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 23
+    ecall
+    ret
+

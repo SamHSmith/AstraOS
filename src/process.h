@@ -45,6 +45,10 @@ typedef struct
     Kallocation surface_consumer_alloc;
     u64 surface_consumer_count;
 
+    Kallocation file_access_redirects_alloc; // u64 array of file handles
+    Kallocation file_access_permissions_alloc; // u8 array of flags
+    u64 file_access_count;
+
     KeyboardEventQueue kbd_event_queue;
     RawMouse mouse;
 
@@ -101,7 +105,6 @@ u64 mmu_table_ptr_to_satp(u64* mmu_table)
     u64 satp_val = (((u64)8) << 60) | root_ppn;
     return satp_val;
 }
-
 
 typedef struct
 {
@@ -297,4 +300,90 @@ Kallocation process_shrink_allocation(Process* process, u64 vaddr, u64 new_page_
         }
     }
     return ret_a;
+}
+
+#define FILE_ACCESS_PERMISSION_READ_BIT 1
+#define FILE_ACCESS_PERMISSION_READ_WRITE_BIT 2
+
+u64 process_new_file_access(u64 pid, u64 redirect, u8 permission) // todo optimize beyond singular
+{
+    assert(permission != 0, "permission is not zero");
+    assert(is_valid_file_id(redirect), "redirect is a valid file");
+
+    Process* process = KERNEL_PROCESS_ARRAY[pid];
+    u64* redirects = process->file_access_redirects_alloc.memory;
+    u8* permissions = process->file_access_permissions_alloc.memory;
+
+    {
+        for(u64 i = 0; i < process->file_access_count; i++)
+        {
+            if(!permissions[i])
+            {
+                redirects[i] = redirect;
+                permissions[i] = permission;
+                return i;
+            }
+        }
+    }
+
+    u64 redirects_page_count = ((process->file_access_count + 1) * 8 + (PAGE_SIZE-1)) / PAGE_SIZE;
+    u64 permissions_page_count = ((process->file_access_count + 1) * 1 + (PAGE_SIZE-1)) / PAGE_SIZE;
+
+    if(redirects_page_count > process->file_access_redirects_alloc.page_count)
+    {
+        Kallocation new_alloc = kalloc_pages(redirects_page_count);
+        u64* new_array = new_alloc.memory;
+        for(u64 i = 0; i < process->file_access_count; i++)
+        {
+            new_array[i] = redirects[i];
+        }
+        if(process->file_access_redirects_alloc.page_count != 0)
+        {
+            kfree_pages(process->file_access_redirects_alloc);
+        }
+        process->file_access_redirects_alloc = new_alloc;
+        redirects = process->file_access_redirects_alloc.memory;
+    }
+
+    if(permissions_page_count > process->file_access_permissions_alloc.memory)
+    {
+        Kallocation new_alloc = kalloc_pages(permissions_page_count);
+        u8* new_array = new_alloc.memory;
+        for(u64 i = 0; i < process->file_access_count; i++)
+        {
+            new_array[i] = permissions[i];
+        }
+        if(process->file_access_permissions_alloc.page_count != 0)
+        {
+            kfree_pages(process->file_access_permissions_alloc);
+        }
+        process->file_access_permissions_alloc = new_alloc;
+        permissions = process->file_access_permissions_alloc.memory;
+    }
+    u64 i = process->file_access_count;
+    process->file_access_count++;
+
+    permissions[i] = permission;
+    redirects[i] = redirect;
+    return i;
+}
+
+u64 process_get_write_access(Process* process, u64 local_file_id, u64* file_id)
+{
+    if(local_file_id >= process->file_access_count) { return 0; }
+    u64* redirects = process->file_access_redirects_alloc.memory;
+    u64* permissions = process->file_access_permissions_alloc.memory;
+    if(permissions[local_file_id] & FILE_ACCESS_PERMISSION_READ_WRITE_BIT == 0) { return 0; }
+    if(file_id) { *file_id = redirects[local_file_id]; }
+    return 1;
+}
+
+u64 process_get_read_access(Process* process, u64 local_file_id, u64* file_id)
+{
+    if(local_file_id >= process->file_access_count) { return 0; }
+    u64* redirects = process->file_access_redirects_alloc.memory;
+    u64* permissions = process->file_access_permissions_alloc.memory;
+    if(permissions[local_file_id] & FILE_ACCESS_PERMISSION_READ_BIT == 0) { return 0; }
+    if(file_id) { *file_id = redirects[local_file_id]; }
+    return 1;
 }

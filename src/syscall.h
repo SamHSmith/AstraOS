@@ -362,6 +362,102 @@ void syscall_time_get_seconds(Thread** current_thread, u64 mtime)
     t->program_counter += 4;
 }
 
+void syscall_file_get_name(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_file_id = frame->regs[11];
+    u64 user_buf = frame->regs[12];
+    u64 buf_size = frame->regs[13];
+
+    u64 file_id;
+    if(!process_get_read_access(process, user_file_id, &file_id))
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        return;
+    }
+ 
+    u64 buf = 0;
+    if(buf_size != 0)
+    {
+        if(!(mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf) == 0))
+        {
+            frame->regs[10] = 0;
+            t->program_counter += 4;
+            return;
+        }
+ 
+        {
+            u64 num_pages = (buf_size + PAGE_SIZE) / PAGE_SIZE;
+            u64 ptr = user_buf + PAGE_SIZE;
+            u64 temp;
+            for(u64 i = 1; i < num_pages; i++)
+            {
+                if(!(mmu_virt_to_phys(process->mmu_table, ptr, (u64*)&temp) == 0))
+                {
+                    frame->regs[10] = 0;
+                    t->program_counter += 4;
+                    return;
+                }
+                ptr += PAGE_SIZE;
+            }
+        }
+    }
+ 
+    frame->regs[10] = kernel_file_get_name(file_id, buf, buf_size);
+    t->program_counter += 4;
+}
+
+void syscall_directory_get_files(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 dir_id = frame->regs[11];
+    u64 user_buf = frame->regs[12];
+    u64 buf_size = frame->regs[13];
+
+    u64 buf = 0;
+    if(buf_size != 0)
+    {
+        if(!(mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf) == 0))
+        {
+            frame->regs[10] = 0;
+            t->program_counter += 4;
+            return;
+        }
+
+        {
+            u64 num_pages = (buf_size*8 + PAGE_SIZE) / PAGE_SIZE;
+            u64 ptr = user_buf + PAGE_SIZE;
+            u64 temp;
+            for(u64 i = 1; i < num_pages; i++)
+            {
+                if(!(mmu_virt_to_phys(process->mmu_table, ptr, (u64*)&temp) == 0))
+                {
+                    frame->regs[10] = 0;
+                    t->program_counter += 4;
+                    return;
+                }
+                ptr += PAGE_SIZE;
+            }
+        }
+    }
+
+    u64 temp_buf[buf_size];
+    u64 ret = kernel_directory_get_files(dir_id, temp_buf, buf_size);
+    u64 count = ret;
+    if(buf_size < count) { count = buf_size; }
+    u64* array = buf;
+    for(u64 i = 0; i < count; i++)
+  { array[i] = process_new_file_access(t->process_pid, temp_buf[i], FILE_ACCESS_PERMISSION_READ_WRITE_BIT); }
+
+    frame->regs[10] = ret;
+    t->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -393,8 +489,12 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_surface_consumer_set_size(current_thread); }
     else if(call_num == 13)
     { syscall_surface_consumer_fetch(current_thread); }
-    else if (call_num == 14)
+    else if(call_num == 14)
     { syscall_time_get_seconds(current_thread, mtime); }
+    else if(call_num == 15)
+    { syscall_file_get_name(current_thread); }
+    else if (call_num == 23)
+    { syscall_directory_get_files(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

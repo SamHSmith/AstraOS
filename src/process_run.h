@@ -147,6 +147,7 @@ void process_init()
         );
 
     tarr[thread1].program_counter = (u64)program_loader_program;
+    tarr[thread1].frame.regs[10] = drive1_partition_directory;
 
     tarr[thread1].thread_state = THREAD_STATE_RUNNING;
 
