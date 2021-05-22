@@ -130,6 +130,8 @@ u64 user_directory_get_subdirectories(u64 dir_id, u64* buf, 64 buf_size); // not
 u64 user_directory_get_files(u64 dir_id, u64* buf, u64 buf_size); // sorta done 23
 u64 user_directory_add_subdirectory(u64 dir_id, u64 subdirectory); // not done 24
 u64 user_directory_add_file(u64 dir_id, u64 file_id); // not done 25
+
+u64 user_create_process_from_file(u64 file_id, u64* pid); // done 26
 */
 
 .global user_file_get_name
@@ -147,6 +149,14 @@ user_directory_get_files:
     mv a2, a1
     mv a1, a0
     addi a0, x0, 23
+    ecall
+    ret
+
+.global user_create_process_from_file
+user_create_process_from_file:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 26
     ecall
     ret
 

@@ -48,7 +48,7 @@ typedef struct
 } ELF_ProgramHeader;
 
 // returns true on success
-u64 create_proccess_from_file(u64 file_id, u64* pid_ret)
+u64 create_process_from_file(u64 file_id, u64* pid_ret)
 {
     if(!is_valid_file_id(file_id)) { return 0; }
 
@@ -105,7 +105,7 @@ u64 create_proccess_from_file(u64 file_id, u64* pid_ret)
 
     u32 thread1 = process_thread_create(pid);
     proc->threads[thread1].stack_alloc = kalloc_pages(8);
-    proc->threads[thread1].frame.regs[2] = U64_MAX & (~0xfff);
+    proc->threads[thread1].frame.regs[2] = U64_MAX & (~(0xffff << 50)) & (~0xfff);
     u64 stack_start =
         proc->threads[thread1].frame.regs[2] - (PAGE_SIZE * proc->threads[thread1].stack_alloc.page_count);
     mmu_map_kallocation(

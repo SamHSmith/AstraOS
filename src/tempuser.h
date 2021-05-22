@@ -38,6 +38,8 @@ u64 user_directory_get_files(u64 dir_id, u64* buf, u64 buf_size);
 u64 user_directory_add_subdirectory(u64 dir_id, u64 subdirectory); // not done
 u64 user_directory_add_file(u64 dir_id, u64 file_id); // not done
 
+u64 user_create_process_from_file(u64 file_id, u64* pid);
+
 // give file to proccess
 // give directory to proccess
 
@@ -101,6 +103,16 @@ while(1) {
                     { slot_index--; }
                     else if(scancode == 101 && slot_index + 1 < slot_count)
                     { slot_index++; }
+
+                    if(scancode == 35 && slot_index < slot_count)
+                    {
+                        u64 pid = 0;
+                        if(user_create_process_from_file(partitions[slot_index], &pid))
+                        {
+                            printf("PROCESS CREATED, PID=%llu\n", pid);
+                        }
+                        else { printf("failed to create process."); }
+                    }
                 }
                 else
                 {

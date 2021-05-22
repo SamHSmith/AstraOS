@@ -383,7 +383,8 @@ u64 process_get_read_access(Process* process, u64 local_file_id, u64* file_id)
     if(local_file_id >= process->file_access_count) { return 0; }
     u64* redirects = process->file_access_redirects_alloc.memory;
     u64* permissions = process->file_access_permissions_alloc.memory;
-    if(permissions[local_file_id] & FILE_ACCESS_PERMISSION_READ_BIT == 0) { return 0; }
+    if(permissions[local_file_id] &
+        (FILE_ACCESS_PERMISSION_READ_BIT | FILE_ACCESS_PERMISSION_READ_WRITE_BIT) == 0) { return 0; }
     if(file_id) { *file_id = redirects[local_file_id]; }
     return 1;
 }

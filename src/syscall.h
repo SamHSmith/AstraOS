@@ -458,6 +458,32 @@ void syscall_directory_get_files(Thread** current_thread)
     t->program_counter += 4;
 }
 
+void syscall_create_process_from_file(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_file_id = frame->regs[11];
+    u64 user_pid_ptr = frame->regs[12];
+
+    u64 file_id = 0;
+    u64 ret = process_get_read_access(process, user_file_id, &file_id);
+ 
+    u64* pid_ptr = 0;
+    if(!ret && !(mmu_virt_to_phys(process->mmu_table, user_pid_ptr + sizeof(u64), (u64*)&pid_ptr) == 0) ||
+               !(mmu_virt_to_phys(process->mmu_table, user_pid_ptr, (u64*)&pid_ptr) == 0))
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        return;
+    }
+    // ret is true
+    ret = create_process_from_file(file_id, pid_ptr);
+
+    frame->regs[10] = ret;
+    t->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -493,8 +519,10 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_time_get_seconds(current_thread, mtime); }
     else if(call_num == 15)
     { syscall_file_get_name(current_thread); }
-    else if (call_num == 23)
+    else if(call_num == 23)
     { syscall_directory_get_files(current_thread); }
+    else if(call_num == 26)
+    { syscall_create_process_from_file(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }
