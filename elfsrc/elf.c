@@ -38,6 +38,6 @@ void _start()
     while(1)
     {
         uart_write(dave, strlen(dave));
-        user_thread_sleep(110000);
+        user_thread_sleep(990000);
     }
 }
