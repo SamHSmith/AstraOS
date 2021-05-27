@@ -49,6 +49,7 @@ typedef struct
     RawMouse mouse;
 
     u32 thread_count;
+    u64 pid;
     Thread threads[];
 } Process;
 
@@ -70,8 +71,9 @@ u64 process_create()
     {
         if(KERNEL_PROCESS_ARRAY[i]->mmu_table == 0)
         {
-            KERNEL_PROCESS_ARRAY[i] = process;
-            return i;
+            process->pid = i;
+            KERNEL_PROCESS_ARRAY[process->pid] = process;
+            return process->pid;
         }
     }
     if((KERNEL_PROCESS_ARRAY_LEN+1) * sizeof(Process*)
@@ -89,10 +91,10 @@ u64 process_create()
         }
         KERNEL_PROCESS_ARRAY_ALLOCATION = new_alloc;
     }
-    u64 index = KERNEL_PROCESS_ARRAY_LEN;
-    KERNEL_PROCESS_ARRAY[index] = process;
+    process->pid = KERNEL_PROCESS_ARRAY_LEN;
+    KERNEL_PROCESS_ARRAY[process->pid] = process;
     KERNEL_PROCESS_ARRAY_LEN += 1;
-    return index;
+    return process->pid;
 }
 
 u64 mmu_table_ptr_to_satp(u64* mmu_table)

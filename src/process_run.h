@@ -206,7 +206,7 @@ void process_init()
     tarr[thread3].thread_state = THREAD_STATE_RUNNING;
 
     u64 cs;
-    if(surface_consumer_create(pid, pid2, &cs))
+    if(surface_consumer_create(KERNEL_PROCESS_ARRAY[pid], KERNEL_PROCESS_ARRAY[pid2], &cs))
     {
         printf("consumer slot: %llu\n", cs);
     }
