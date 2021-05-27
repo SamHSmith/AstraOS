@@ -42,8 +42,7 @@ sudo pacman -Sy ninja ceph glusterfs libiscsi python python-sphinx spice-protoco
 cd AstraOS
 mkdir qemu/build
 cd qemu/build
-../configure --target-list=riscv64-softmmu
-make -j$(nproc)
+CFLAGS=-Wno-error ../configure --target-list=riscv64-softmmu && make -j$(nproc)
 cd ../..
 ```
 

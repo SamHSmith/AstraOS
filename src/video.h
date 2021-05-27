@@ -102,28 +102,25 @@ u64 surface_create(Process* p)
     return p->surface_count - 1;
 }
 
-u64 surface_consumer_create(u64 pid, u64 surface_pid, u64* consumer)
+u64 surface_consumer_create(Process* process, Process* surface_process, u64* consumer)
 {
-    if(pid == surface_pid) { return 0; }
-    Process* p = KERNEL_PROCESS_ARRAY[pid];
-    if(!(surface_pid < KERNEL_PROCESS_ARRAY_LEN && KERNEL_PROCESS_ARRAY[surface_pid]->mmu_table))
-    { return 0; }
-    u64 surface_slot = surface_create(KERNEL_PROCESS_ARRAY[surface_pid]);
+    if(process == surface_process) { return 0; }
+    u64 surface_slot = surface_create(surface_process);
 
-    for(u64 i = 0; i < p->surface_consumer_count; i++)
+    for(u64 i = 0; i < process->surface_consumer_count; i++)
     {
-        SurfaceConsumer* con = ((SurfaceConsumer*)p->surface_consumer_alloc.memory) + i;
+        SurfaceConsumer* con = ((SurfaceConsumer*)process->surface_consumer_alloc.memory) + i;
         if(!con->is_initialized)
         {
-            con->surface_pid = surface_pid;
+            con->surface_pid = surface_process->pid;
             con->surface_slot = surface_slot;
             con->has_surface = 1;
             con->is_initialized = 1;
             con->has_fetched = 0;
             con->fb_fetched = framebuffer_create(0,0);
-            Surface* surface = &(((SurfaceSlot*)KERNEL_PROCESS_ARRAY[surface_pid]->surface_alloc.memory)
+            Surface* surface = &(((SurfaceSlot*)surface_process->surface_alloc.memory)
                                 + surface_slot)->surface;
-            surface->consumer_pid = pid;
+            surface->consumer_pid = process->pid;
             surface->consumer_slot = i;
             surface->has_consumer = 1;
             *consumer = i;
@@ -131,32 +128,33 @@ u64 surface_consumer_create(u64 pid, u64 surface_pid, u64* consumer)
         }
     }
 
-    if((p->surface_consumer_count+1)*sizeof(SurfaceConsumer) >p->surface_consumer_alloc.page_count*PAGE_SIZE)
+    if((process->surface_consumer_count+1)*sizeof(SurfaceConsumer)
+        > process->surface_consumer_alloc.page_count*PAGE_SIZE)
     {
-        Kallocation new_alloc = kalloc_pages(p->surface_consumer_alloc.page_count + 1);
+        Kallocation new_alloc = kalloc_pages(process->surface_consumer_alloc.page_count + 1);
         SurfaceConsumer* new_array = (SurfaceConsumer*)new_alloc.memory;
-        for(u64 i = 0; i < p->surface_consumer_count; i++)
+        for(u64 i = 0; i < process->surface_consumer_count; i++)
         {
-            new_array[i] = ((SurfaceConsumer*)p->surface_consumer_alloc.memory)[i];
+            new_array[i] = ((SurfaceConsumer*)process->surface_consumer_alloc.memory)[i];
         }
-        if(p->surface_consumer_alloc.page_count != 0)
+        if(process->surface_consumer_alloc.page_count != 0)
         {
-            kfree_pages(p->surface_consumer_alloc);
+            kfree_pages(process->surface_consumer_alloc);
         }
-        p->surface_consumer_alloc = new_alloc;
+        process->surface_consumer_alloc = new_alloc;
     }
-    u64 cs = p->surface_consumer_count;
-    p->surface_consumer_count += 1;
-    SurfaceConsumer* con = ((SurfaceConsumer*)p->surface_consumer_alloc.memory) + cs;
-    con->surface_pid = surface_pid;
+    u64 cs = process->surface_consumer_count;
+    process->surface_consumer_count += 1;
+    SurfaceConsumer* con = ((SurfaceConsumer*)process->surface_consumer_alloc.memory) + cs;
+    con->surface_pid = surface_process->pid;
     con->surface_slot = surface_slot;
     con->has_surface = 1;
     con->is_initialized = 1;
     con->has_fetched = 0;
     con->fb_fetched = framebuffer_create(0,0);
-    Surface* surface = &(((SurfaceSlot*)KERNEL_PROCESS_ARRAY[surface_pid]->surface_alloc.memory)
+    Surface* surface = &(((SurfaceSlot*)surface_process->surface_alloc.memory)
                         + surface_slot)->surface;
-    surface->consumer_pid = pid;
+    surface->consumer_pid = process->pid;
     surface->consumer_slot = cs;
     surface->has_consumer = 1;
     *consumer = cs;
