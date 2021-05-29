@@ -1,4 +1,4 @@
-#include "types.h"
+#include "../common/types.h"
 #include "random.h"
 
 #include "uart.h"

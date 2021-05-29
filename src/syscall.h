@@ -484,6 +484,30 @@ void syscall_create_process_from_file(Thread** current_thread)
     t->program_counter += 4;
 }
 
+void syscall_surface_consumer_create(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_foreign_pid = frame->regs[11];
+    u64 user_consumer_ptr = frame->regs[12];
+
+    u64* consumer_ptr = 0;
+    if(!(mmu_virt_to_phys(process->mmu_table, user_consumer_ptr + sizeof(u64), (u64*)&consumer_ptr) == 0) ||
+       !(mmu_virt_to_phys(process->mmu_table, user_consumer_ptr, (u64*)&consumer_ptr) == 0) ||
+       !(user_foreign_pid < KERNEL_PROCESS_ARRAY_LEN && KERNEL_PROCESS_ARRAY[user_foreign_pid]->mmu_table))
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        return;
+    }
+    Process* foreign_process = KERNEL_PROCESS_ARRAY[user_foreign_pid];
+
+    frame->regs[10] = surface_consumer_create(process, foreign_process, consumer_ptr);
+    t->program_counter += 4;
+    return;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -523,6 +547,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_directory_get_files(current_thread); }
     else if(call_num == 26)
     { syscall_create_process_from_file(current_thread); }
+    else if(call_num == 27)
+    { syscall_surface_consumer_create(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

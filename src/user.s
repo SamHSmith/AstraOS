@@ -132,6 +132,7 @@ u64 user_directory_add_subdirectory(u64 dir_id, u64 subdirectory); // not done 2
 u64 user_directory_add_file(u64 dir_id, u64 file_id); // not done 25
 
 u64 user_create_process_from_file(u64 file_id, u64* pid); // done 26
+u64 user_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer); // not done 27
 */
 
 .global user_file_get_name
@@ -157,6 +158,14 @@ user_create_process_from_file:
     mv a2, a1
     mv a1, a0
     addi a0, x0, 26
+    ecall
+    ret
+
+.global user_surface_consumer_create
+user_surface_consumer_create:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 27
     ecall
     ret
 

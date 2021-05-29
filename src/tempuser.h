@@ -40,6 +40,8 @@ u64 user_directory_add_file(u64 dir_id, u64 file_id); // not done
 
 u64 user_create_process_from_file(u64 file_id, u64* pid);
 
+u64 user_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer);
+
 // give file to proccess
 // give directory to proccess
 
@@ -50,6 +52,17 @@ u64 user_create_process_from_file(u64 file_id, u64* pid);
 //#include "qwerty.h"
 
 #include "font8_16.h"
+
+typedef struct
+{
+    s64 x;
+    s64 y;
+    u64 consumer;
+    u64 width;
+    u64 height;
+    Framebuffer* fb;
+    u64 fb_page_count;
+} Window;
 
 void program_loader_program(u64 drive1_partitions_directory)
 {
@@ -66,6 +79,9 @@ void program_loader_program(u64 drive1_partitions_directory)
         printf("tempuser has found %s\n", partition_names[i]);
     }
     u64 slot_index = 0;
+
+    Window windows[256];
+    u64 window_count = 0;
 
 while(1) {
     u64 user_wait_surface = 0;
@@ -104,7 +120,7 @@ while(1) {
                     else if(scancode == 101 && slot_index + 1 < slot_count)
                     { slot_index++; }
 
-                    if(scancode == 35 && slot_index < slot_count)
+                    if(scancode == 35 && slot_index < slot_count && window_count + 1 < 256)
                     {
                         u64 pid = 0;
                         if(user_create_process_from_file(partitions[slot_index], &pid))
@@ -112,6 +128,18 @@ while(1) {
                             printf("PROCESS CREATED, PID=%llu\n", pid);
                         }
                         else { printf("failed to create process."); }
+                        u64 con = 0;
+                        if(user_surface_consumer_create(pid, &con))
+                        {
+                            windows[window_count].consumer = con;
+                            windows[window_count].x = 20;
+                            windows[window_count].y = 60*window_count;
+                            if(windows[window_count].y > 400) { windows[window_count].y = 500; }
+                            user_surface_consumer_set_size(windows[window_count].consumer, 100, 100);
+                            windows[window_count].fb = 0x425364000 + (10000*10000*4*4 * window_count);
+                            window_count++;
+                        }
+                        else { printf("Failed to create consumer for PID: %llu\n", pid); }
                     }
                 }
                 else
@@ -121,6 +149,19 @@ while(1) {
                 printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
             }
         } while(more);
+
+        // Fetch from consumers
+        {
+            for(u64 i = 0; i < window_count; i++)
+            {
+                user_surface_consumer_get_size(windows[i].consumer, &windows[i].width, &windows[i].height);
+                windows[i].fb_page_count = user_surface_consumer_fetch(windows[i].consumer, 0, 0);
+                if(!user_surface_consumer_fetch(0, windows[i].fb, windows[i].fb_page_count))
+                {
+                    printf("Window#%llu dropped a frame\n", i);
+                }
+            }
+        }
 
         u64 column_count = (fb->width / 8);
         u64 row_count = (fb->height / 16);

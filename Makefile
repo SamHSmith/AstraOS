@@ -13,7 +13,7 @@ SOURCES=$(wildcard src/*.s) $(wildcard src/*.c) src/cyclone_crypto/hash/sha512.c
 kernel.bin: virt.lds
 	riscv64-unknown-elf-gcc $(CFLAGS) $(LDFLAGS) -T $< -o $@ $(SOURCES)
 
-ELFSOURCES= elfsrc/elf.c src/user.s
+ELFSOURCES= elfsrc/elf.c userland/aos_syscalls.s
 
 elf: elfsrc/elf.c src/user.s
 	riscv64-unknown-elf-gcc $(CFLAGS) -o $@ $(ELFSOURCES)
