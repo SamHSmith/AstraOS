@@ -1,6 +1,6 @@
 // to be user code
 
-void user_surface_commit(u64 surface_slot);
+u64 user_surface_commit(u64 surface_slot);
 u64 user_surface_acquire(u64 surface_slot, Framebuffer* fb, u64 page_count);
 
 void user_thread_sleep(u64 duration);
@@ -64,6 +64,13 @@ typedef struct
     u64 fb_page_count;
 } Window;
 
+f32 clamp_01(f32 f)
+{
+    if(f < 0.0) { f = 0.0; }
+    else if(f > 1.0) { f = 1.0; }
+    return f;
+}
+
 void program_loader_program(u64 drive1_partitions_directory)
 {
     u64 slot_count = user_directory_get_files(drive1_partitions_directory, 0, 0);
@@ -87,8 +94,8 @@ while(1) {
     u64 user_wait_surface = 0;
     user_wait_for_surface_draw(&user_wait_surface, 1);
 
-    Framebuffer* fb = 0x424242000;
-    u64 fb_page_count = user_surface_acquire(0, fb, 0);
+    Framebuffer* fb = 0x54000;
+    u64 fb_page_count = user_surface_acquire(0, 0, 0);
     if(user_surface_acquire(0, fb, fb_page_count))
     {
         double time_frame_start = user_time_get_seconds();
@@ -126,20 +133,22 @@ while(1) {
                         if(user_create_process_from_file(partitions[slot_index], &pid))
                         {
                             printf("PROCESS CREATED, PID=%llu\n", pid);
+                            u64 con = 0;
+                            if(user_surface_consumer_create(pid, &con))
+                            {
+                                windows[window_count].consumer = con;
+                                windows[window_count].x = 20;
+                                windows[window_count].y = 45*window_count;
+                                if(windows[window_count].y > 400) { windows[window_count].y = 500; }
+                                user_surface_consumer_set_size(windows[window_count].consumer, 100, 100);
+                                windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
+                                windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
+                                windows[window_count].fb_page_count = 0;
+                                window_count++;
+                            }
+                            else { printf("Failed to create consumer for PID: %llu\n", pid); }
                         }
                         else { printf("failed to create process."); }
-                        u64 con = 0;
-                        if(user_surface_consumer_create(pid, &con))
-                        {
-                            windows[window_count].consumer = con;
-                            windows[window_count].x = 20;
-                            windows[window_count].y = 60*window_count;
-                            if(windows[window_count].y > 400) { windows[window_count].y = 500; }
-                            user_surface_consumer_set_size(windows[window_count].consumer, 100, 100);
-                            windows[window_count].fb = 0x425364000 + (10000*10000*4*4 * window_count);
-                            window_count++;
-                        }
-                        else { printf("Failed to create consumer for PID: %llu\n", pid); }
                     }
                 }
                 else
@@ -156,7 +165,7 @@ while(1) {
             {
                 user_surface_consumer_get_size(windows[i].consumer, &windows[i].width, &windows[i].height);
                 windows[i].fb_page_count = user_surface_consumer_fetch(windows[i].consumer, 0, 0);
-                if(!user_surface_consumer_fetch(0, windows[i].fb, windows[i].fb_page_count))
+                if(!user_surface_consumer_fetch(windows[i].consumer, windows[i].fb, windows[i].fb_page_count))
                 {
                     printf("Window#%llu dropped a frame\n", i);
                 }
@@ -226,6 +235,36 @@ while(1) {
                 fb->data[i*4 + 2] = 0.772;
                 fb->data[i*4 + 3] = 1.0;
             }
+
+//#define fancy_alpha_rendering
+
+#ifdef fancy_alpha_rendering
+            for(u64 j = 0; j < window_count; j++)
+#else
+            for(s64 j = (s64)window_count -1; j >= 0; j--)
+#endif
+            {
+                if(windows[j].fb_page_count &&
+    (s64)x >= windows[j].x && y >= windows[j].y &&
+    (s64)x < windows[j].x + (s64)windows[j].fb->width && (s64)y < windows[j].y + (s64)windows[j].fb->height)
+                {
+                    u64 k = ((s64)x - windows[j].x) + ((s64)y - windows[j].y) * (s64)windows[j].fb->height;
+
+#ifdef fancy_alpha_rendering
+                    float cover = 1.0 - clamp_01(windows[j].fb->data[k*4 + 3]);
+        fb->data[i*4 + 0] = clamp_01(fb->data[i*4 + 0] * cover + clamp_01(windows[j].fb->data[k*4 + 0]));
+        fb->data[i*4 + 1] = clamp_01(fb->data[i*4 + 1] * cover + clamp_01(windows[j].fb->data[k*4 + 1]));
+        fb->data[i*4 + 2] = clamp_01(fb->data[i*4 + 2] * cover + clamp_01(windows[j].fb->data[k*4 + 2]));
+        fb->data[i*4 + 3] = 1.0;
+#else
+        fb->data[i*4 + 0] = clamp_01(windows[j].fb->data[k*4 + 0]);
+        fb->data[i*4 + 1] = clamp_01(windows[j].fb->data[k*4 + 1]);
+        fb->data[i*4 + 2] = clamp_01(windows[j].fb->data[k*4 + 2]);
+        fb->data[i*4 + 3] = 1.0;
+                    break;
+#endif
+                }
+            }
         }
 
         double time_frame_end = user_time_get_seconds();
@@ -247,8 +286,7 @@ while(1) {
                 fb->data[i*4 + 3] = 1.0;
             }
         }
- 
-        user_surface_commit(0);
+        assert(user_surface_commit(0), "commited successfully");
     }
 }
 }

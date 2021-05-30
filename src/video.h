@@ -39,7 +39,7 @@ typedef struct
 typedef struct
 {
     u64 vaddr;
-    u8 has_aquired;
+    u8 has_acquired;
     Framebuffer fb_draw_control;
     Surface surface;
 } SurfaceSlot;
@@ -97,7 +97,7 @@ u64 surface_create(Process* p)
     s->surface.fb_draw = framebuffer_create(0, 0);
     s->surface.is_initialized = 1;
     s->surface.has_consumer = 0;
-    s->has_aquired = 0;
+    s->has_acquired = 0;
     return p->surface_count - 1;
 }
 
@@ -189,7 +189,7 @@ u64 surface_acquire(u64 surface_slot, Framebuffer* fb_location, Process* process
     s->fb_draw_control = *s->surface.fb_draw;
     if(process_alloc_pages(process, fb_location, s->surface.fb_draw->alloc))
     {
-        s->has_aquired = 1;
+        s->has_acquired = 1;
         s->vaddr = fb_location;
         return 1;
     }
@@ -200,13 +200,13 @@ u64 surface_commit(u64 surface_slot, Process* process)
 {
     SurfaceSlot* s = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot;
 
-    if(surface_slot >= process->surface_count || !s->has_aquired) { return 0; }
+    if(surface_slot >= process->surface_count || !s->has_acquired) { return 0; }
 
     Kallocation a = process_shrink_allocation(process, s->vaddr, 0);
     if(a.memory == 0) { return 0; }
 
     *s->surface.fb_draw = s->fb_draw_control;
-    s->has_aquired = 0;
+    s->has_acquired = 0;
 
     volatile Framebuffer* temp = s->surface.fb_present;
     s->surface.fb_present = s->surface.fb_draw;

@@ -10,7 +10,7 @@ void syscall_surface_commit(Thread** current_thread)
         ((SurfaceSlot*)process->surface_alloc.memory)[surface_slot].surface.is_initialized,
         "surface_commit: the surface slot contains to a valid surface");
 
-    surface_commit(surface_slot, process);
+    frame->regs[10] = surface_commit(surface_slot, process);
     (*current_thread)->program_counter += 4;
 }
 
@@ -33,10 +33,11 @@ void syscall_surface_acquire(volatile Thread** current_thread)
 
     SurfaceSlot* slot = &((SurfaceSlot*)process->surface_alloc.memory)[surface_slot];
 
-    if(surface_slot < process->surface_count && slot->surface.is_initialized && !slot->has_aquired)
+    if(surface_slot < process->surface_count && slot->surface.is_initialized)
     {
+        assert(!slot->has_acquired, "you have not already acquired");
         surface_prepare_draw_framebuffer(surface_slot, process);
-        if(page_count == 0)
+        if(page_count == 0 && !fb)
         {
             ret = slot->surface.fb_draw->alloc.page_count;
         }

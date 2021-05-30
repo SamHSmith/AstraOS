@@ -9,7 +9,7 @@ typedef struct
     float data[];
 } AOS_Framebuffer;
 
-void AOS_surface_commit(u64 surface_slot);
+u64 AOS_surface_commit(u64 surface_slot);
 u64 AOS_surface_acquire(u64 surface_slot, AOS_Framebuffer* fb, u64 page_count);
  
 void AOS_thread_sleep(u64 duration);

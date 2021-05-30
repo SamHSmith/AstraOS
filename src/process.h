@@ -289,9 +289,9 @@ Kallocation process_shrink_allocation(Process* process, u64 vaddr, u64 new_page_
         Kallocation* array = ((Kallocation*)process->allocations_alloc.memory);
         if(should_remove)
         {
-            for(u64 i = process->allocations_count - 1; i > remove_index; i--)
+            for(u64 i = remove_index; i + 1 < process->allocations_count; i++)
             {
-                array[i-1] = array[i];
+                array[i] = array[i+1];
             }
             process->allocations_count -= 1;
         }
