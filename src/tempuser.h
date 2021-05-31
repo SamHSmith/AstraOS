@@ -53,6 +53,8 @@ u64 user_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer);
 
 #include "font8_16.h"
 
+#define BORDER_SIZE 3
+
 typedef struct
 {
     s64 x;
@@ -62,6 +64,7 @@ typedef struct
     u64 height;
     Framebuffer* fb;
     u64 fb_page_count;
+    u8 we_have_frame;
 } Window;
 
 f32 clamp_01(f32 f)
@@ -126,6 +129,20 @@ while(1) {
                     { slot_index--; }
                     else if(scancode == 101 && slot_index + 1 < slot_count)
                     { slot_index++; }
+                    else if(scancode == 102)
+                    {
+                        for(u64 i = 0; i < window_count; i++)
+                        {
+                            windows[i].width += 10;
+                        }
+                    }
+                    else if(scancode == 99)
+                    {
+                        for(u64 i = 0; i < window_count; i++)
+                        {
+                            if(windows[i].width > 10) { windows[i].width -= 10; }
+                        }
+                    }
 
                     if(scancode == 35 && slot_index < slot_count && window_count + 1 < 256)
                     {
@@ -137,13 +154,19 @@ while(1) {
                             if(user_surface_consumer_create(pid, &con))
                             {
                                 windows[window_count].consumer = con;
-                                windows[window_count].x = 20;
-                                windows[window_count].y = 45*window_count;
-                                if(windows[window_count].y > 400) { windows[window_count].y = 500; }
-                                user_surface_consumer_set_size(windows[window_count].consumer, 100, 100);
+                                windows[window_count].x = 20 + window_count*7;
+                                windows[window_count].y = 39*window_count;
+                                if(windows[window_count].y > 400) { windows[window_count].y = 400; }
+                                windows[window_count].width = 100;
+                                windows[window_count].height = 100;
+                                user_surface_consumer_set_size(
+                                    windows[window_count].consumer,
+                                    windows[window_count].width - 2*BORDER_SIZE,
+                                    windows[window_count].height - 2*BORDER_SIZE
+                                );
                                 windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                                 windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
-                                windows[window_count].fb_page_count = 0;
+                                windows[window_count].we_have_frame = 0;
                                 window_count++;
                             }
                             else { printf("Failed to create consumer for PID: %llu\n", pid); }
@@ -163,12 +186,24 @@ while(1) {
         {
             for(u64 i = 0; i < window_count; i++)
             {
-                user_surface_consumer_get_size(windows[i].consumer, &windows[i].width, &windows[i].height);
-                windows[i].fb_page_count = user_surface_consumer_fetch(windows[i].consumer, 0, 0);
-                if(!user_surface_consumer_fetch(windows[i].consumer, windows[i].fb, windows[i].fb_page_count))
+                if(user_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
                 {
-                    printf("Window#%llu dropped a frame\n", i);
+                    // allocate address space
+                    windows[i].fb_page_count = user_surface_consumer_fetch(windows[i].consumer, 0, 0);
+                    if(user_surface_consumer_fetch(
+                        windows[i].consumer,
+                        windows[i].fb,
+                        windows[i].fb_page_count
+                    ))
+                    {
+                        windows[i].we_have_frame = 1;
+                    }
                 }
+                user_surface_consumer_set_size(
+                    windows[i].consumer,
+                    windows[i].width  -2*BORDER_SIZE,
+                    windows[i].height -2*BORDER_SIZE
+                );
             }
         }
 
@@ -239,16 +274,20 @@ while(1) {
 //#define fancy_alpha_rendering
 
 #ifdef fancy_alpha_rendering
-            for(u64 j = 0; j < window_count; j++)
+            for(s64 j = 0; j < window_count; j++)
 #else
             for(s64 j = (s64)window_count -1; j >= 0; j--)
 #endif
             {
-                if(windows[j].fb_page_count &&
-    (s64)x >= windows[j].x && y >= windows[j].y &&
-    (s64)x < windows[j].x + (s64)windows[j].fb->width && (s64)y < windows[j].y + (s64)windows[j].fb->height)
+                if(windows[j].we_have_frame && // window_content
+    (s64)x >= windows[j].x + BORDER_SIZE && y >= windows[j].y + BORDER_SIZE &&
+    (s64)x < windows[j].x + BORDER_SIZE + (s64)windows[j].fb->width &&
+    (s64)y < windows[j].y + BORDER_SIZE + (s64)windows[j].fb->height
+                )
                 {
-                    u64 k = ((s64)x - windows[j].x) + ((s64)y - windows[j].y) * (s64)windows[j].fb->height;
+                    u64 internal_x = (u64)((s64)x - (windows[j].x + BORDER_SIZE));
+                    u64 internal_y = (u64)((s64)y - (windows[j].y + BORDER_SIZE));
+                    u64 k = internal_x + internal_y * windows[j].fb->width;
 
 #ifdef fancy_alpha_rendering
                     float cover = 1.0 - clamp_01(windows[j].fb->data[k*4 + 3]);
@@ -261,6 +300,23 @@ while(1) {
         fb->data[i*4 + 1] = clamp_01(windows[j].fb->data[k*4 + 1]);
         fb->data[i*4 + 2] = clamp_01(windows[j].fb->data[k*4 + 2]);
         fb->data[i*4 + 3] = 1.0;
+                    break;
+#endif
+                }
+                else if( // window_frame
+    (s64)x >= windows[j].x && y >= windows[j].y &&
+    (s64)x < windows[j].x + (s64)windows[j].width &&
+    (s64)y < windows[j].y + (s64)windows[j].height
+                )
+                {
+                    u64 internal_x = (u64)((s64)x - windows[j].x);
+                    u64 internal_y = (u64)((s64)y - windows[j].y);
+
+                    fb->data[i*4 + 0] = (f32)internal_x / (f32)windows[j].width;// + 77.0/255.0;
+                    fb->data[i*4 + 1] = (f32)internal_y / (f32)windows[j].height;// +  97.0/255.0;
+                    fb->data[i*4 + 2] = 180.0/255.0;
+                    fb->data[i*4 + 3] = 1.0;
+#ifndef fancy_alpha_rendering
                     break;
 #endif
                 }

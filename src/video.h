@@ -268,6 +268,14 @@ u64 surface_consumer_set_size(u64 pid, u64 consumer_slot, u32 width, u32 height)
     return 1;
 }
 
+/*
+If fb_location is not null and page_count is zero the function returns *surface_has_commited* status.
+If not the previous option the function will return 0 if *surface_has_commited* is false.
+Otherwise the function will return the page count required for a fetch if fb_location and page_count
+are null.
+If the surface has commited and you pass a page aligned fb_location and a big enough page_count
+a successful consumer fetch is performed.
+*/
 u64 surface_consumer_fetch(u64 pid, u64 consumer_slot, Framebuffer* fb_location, u64 page_count)
 {
     Process* process = KERNEL_PROCESS_ARRAY[pid];
@@ -275,10 +283,13 @@ u64 surface_consumer_fetch(u64 pid, u64 consumer_slot, Framebuffer* fb_location,
     if(!get_consumer_and_surface(pid, consumer_slot, &con, &s))
     { return 0; }
 
-    if(!s->has_commited)
+    if(fb_location && page_count == 0)
+    { return surface_has_commited(*s); }
+
+    if(!surface_has_commited(*s))
     { return 0; }
 
-    if(page_count == 0)
+    if(page_count == 0 && !fb_location)
     { return s->fb_present->alloc.page_count; }
 
     if(((u64)fb_location % PAGE_SIZE) != 0 || page_count < s->fb_present->alloc.page_count)
