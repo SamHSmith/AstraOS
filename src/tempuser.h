@@ -159,7 +159,7 @@ while(1) {
                     {
                         for(u64 i = 0; i < window_count; i++)
                         {
-                            if(windows[i].target_width > 50) { windows[i].target_width -= 10; }
+                            if(windows[i].target_width > 90) { windows[i].target_width -= 10; }
                         }
                     }
 
@@ -174,8 +174,8 @@ while(1) {
                             {
                                 windows[window_count].consumer = con;
                                 windows[window_count].x = 20 + window_count*7;
-                                windows[window_count].y = 39*window_count;
-                                if(windows[window_count].y > 400) { windows[window_count].y = 400; }
+                                windows[window_count].y = 49*window_count;
+                                if(windows[window_count].y > 1000) { windows[window_count].y = 1000; }
                                 windows[window_count].new_width = 100;
                                 windows[window_count].target_width = 100;
                                 windows[window_count].creation_time = user_time_get_seconds();
@@ -210,7 +210,7 @@ while(1) {
             for(u64 i = 0; i < window_count; i++)
             {
                 windows[i].new_width = (s64)windows[i].target_width +
-                    (s64)(35.0 * botched_sin((time_frame_start - windows[i].creation_time)*8));
+                    (s64)(75.0 * botched_sin((time_frame_start - windows[i].creation_time)));
 
                 if(user_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
                 {
@@ -291,55 +291,59 @@ while(1) {
                 fb->data[i*4 + 2] = 0.772;
                 fb->data[i*4 + 3] = 1.0;
             }
+        }
 
-//#define fancy_alpha_rendering
-
-#ifdef fancy_alpha_rendering
-            for(s64 j = 0; j < window_count; j++)
-#else
-            for(s64 j = (s64)window_count -1; j >= 0; j--)
-#endif
+        for(s64 j = 0; j < window_count; j++)
+        {
+            if(!windows[j].we_have_frame)
             {
-                if(windows[j].we_have_frame && // window_content
-    (s64)x >= windows[j].x + BORDER_SIZE && y >= windows[j].y + BORDER_SIZE &&
-    (s64)x < windows[j].x + BORDER_SIZE + (s64)windows[j].fb->width &&
-    (s64)y < windows[j].y + BORDER_SIZE + (s64)windows[j].fb->height
-                )
+                for(u64 y = 0; y < windows[j].height; y++)
+                for(u64 x = 0; x < windows[j].width; x++)
                 {
-                    u64 internal_x = (u64)((s64)x - (windows[j].x + BORDER_SIZE));
-                    u64 internal_y = (u64)((s64)y - (windows[j].y + BORDER_SIZE));
-                    u64 k = internal_x + internal_y * windows[j].fb->width;
+                    if((s64)x + windows[j].x < 0 || (s64)y + windows[j].y < 0 ||
+                       (s64)x + windows[j].x >= fb->width || (s64)y + windows[j].y >= fb->height)
+                    { continue; }
+                    u64 external_x = (u64)((s64)x + windows[j].x);
+                    u64 external_y = (u64)((s64)y + windows[j].y);
+                    u64 i = external_x + (external_y * fb->width);
 
-#ifdef fancy_alpha_rendering
+                    fb->data[i*4 + 0] = (f32)x / (f32)windows[j].width;
+                    fb->data[i*4 + 1] = (f32)y / (f32)windows[j].height;
+                    fb->data[i*4 + 2] = 180.0/255.0;
+                    fb->data[i*4 + 3] = 1.0;
+                }
+                continue;
+            }
+
+            for(u64 y = 0; y < windows[j].height; y++)
+            for(u64 x = 0; x < windows[j].width; x++)
+            {
+                if((s64)x + windows[j].x < 0 || (s64)y + windows[j].y < 0 ||
+                   (s64)x + windows[j].x >= fb->width || (s64)y + windows[j].y >= fb->height)
+                { continue; }
+                u64 external_x = (u64)((s64)x + windows[j].x);
+                u64 external_y = (u64)((s64)y + windows[j].y);
+                u64 i = external_x + (external_y * fb->width);
+
+                if(x >= BORDER_SIZE && y >= BORDER_SIZE &&
+                   x - BORDER_SIZE < windows[j].fb->width && y - BORDER_SIZE < windows[j].fb->height)
+                {
+                    u64 internal_x = x - BORDER_SIZE;
+                    u64 internal_y = y - BORDER_SIZE;
+                    u64 k = internal_x + (internal_y * windows[j].fb->width);
+
                     float cover = 1.0 - clamp_01(windows[j].fb->data[k*4 + 3]);
         fb->data[i*4 + 0] = clamp_01(fb->data[i*4 + 0] * cover + clamp_01(windows[j].fb->data[k*4 + 0]));
         fb->data[i*4 + 1] = clamp_01(fb->data[i*4 + 1] * cover + clamp_01(windows[j].fb->data[k*4 + 1]));
         fb->data[i*4 + 2] = clamp_01(fb->data[i*4 + 2] * cover + clamp_01(windows[j].fb->data[k*4 + 2]));
         fb->data[i*4 + 3] = 1.0;
-#else
-        fb->data[i*4 + 0] = clamp_01(windows[j].fb->data[k*4 + 0]);
-        fb->data[i*4 + 1] = clamp_01(windows[j].fb->data[k*4 + 1]);
-        fb->data[i*4 + 2] = clamp_01(windows[j].fb->data[k*4 + 2]);
-        fb->data[i*4 + 3] = 1.0;
-                    break;
-#endif
                 }
-                else if( // window_frame
-    (s64)x >= windows[j].x && y >= windows[j].y &&
-    (s64)x < windows[j].x + (s64)windows[j].width &&
-    (s64)y < windows[j].y + (s64)windows[j].height
-                )
+                else
                 {
-                    u64 internal_x = (u64)((s64)x - windows[j].x);
-                    u64 internal_y = (u64)((s64)y - windows[j].y);
-
-                    fb->data[i*4 + 0] = (f32)internal_x / (f32)windows[j].width;// + 77.0/255.0;
-                    fb->data[i*4 + 1] = (f32)internal_y / (f32)windows[j].height;// +  97.0/255.0;
+                    fb->data[i*4 + 0] = (f32)x / (f32)windows[j].width;
+                    fb->data[i*4 + 1] = (f32)y / (f32)windows[j].height;
                     fb->data[i*4 + 2] = 180.0/255.0;
                     fb->data[i*4 + 3] = 1.0;
-#ifndef fancy_alpha_rendering
-                    break;
-#endif
                 }
             }
         }
