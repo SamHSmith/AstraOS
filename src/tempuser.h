@@ -60,8 +60,12 @@ typedef struct
     s64 x;
     s64 y;
     u64 consumer;
+    f64 creation_time;
+    u64 target_width;
     u64 width;
     u64 height;
+    u64 new_width;
+    u64 new_height;
     Framebuffer* fb;
     u64 fb_page_count;
     u8 we_have_frame;
@@ -72,6 +76,21 @@ f32 clamp_01(f32 f)
     if(f < 0.0) { f = 0.0; }
     else if(f > 1.0) { f = 1.0; }
     return f;
+}
+
+f32 botched_sin(f32 t)
+{
+    t /= 3.14;
+    s64 off = (s64)(t/2.0);
+    t -= (f32)(off*2);
+    if(t < 1.0)
+    {
+        return 1.0 - (2.0*t);
+    }
+    else
+    {
+        return (2.0*(t-1.0)) - 1.0;
+    }
 }
 
 void program_loader_program(u64 drive1_partitions_directory)
@@ -133,14 +152,14 @@ while(1) {
                     {
                         for(u64 i = 0; i < window_count; i++)
                         {
-                            windows[i].width += 10;
+                            windows[i].target_width += 10;
                         }
                     }
                     else if(scancode == 99)
                     {
                         for(u64 i = 0; i < window_count; i++)
                         {
-                            if(windows[i].width > 10) { windows[i].width -= 10; }
+                            if(windows[i].target_width > 50) { windows[i].target_width -= 10; }
                         }
                     }
 
@@ -157,12 +176,16 @@ while(1) {
                                 windows[window_count].x = 20 + window_count*7;
                                 windows[window_count].y = 39*window_count;
                                 if(windows[window_count].y > 400) { windows[window_count].y = 400; }
-                                windows[window_count].width = 100;
-                                windows[window_count].height = 100;
+                                windows[window_count].new_width = 100;
+                                windows[window_count].target_width = 100;
+                                windows[window_count].creation_time = user_time_get_seconds();
+                                windows[window_count].new_height = 100;
+                                windows[window_count].width = windows[window_count].new_width;
+                                windows[window_count].height = windows[window_count].new_height;
                                 user_surface_consumer_set_size(
                                     windows[window_count].consumer,
-                                    windows[window_count].width - 2*BORDER_SIZE,
-                                    windows[window_count].height - 2*BORDER_SIZE
+                                    windows[window_count].new_width - 2*BORDER_SIZE,
+                                    windows[window_count].new_height - 2*BORDER_SIZE
                                 );
                                 windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                                 windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
@@ -186,6 +209,9 @@ while(1) {
         {
             for(u64 i = 0; i < window_count; i++)
             {
+                windows[i].new_width = (s64)windows[i].target_width +
+                    (s64)(35.0 * botched_sin((time_frame_start - windows[i].creation_time)*8));
+
                 if(user_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
                 {
                     // allocate address space
@@ -199,11 +225,6 @@ while(1) {
                         windows[i].we_have_frame = 1;
                     }
                 }
-                user_surface_consumer_set_size(
-                    windows[i].consumer,
-                    windows[i].width  -2*BORDER_SIZE,
-                    windows[i].height -2*BORDER_SIZE
-                );
             }
         }
 
@@ -343,6 +364,19 @@ while(1) {
             }
         }
         assert(user_surface_commit(0), "commited successfully");
+
+        { // prepare consumers for the next frame
+            for(u64 i = 0; i < window_count; i++)
+            {
+                user_surface_consumer_set_size(
+                    windows[i].consumer,
+                    windows[i].new_width  -2*BORDER_SIZE,
+                    windows[i].new_height -2*BORDER_SIZE
+                );
+                windows[i].width = windows[i].new_width;
+                windows[i].height = windows[i].new_height;
+            }
+        }
     }
 }
 }
