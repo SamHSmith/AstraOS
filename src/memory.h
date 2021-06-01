@@ -216,7 +216,14 @@ u64 mmu_is_entry_leaf(u64 entry)
 {
     return (entry & 0xe) != 0;
 }
- 
+
+u64* create_mmu_table()
+{
+    u64* page = (u64)kalloc_single_page();
+    for(u64 i = 0; i < 512; i++) { page[i] = 0; }
+    return page;
+}
+
 void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
 {
 
@@ -236,8 +243,9 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
     {
         if(!mmu_is_entry_valid(*v))
         {
-            u64 page = (u64)kalloc_single_page();
-            *v = (page >> 2) | 1;
+            u64* page = (u64)kalloc_single_page();
+            for(u64 i = 0; i < 512; i++) { page[i] = 0; }
+            *v = ((u64)page >> 2) | 1;
         }
         u64* entry = (u64*)((*v & (~0x3ff)) << 2);
         v = entry + vpn[i];

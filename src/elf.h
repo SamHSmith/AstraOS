@@ -105,15 +105,22 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret)
 
     u32 thread1 = process_thread_create(pid);
     proc->threads[thread1].stack_alloc = kalloc_pages(8);
-    proc->threads[thread1].frame.regs[2] = U64_MAX & (~(0xffff << 50)) & (~0xfff);
+    proc->threads[thread1].frame.regs[8] = U64_MAX & (~(0xffff << 50)) & (~0xfff); // frame pointer
+    proc->threads[thread1].frame.regs[2] = proc->threads[thread1].frame.regs[8] - 4 * sizeof(u64);
     u64 stack_start =
-        proc->threads[thread1].frame.regs[2] - (PAGE_SIZE * proc->threads[thread1].stack_alloc.page_count);
+        proc->threads[thread1].frame.regs[8] - (PAGE_SIZE * proc->threads[thread1].stack_alloc.page_count);
+    proc->threads[thread1].frame.regs[8] = proc->threads[thread1].frame.regs[8] - 2 * sizeof(u64);
     mmu_map_kallocation(
         proc->mmu_table,
         proc->threads[thread1].stack_alloc,
         stack_start,
         2 + 4
     );
+    { // Mark end of stack for stacktrace
+        u64* frame = (u64)proc->threads[thread1].stack_alloc.memory +
+                        proc->threads[thread1].stack_alloc.page_count * PAGE_SIZE;
+        *(frame-2) = 0;
+    }
 
     mmu_kernel_map_range(proc->mmu_table, 0x10000000, 0x10000000, 2 + 4); // UART
 

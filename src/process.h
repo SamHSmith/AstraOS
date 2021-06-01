@@ -68,7 +68,7 @@ u64 process_create()
     memset(process, 0, sizeof(Process));
     process->proc_alloc = _proc;
 
-    process->mmu_table = (u64*)kalloc_single_page();
+    process->mmu_table = create_mmu_table();
     for(u64 i = 0; i < 512; i++) { process->mmu_table[i] = 0; }
 
     for(u64 i = 0; i < KERNEL_PROCESS_ARRAY_LEN; i++)

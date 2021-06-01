@@ -8,6 +8,23 @@ void _putchar(char c)
     uart_write(&c, 1);
 }
 
+void print_stacktrace(u64 start_frame, u64 program_counter, u64 return_address)
+{
+    u64* fp = start_frame;
+    u64* ra = return_address;
+    printf("Stacktrace:\n");
+    printf("0x%llx\n", program_counter);
+    printf("0x%llx\n", return_address - 4);
+    if(fp < 0x80000000 || fp > 0x10000000000) { return; }
+    for(u64 i = 0; i < 128; i++)
+    {
+        ra = ((u64)*(fp-1)) - 4;
+        fp = *(fp-2);
+        if(fp < 0x80000000 || fp > 0x10000000000) { break; }
+        printf("0x%llx\n", ra);
+    }
+}
+
 void assert(u64 stat, char* error)
 {
     if(!stat)
@@ -15,6 +32,7 @@ void assert(u64 stat, char* error)
         printf("assertion failed: \"");
         printf(error);
         printf("\"\n");
+        print_stacktrace(read_fp_register(), read_pc_register(), read_ra_register());
         u8 freeze = 1;
         while(freeze) {};
     }
@@ -72,7 +90,6 @@ void kmain()
 {
     printf("done.\n    Successfully entered kmain with supervisor mode enabled.\n\n");
     uart_write_string("Hello there, welcome to the ROS operating system\nYou have no idea the pain I went through to make these characters you type appear on screen\n\n");
-
 
     /* TESTING */
     u64 dir_id = kernel_directory_create_imaginary("Über directory");
@@ -222,7 +239,10 @@ void trap_hang_kernel(
     printf(" fregs:\n");
     for(u64 i = 0; i < 32; i++) { printf("  f%lld: %llx\n", i, frame->fregs[i]); }
     printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
-    printf("Kernel has hung.");
+    printf("Kernel has hung.\n");
+    u64 ptr = frame->regs[8];
+    u64 r = mmu_virt_to_phys(frame->satp << 12, ptr, (u64*)&ptr);
+    print_stacktrace(ptr, epc, frame->regs[1]);
     while(1) {}
 }
 
