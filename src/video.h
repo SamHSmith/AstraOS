@@ -284,9 +284,9 @@ u64 surface_consumer_fetch(u64 pid, u64 consumer_slot, Framebuffer* fb_location,
     { return 0; }
 
     if(fb_location && page_count == 0)
-    { return surface_has_commited(*s); }
+    { return s->has_commited; }
 
-    if(!surface_has_commited(*s))
+    if(!s->has_commited)
     { return 0; }
 
     if(page_count == 0 && !fb_location)
