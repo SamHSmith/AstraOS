@@ -509,6 +509,17 @@ void syscall_surface_consumer_create(Thread** current_thread)
     return;
 }
 
+void syscall_surface_consumer_fire(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
+    u64 consumer_slot = frame->regs[11];
+
+    frame->regs[10] = surface_consumer_fire(t->process_pid, consumer_slot);
+    t->program_counter += 4;
+    return;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -550,6 +561,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_create_process_from_file(current_thread); }
     else if(call_num == 27)
     { syscall_surface_consumer_create(current_thread); }
+    else if(call_num == 28)
+    { syscall_surface_consumer_fire(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

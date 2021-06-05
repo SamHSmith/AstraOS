@@ -62,7 +62,8 @@ u64 AOS_directory_add_file(u64 dir_id, u64 file_id); // not done
 u64 AOS_create_process_from_file(u64 file_id, u64* pid);
  
 u64 AOS_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer);
- 
+u64 AOS_surface_consumer_fire(u64 consumer_slot);
+
 // give file to proccess
 // give directory to proccess
  

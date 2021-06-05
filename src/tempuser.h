@@ -41,6 +41,7 @@ u64 user_directory_add_file(u64 dir_id, u64 file_id); // not done
 u64 user_create_process_from_file(u64 file_id, u64* pid);
 
 u64 user_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer);
+u64 user_surface_consumer_fire(u64 consumer_slot);
 
 // give file to proccess
 // give directory to proccess
@@ -113,8 +114,44 @@ void program_loader_program(u64 drive1_partitions_directory)
     u64 window_count = 0;
 
 while(1) {
+
+    // Set up consumers
+    {
+        for(u64 i = 0; i < window_count; i++)
+        {
+            windows[i].width = windows[i].new_width;
+            windows[i].height = windows[i].new_height;
+            user_surface_consumer_set_size(
+                windows[i].consumer,
+                windows[i].width  -2*BORDER_SIZE,
+                windows[i].height -2*BORDER_SIZE
+            );
+            user_surface_consumer_fire(windows[i].consumer);
+        }
+    }
+
     u64 user_wait_surface = 0;
     user_wait_for_surface_draw(&user_wait_surface, 1);
+
+    // Fetch from consumers
+    {
+        for(u64 i = 0; i < window_count; i++)
+        {
+            if(user_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
+            {
+                // allocate address space
+                windows[i].fb_page_count = user_surface_consumer_fetch(windows[i].consumer, 0, 0);
+                if(user_surface_consumer_fetch(
+                    windows[i].consumer,
+                    windows[i].fb,
+                    windows[i].fb_page_count
+                ))
+                {
+                    windows[i].we_have_frame = 1;
+                }
+            }
+        }
+    }
 
     Framebuffer* fb = 0x54000;
     u64 fb_page_count = user_surface_acquire(0, 0, 0);
@@ -159,7 +196,7 @@ while(1) {
                     {
                         for(u64 i = 0; i < window_count; i++)
                         {
-                            if(windows[i].target_width > 90) { windows[i].target_width -= 10; }
+                            if(windows[i].target_width > 2*BORDER_SIZE) { windows[i].target_width -= 10; }
                         }
                     }
 
@@ -176,17 +213,12 @@ while(1) {
                                 windows[window_count].x = 20 + window_count*7;
                                 windows[window_count].y = 49*window_count;
                                 if(windows[window_count].y > 1000) { windows[window_count].y = 1000; }
-                                windows[window_count].new_width = 100;
-                                windows[window_count].target_width = 100;
+                                windows[window_count].width = 0;
+                                windows[window_count].height = 0;
+                                windows[window_count].new_width = 1;
+                                windows[window_count].new_height = 1;
+                                windows[window_count].target_width = 2*BORDER_SIZE;
                                 windows[window_count].creation_time = user_time_get_seconds();
-                                windows[window_count].new_height = 100;
-                                windows[window_count].width = windows[window_count].new_width;
-                                windows[window_count].height = windows[window_count].new_height;
-                                user_surface_consumer_set_size(
-                                    windows[window_count].consumer,
-                                    windows[window_count].new_width - 2*BORDER_SIZE,
-                                    windows[window_count].new_height - 2*BORDER_SIZE
-                                );
                                 windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                                 windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
                                 windows[window_count].we_have_frame = 0;
@@ -205,27 +237,11 @@ while(1) {
             }
         } while(more);
 
-        // Fetch from consumers
+        for(u64 i = 0; i < window_count; i++)
         {
-            for(u64 i = 0; i < window_count; i++)
-            {
-                windows[i].new_width = (s64)windows[i].target_width +
-                    (s64)(75.0 * botched_sin((time_frame_start - windows[i].creation_time)));
-
-                if(user_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
-                {
-                    // allocate address space
-                    windows[i].fb_page_count = user_surface_consumer_fetch(windows[i].consumer, 0, 0);
-                    if(user_surface_consumer_fetch(
-                        windows[i].consumer,
-                        windows[i].fb,
-                        windows[i].fb_page_count
-                    ))
-                    {
-                        windows[i].we_have_frame = 1;
-                    }
-                }
-            }
+            windows[i].new_width = (s64)windows[i].target_width +
+                (s64)(125.0 * (1.0+botched_sin((time_frame_start - windows[i].creation_time))));
+            windows[i].new_height = 70;
         }
 
         u64 column_count = (fb->width / 8);
@@ -368,19 +384,6 @@ while(1) {
             }
         }
         assert(user_surface_commit(0), "commited successfully");
-
-        { // prepare consumers for the next frame
-            for(u64 i = 0; i < window_count; i++)
-            {
-                user_surface_consumer_set_size(
-                    windows[i].consumer,
-                    windows[i].new_width  -2*BORDER_SIZE,
-                    windows[i].new_height -2*BORDER_SIZE
-                );
-                windows[i].width = windows[i].new_width;
-                windows[i].height = windows[i].new_height;
-            }
-        }
     }
 }
 }

@@ -29,6 +29,7 @@ typedef struct
     volatile Framebuffer* fb_present;
     volatile Framebuffer* fb_draw;
     u8 has_commited;
+    u8 has_been_fired;
 
     u64 consumer_pid;
     u64 consumer_slot;
@@ -50,6 +51,9 @@ typedef struct
     u64 surface_slot;
     u8 has_surface;
     u8 is_initialized;
+
+    u32 not_yet_fired_width;
+    u32 not_yet_fired_height;
 
     volatile Framebuffer* fb_fetched;
     Framebuffer fb_fetched_control;
@@ -96,6 +100,8 @@ u64 surface_create(Process* p)
     s->surface.fb_present = framebuffer_create(0, 0);
     s->surface.fb_draw = framebuffer_create(0, 0);
     s->surface.is_initialized = 1;
+    s->surface.has_commited = 0;
+    s->surface.has_been_fired = 0;
     s->surface.has_consumer = 0;
     s->has_acquired = 0;
     return p->surface_count - 1;
@@ -184,12 +190,14 @@ u64 surface_acquire(u64 surface_slot, Framebuffer* fb_location, Process* process
 {
     SurfaceSlot* s = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot;
 
-    if(surface_slot >= process->surface_count || surface_has_commited(s->surface)) { return 0; }
+    if(surface_slot >= process->surface_count || surface_has_commited(s->surface) ||
+        !s->surface.has_been_fired) { return 0; }
 
     s->fb_draw_control = *s->surface.fb_draw;
     if(process_alloc_pages(process, fb_location, s->surface.fb_draw->alloc))
     {
         s->has_acquired = 1;
+        s->surface.has_been_fired = 0;
         s->vaddr = fb_location;
         return 1;
     }
@@ -263,8 +271,20 @@ u64 surface_consumer_set_size(u64 pid, u64 consumer_slot, u32 width, u32 height)
     if(!get_consumer_and_surface(pid, consumer_slot, &con, &s))
     { return 0; }
 
-    s->width = width;
-    s->height = height;
+    con->not_yet_fired_width = width;
+    con->not_yet_fired_height = height;
+    return 1;
+}
+
+u64 surface_consumer_fire(u64 pid, u64 consumer_slot)
+{
+    SurfaceConsumer* con; Surface* s;
+    if(!get_consumer_and_surface(pid, consumer_slot, &con, &s))
+    { return 0; }
+
+    s->width = con->not_yet_fired_width;
+    s->height = con->not_yet_fired_height;
+    s->has_been_fired = 1;
     return 1;
 }
 

@@ -317,6 +317,7 @@ u64 m_trap(
 
                 frame_has_been_requested = 0;
             }
+            surface->has_been_fired = 1;
 
 
             // Reset the Machine Timer

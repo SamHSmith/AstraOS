@@ -169,3 +169,9 @@ user_surface_consumer_create:
     ecall
     ret
 
+.global user_surface_consumer_fire
+user_surface_consumer_fire:
+    mv a1, a0
+    addi a0, x0, 28
+    ecall
+    ret

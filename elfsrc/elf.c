@@ -1,6 +1,11 @@
 #include "../userland/aos_syscalls.h"
 
 #include "../src/uart.h"
+#include "../src/printf.h"
+void _putchar(char c)
+{
+    uart_write(&c, 1);
+}
 
 u64 strlen(char* str)
 {
@@ -11,12 +16,7 @@ u64 strlen(char* str)
 
 void _start()
 {
-/*    char* dave = "Hi I'm dave and I live in an elf file on a partition on the RADICAL PARTITION SYSTEM\n";
-    for(u64 i = 0; i < 3; i++)
-    {
-        uart_write(dave, strlen(dave));
-        AOS_thread_sleep(490000);
-    } */
+    printf("Hi I'm dave and I live in an elf file on a partition on the RADICAL PARTITION SYSTEM\n");
 
     double start_time = AOS_time_get_seconds();
 
@@ -24,7 +24,6 @@ while(1)
 {
     u64 surface = 0;
     AOS_wait_for_surface_draw(&surface, 1);
-//AOS_thread_sleep(5000000);
 
     AOS_Framebuffer* fb = 0x424242000; // the three zeroes alignes it to the page boundry
     u64 fb_page_count = AOS_surface_acquire(surface, 0, 0);
@@ -50,7 +49,6 @@ while(1)
             fb->data[i*4 + 2] = blue;
             fb->data[i*4 + 3] = 0.6;
         }
-
         AOS_surface_commit(surface);
     }
 }
