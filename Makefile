@@ -8,14 +8,14 @@ QEMU=./qemu/build/qemu-system-riscv64
 
 QEMU_FLAGS=-machine virt -cpu rv64 -smp 4 -m 512M -serial pipe:./pipe -bios none -kernel kernel.bin -display sdl
 
-SOURCES=$(wildcard src/*.s) $(wildcard src/*.c) src/cyclone_crypto/hash/sha512.c src/cyclone_crypto/common/cpu_endian.c
+SOURCES=$(wildcard src/*.s) $(wildcard src/*.c) src/cyclone_crypto/hash/sha512.c src/cyclone_crypto/common/cpu_endian.c userland/aos_syscalls.s
 
 kernel.bin: virt.lds
 	riscv64-unknown-elf-gcc $(CFLAGS) $(LDFLAGS) -T $< -o $@ $(SOURCES)
 
 ELFSOURCES= elfsrc/elf.c userland/aos_syscalls.s src/printf.c
 
-elf: elfsrc/elf.c src/user.s
+elf: elfsrc/elf.c
 	riscv64-unknown-elf-gcc $(CFLAGS) -o $@ $(ELFSOURCES)
 
 run: clean kernel.bin

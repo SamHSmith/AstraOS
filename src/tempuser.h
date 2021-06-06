@@ -1,53 +1,4 @@
-// to be user code
-
-u64 user_surface_commit(u64 surface_slot);
-u64 user_surface_acquire(u64 surface_slot, Framebuffer* fb, u64 page_count);
-
-void user_thread_sleep(u64 duration);
-void user_wait_for_surface_draw(u64* surface_slots, u64 count);
-
-u64 user_get_rawmouse_events(volatile RawMouseEvent* buf, u64 len);
-u64 user_get_keyboard_events(volatile KeyboardEvent* buf, u64 len);
-
-u64 user_switch_vo(u64 vo_id);
-u64 user_get_vo_id(u64* vo_id);
-
-u64 user_alloc_pages(void* vaddr, u64 page_count);
-u64 user_shrink_allocation(void* vaddr, u64 new_page_count);
-
-u64 user_surface_consumer_has_commited(u64 consumer_slot);
-u64 user_surface_consumer_get_size(u64 consumer_slot, u32* width, u32* height);
-u64 user_surface_consumer_set_size(u64 consumer_slot, u32 width, u32 height);
-u64 user_surface_consumer_fetch(u64 consumer_slot, Framebuffer* fb, u64 page_count);
-
-f64 user_time_get_seconds();
-
-u64 user_is_valid_file_id(u64 file_id);
-u64 user_is_valid_dir_id(u64 directory_id);
-
-u64 user_file_get_name(u64 file_id, u8* buf, u64 buf_size);
-u64 user_file_git_size(u64 file_id); // not done
-u64 user_file_get_block_count(u64 file_id); // not done
-u64 user_file_set_size(u64 file_id, u64 new_size); // not done
-u64 user_file_read_blocks(u64 file_id, u64* op_array, u64 op_count); // not done
-u64 user_file_write_blocks(u64 file_id, u64* op_array, u64 op_count); // not done
-
-u64 user_directory_get_name(u64 dir_id, u8* buf, u64 buf_size); // not done
-u64 user_directory_get_subdirectories(u64 dir_id, u64* buf, u64 buf_size); // not done
-u64 user_directory_get_files(u64 dir_id, u64* buf, u64 buf_size);
-u64 user_directory_add_subdirectory(u64 dir_id, u64 subdirectory); // not done
-u64 user_directory_add_file(u64 dir_id, u64 file_id); // not done
-
-u64 user_create_process_from_file(u64 file_id, u64* pid);
-
-u64 user_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer);
-u64 user_surface_consumer_fire(u64 consumer_slot);
-
-// give file to proccess
-// give directory to proccess
-
-// create file
-// create directory
+#include "../userland/aos_syscalls.h"
 
 #include "samorak.h"
 //#include "qwerty.h"
@@ -96,17 +47,17 @@ f32 botched_sin(f32 t)
 
 void program_loader_program(u64 drive1_partitions_directory)
 {
-    u64 slot_count = user_directory_get_files(drive1_partitions_directory, 0, 0);
+    u64 slot_count = AOS_directory_get_files(drive1_partitions_directory, 0, 0);
     u64 partitions[slot_count];
     u8 partition_names[slot_count][64];
     u64 partition_name_lens[slot_count];
-    slot_count = user_directory_get_files(drive1_partitions_directory, partitions, slot_count);
+    slot_count = AOS_directory_get_files(drive1_partitions_directory, partitions, slot_count);
     for(u64 i = 0; i < slot_count; i++)
     {
         partition_names[i][0] = 0;
-        user_file_get_name(partitions[i], partition_names[i], 64);
+        AOS_file_get_name(partitions[i], partition_names[i], 64);
         partition_name_lens[i] = strlen(partition_names[i]);
-        printf("tempuser has found %s\n", partition_names[i]);
+        printf("tempAOS has found %s\n", partition_names[i]);
     }
     u64 slot_index = 0;
 
@@ -140,27 +91,27 @@ while(1) {
 
             windows[i].width = windows[i].new_width;
             windows[i].height = windows[i].new_height;
-            user_surface_consumer_set_size(
+            AOS_surface_consumer_set_size(
                 windows[i].consumer,
                 windows[i].width  -2*BORDER_SIZE,
                 windows[i].height -2*BORDER_SIZE
             );
-            user_surface_consumer_fire(windows[i].consumer);
+            AOS_surface_consumer_fire(windows[i].consumer);
         }
     }
 
-    u64 user_wait_surface = 0;
-    user_wait_for_surface_draw(&user_wait_surface, 1);
+    u64 AOS_wait_surface = 0;
+    AOS_wait_for_surface_draw(&AOS_wait_surface, 1);
 
     // Fetch from consumers
     {
         for(u64 i = 0; i < window_count; i++)
         {
-            if(user_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
+            if(AOS_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
             {
                 // allocate address space
-                windows[i].fb_page_count = user_surface_consumer_fetch(windows[i].consumer, 0, 0);
-                if(user_surface_consumer_fetch(
+                windows[i].fb_page_count = AOS_surface_consumer_fetch(windows[i].consumer, 0, 0);
+                if(AOS_surface_consumer_fetch(
                     windows[i].consumer,
                     windows[i].fb,
                     windows[i].fb_page_count
@@ -173,15 +124,15 @@ while(1) {
     }
 
     Framebuffer* fb = 0x54000;
-    u64 fb_page_count = user_surface_acquire(0, 0, 0);
-    if(user_surface_acquire(0, fb, fb_page_count))
+    u64 fb_page_count = AOS_surface_acquire(0, 0, 0);
+    if(AOS_surface_acquire(0, fb, fb_page_count))
     {
-        double time_frame_start = user_time_get_seconds();
+        double time_frame_start = AOS_time_get_seconds();
 
         { // Mouse events
-            u64 mouse_event_count = user_get_rawmouse_events(0, 0);
+            u64 mouse_event_count = AOS_get_rawmouse_events(0, 0);
             RawMouseEvent mouse_events[mouse_event_count];
-            mouse_event_count = user_get_rawmouse_events(mouse_events, mouse_event_count);
+            mouse_event_count = AOS_get_rawmouse_events(mouse_events, mouse_event_count);
             for(u64 i = 0; i < mouse_event_count; i++)
             {
                 new_cursor_x += mouse_events[i].delta_x;
@@ -223,12 +174,12 @@ while(1) {
         }
 
         { // Keyboard events
-        u64 kbd_event_count = user_get_keyboard_events(0, 0);
+        u64 kbd_event_count = AOS_get_keyboard_events(0, 0);
         KeyboardEvent kbd_events[kbd_event_count];
         u64 more = 0;
         do {
             more = 0;
-            kbd_event_count = user_get_keyboard_events(kbd_events, kbd_event_count);
+            kbd_event_count = AOS_get_keyboard_events(kbd_events, kbd_event_count);
             for(u64 i = 0; i < kbd_event_count; i++)
             {
                 if(kbd_events[i].event == KEYBOARD_EVENT_NOTHING)
@@ -242,7 +193,7 @@ while(1) {
                     if(scancode >= 62 && scancode <= 71)
                     {
                         u64 fkey = scancode - 62;
-                        user_switch_vo(fkey);
+                        AOS_switch_vo(fkey);
                     }
 
                     if(scancode == 100 && slot_index > 0)
@@ -267,11 +218,11 @@ while(1) {
                     if(scancode == 35 && slot_index < slot_count && window_count + 1 < 256)
                     {
                         u64 pid = 0;
-                        if(user_create_process_from_file(partitions[slot_index], &pid))
+                        if(AOS_create_process_from_file(partitions[slot_index], &pid))
                         {
                             printf("PROCESS CREATED, PID=%llu\n", pid);
                             u64 con = 0;
-                            if(user_surface_consumer_create(pid, &con))
+                            if(AOS_surface_consumer_create(pid, &con))
                             {
                                 windows[window_count].consumer = con;
                                 windows[window_count].x = 20 + window_count*7;
@@ -282,7 +233,7 @@ while(1) {
                                 windows[window_count].new_width = 1;
                                 windows[window_count].new_height = 1;
                                 windows[window_count].target_width = 2*BORDER_SIZE;
-                                windows[window_count].creation_time = user_time_get_seconds();
+                                windows[window_count].creation_time = AOS_time_get_seconds();
                                 windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                                 windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
                                 windows[window_count].we_have_frame = 0;
@@ -322,7 +273,7 @@ while(1) {
         u8 bottom_banner[256];
         bottom_banner[0] = 0;
         u64 cvo = 0;
-        if(user_get_vo_id(&cvo))
+        if(AOS_get_vo_id(&cvo))
         {
             sprintf(bottom_banner, "Virtual Output #%llu", cvo);
         }
@@ -459,7 +410,7 @@ while(1) {
             }
         }
 
-        double time_frame_end = user_time_get_seconds();
+        double time_frame_end = AOS_time_get_seconds();
         double frame_time = (time_frame_end-time_frame_start) *1000.0;
         u8 frame_counter_string[16];
         sprintf(frame_counter_string, "%4.4lf ms", frame_time);
@@ -478,7 +429,7 @@ while(1) {
                 fb->data[i*4 + 3] = 1.0;
             }
         }
-        assert(user_surface_commit(0), "commited successfully");
+        assert(AOS_surface_commit(0), "commited successfully");
     }
 }
 }
