@@ -65,12 +65,22 @@ typedef struct
     OakPacket base;
     s32 delta_x;
     s32 delta_y;
+    u8 button;
+    u8 pressed;
+    u8 released;
 } OakPacketMouse;
 
 void oak_recieve_mouse(OakPacketMouse* packet)
 {
-    RawMouse* mouse = &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->mouse;
-    new_mouse_input_delta(mouse, packet->delta_x, packet->delta_y);
+    RawMouseEventQueue* queue = &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->mouse_event_queue;
+    new_mouse_input(queue,
+        (f64)packet->delta_x,
+        (f64)packet->delta_y,
+        0.0,
+        packet->button,
+        packet->pressed,
+        packet->released
+    );
 }
 
 typedef struct

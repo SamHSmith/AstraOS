@@ -14,8 +14,18 @@ u64 AOS_surface_acquire(u64 surface_slot, AOS_Framebuffer* fb, u64 page_count);
  
 void AOS_thread_sleep(u64 duration);
 void AOS_wait_for_surface_draw(u64* surface_slots, u64 count);
- 
-//u64 AOS_get_raw_mouse(RawMouse* buf, u64 len);
+
+typedef struct
+{
+    f64 delta_x;
+    f64 delta_y;
+    f64 delta_z;
+    u32 buttons_down;
+    u8 button;
+    u8 pressed;
+    u8 released;
+} AOS_RawMouseEvent;
+u64 AOS_get_rawmouse_events(AOS_RawMouseEvent* buf, u64 len);
 
 typedef struct
 {

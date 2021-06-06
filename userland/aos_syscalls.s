@@ -31,8 +31,8 @@ AOS_wait_for_surface_draw:
     ecall
     ret
 
-.global AOS_get_raw_mouse
-AOS_get_raw_mouse:
+.global AOS_get_rawmouse_events
+AOS_get_rawmouse_events:
     mv a2, a1
     mv a1, a0
     addi a0, x0, 4

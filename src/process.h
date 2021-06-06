@@ -50,7 +50,7 @@ typedef struct
     u64 file_access_count;
 
     KeyboardEventQueue kbd_event_queue;
-    RawMouse mouse;
+    RawMouseEventQueue mouse_event_queue;
 
     u32 thread_count;
     u64 pid;

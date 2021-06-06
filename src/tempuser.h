@@ -6,8 +6,8 @@ u64 user_surface_acquire(u64 surface_slot, Framebuffer* fb, u64 page_count);
 void user_thread_sleep(u64 duration);
 void user_wait_for_surface_draw(u64* surface_slots, u64 count);
 
-u64 user_get_raw_mouse(RawMouse* buf, u64 len);
-u64 user_get_keyboard_events(KeyboardEvent* buf, u64 len);
+u64 user_get_rawmouse_events(volatile RawMouseEvent* buf, u64 len);
+u64 user_get_keyboard_events(volatile KeyboardEvent* buf, u64 len);
 
 u64 user_switch_vo(u64 vo_id);
 u64 user_get_vo_id(u64* vo_id);
@@ -113,12 +113,31 @@ void program_loader_program(u64 drive1_partitions_directory)
     Window windows[256];
     u64 window_count = 0;
 
+    f64 cursor_x = 0.0;
+    f64 cursor_y = 0.0;
+    f64 new_cursor_x = 0.0;
+    f64 new_cursor_y = 0.0;
+
+    u8 is_moving_window = 0;
+    f64 start_move_x = 0.0;
+    f64 start_move_y = 0.0;
+
 while(1) {
+
+    cursor_x = new_cursor_x;
+    cursor_y = new_cursor_y;
 
     // Set up consumers
     {
         for(u64 i = 0; i < window_count; i++)
         {
+            // do move, not related to consumers
+            if(is_moving_window && i + 1 == window_count)
+            {
+                windows[i].x = (s64)(cursor_x - start_move_x);
+                windows[i].y = (s64)(cursor_y - start_move_y);
+            }
+
             windows[i].width = windows[i].new_width;
             windows[i].height = windows[i].new_height;
             user_surface_consumer_set_size(
@@ -159,6 +178,51 @@ while(1) {
     {
         double time_frame_start = user_time_get_seconds();
 
+        { // Mouse events
+            u64 mouse_event_count = user_get_rawmouse_events(0, 0);
+            RawMouseEvent mouse_events[mouse_event_count];
+            mouse_event_count = user_get_rawmouse_events(mouse_events, mouse_event_count);
+            for(u64 i = 0; i < mouse_event_count; i++)
+            {
+                new_cursor_x += mouse_events[i].delta_x;
+                new_cursor_y += mouse_events[i].delta_y;
+
+                if(mouse_events[i].pressed && mouse_events[i].button == 0)
+                {
+                    u64 window = 0;
+                    u8 any_window = 0;
+                    for(s64 j = window_count-1; j >= 0; j--)
+                    {
+                        if( (s64)cursor_x >= windows[j].x &&
+                            (s64)cursor_y >= windows[j].y &&
+                            (s64)cursor_x < windows[j].x + (s64)windows[j].width &&
+                            (s64)cursor_y < windows[j].y + (s64)windows[j].height
+                        )
+                        {
+                            window = (u64)j;
+                            any_window = 1;
+                            break;
+                        }
+                    }
+                    if(any_window)
+                    {
+                        Window temp = windows[window];
+                        for(u64 j = window; j + 1 < window_count; j++)
+                        { windows[j] = windows[j+1]; }
+                        windows[window_count-1] = temp;
+                        is_moving_window = 1;
+                        start_move_x = cursor_x - (f64)temp.x;
+                        start_move_y = cursor_y - (f64)temp.y;
+                    }
+                }
+                else if(mouse_events[i].released && mouse_events[i].button == 0)
+                {
+                    is_moving_window = 0;
+                }
+            }
+        }
+
+        { // Keyboard events
         u64 kbd_event_count = user_get_keyboard_events(0, 0);
         KeyboardEvent kbd_events[kbd_event_count];
         u64 more = 0;
@@ -223,6 +287,13 @@ while(1) {
                                 windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
                                 windows[window_count].we_have_frame = 0;
                                 window_count++;
+
+                                if(is_moving_window)
+                                {
+                                    Window temp = windows[window_count-2];
+                                    windows[window_count-2] = windows[window_count-1];
+                                    windows[window_count-1] = temp;
+                                }
                             }
                             else { printf("Failed to create consumer for PID: %llu\n", pid); }
                         }
@@ -236,6 +307,7 @@ while(1) {
                 printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
             }
         } while(more);
+        }
 
         for(u64 i = 0; i < window_count; i++)
         {
@@ -361,6 +433,29 @@ while(1) {
                     fb->data[i*4 + 2] = 180.0/255.0;
                     fb->data[i*4 + 3] = 1.0;
                 }
+            }
+        }
+
+        { // draw cursor
+            if(cursor_x < 0.0) { cursor_x = 0.0; }
+            if(cursor_y < 0.0) { cursor_y = 0.0; }
+            if(cursor_x >= (f64)fb->width) { cursor_x = (f64)(fb->width - 1); }
+            if(cursor_y >= (f64)fb->height){ cursor_y = (f64)(fb->height -1); }
+            if(new_cursor_x < 0.0) { new_cursor_x = 0.0; }
+            if(new_cursor_y < 0.0) { new_cursor_y = 0.0; }
+            if(new_cursor_x >= (f64)fb->width) { new_cursor_x = (f64)(fb->width - 1); }
+            if(new_cursor_y >= (f64)fb->height){ new_cursor_y = (f64)(fb->height -1); }
+
+            for(u64 y = (u64)cursor_y; y < (u64)cursor_y + 3; y++)
+            for(u64 x = (u64)cursor_x; x < (u64)cursor_x + 3; x++)
+            {
+                if(x >= fb->width || y >= fb->height)
+                { continue; }
+                u64 i = x + (y * fb->width);
+                fb->data[i*4 + 0] = 1.0;
+                fb->data[i*4 + 1] = 1.0;
+                fb->data[i*4 + 2] = 1.0;
+                fb->data[i*4 + 3] = 1.0;
             }
         }
 

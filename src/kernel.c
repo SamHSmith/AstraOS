@@ -366,47 +366,7 @@ u64 m_trap(
             char character;
             while(plic_interrupt_next(&interrupt))
             {
-                if(interrupt == 10 && uart_read(&character, 1))
-                {
-                    if(character == 'a')
-                    {
-                        uart_write("new;;_;;frame", 13);
-
-                        u32 width, height;
-                        uart_read_blocking(&width, 4);
-                        uart_read_blocking(&height, 4);
-
-                        s32 mouse_data[3];
-                        uart_read_blocking(mouse_data, 3*4);
-                        RawMouse* mouse = &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->mouse;
-                        new_mouse_input_from_serial(mouse, mouse_data);
-
-                        for(u64 i = 0; i < (width * height) >> 3; i++)
-                        {
-                            u8 r=0;
-                            uart_write(&r, 1);
-                        }
-                    }
-                    else if(character == 'd') // Key down
-                    {
-                        u8 scode;
-                        uart_read_blocking(&scode, 1);
-                        KeyboardEventQueue* kbd_event_queue = 
-                            &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
-                        keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_PRESSED, scode);
-                    }
-                    else if(character == 'u') // Key up
-                    {
-                        u8 scode;
-                        uart_read_blocking(&scode, 1);
-                        KeyboardEventQueue* kbd_event_queue =
-                            &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
-                        keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_RELEASED, scode);
-                    }
-                    else {
-                        printf("you typed the character: %c\n", character);
-                    }
-                }
+                printf("you entered the character: %c over serial\n", character);
                 plic_interrupt_complete(interrupt);
             }
             if(kernel_current_thread != 0)

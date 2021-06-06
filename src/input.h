@@ -68,37 +68,45 @@ void keyboard_poll_events(KeyboardEventQueue* queue, KeyboardEvent* event)
 
 typedef struct
 {
-    f64 x;
-    f64 y;
-    f64 z;
-    u32 pressed;
-    u32 released;
-    u32 down;
-} RawMouse;
+    f64 delta_x;
+    f64 delta_y;
+    f64 delta_z;
+    u32 buttons_down;
+    u8 button;
+    u8 pressed;
+    u8 released;
+} RawMouseEvent;
 
-void new_mouse_input_from_serial(RawMouse* mouse, s32 mouse_data[3])
+#define RAWMOUSE_EVENT_QUEUE_LEN 511
+
+typedef struct
 {
-    mouse->x += (f64)mouse_data[0];
-    mouse->y += (f64)mouse_data[1];
+    u32 buttons_down;
+    u32 event_count;
+    RawMouseEvent events[RAWMOUSE_EVENT_QUEUE_LEN];
+} RawMouseEventQueue;
 
-    mouse->pressed |= (~mouse->down) & mouse_data[2];
-    mouse->released |= (~mouse_data[2]) & mouse->down;
-    mouse->down = mouse_data[2];
+void new_mouse_input(RawMouseEventQueue* queue, f64 dx, f64 dy, f64 dz, u8 button, u8 pressed, u8 released)
+{
+    if(queue->event_count + 1 >= RAWMOUSE_EVENT_QUEUE_LEN)
+    { return; }
+    RawMouseEvent* event = queue->events + queue->event_count;
+    queue->event_count++;
+
+    event->delta_x = dx;
+    event->delta_y = dy;
+    event->delta_z = dz;
+    event->buttons_down = queue->buttons_down;
+    if(pressed)
+    {
+        queue->buttons_down |= (u32)1 << button;
+    }
+    else if(released)
+    {
+        queue->buttons_down &= ~((u32)1 << button);
+    }
+    event->button = button;
+    event->pressed = pressed;
+    event->released = released;
 }
 
-void new_mouse_input_delta(RawMouse* mouse, s32 x, s32 y)
-{
-    mouse->x += (f64)x;
-    mouse->y += (f64)y;
-}
-
-RawMouse fetch_mouse_data(RawMouse* ptr)
-{
-    RawMouse ret = *ptr;
-    ptr->x = 0.0;
-    ptr->y = 0.0;
-    ptr->z = 0.0;
-    ptr->pressed = 0;
-    ptr->released = 0;
-    return ret;
-}

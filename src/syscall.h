@@ -117,8 +117,7 @@ void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
     t->program_counter += 4;
 }
 
-// Vulkan style call that gets all the mouse state and resets it.
-void syscall_get_raw_mouse(Thread** current_thread)
+void syscall_get_rawmouse_events(Thread** current_thread)
 {
     Thread* t = *current_thread;
     TrapFrame* frame = &t->frame;
@@ -127,22 +126,36 @@ void syscall_get_raw_mouse(Thread** current_thread)
     u64 user_buf = frame->regs[11];
     u64 len = frame->regs[12];
 
-    u64 mouse_count = 1;
+    // TODO: add multiple mouse support. Probably something we do after there is a test case
 
     if(user_buf != 0)
     {
-        RawMouse* buf;
-        assert(
-            mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf) == 0,
-            "you didn't do a memory bad"
-        );
-        if(len < mouse_count) { mouse_count = len; }
-        for(u64 i = 0; i < mouse_count; i++)
+        RawMouseEvent* buf;
+        if(mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf))
         {
-            buf[i] = fetch_mouse_data(&process->mouse); // in the future there will be more
+            frame->regs[10] = 0;
+            t->program_counter += 4;
+            return;
         }
+        if(len > process->mouse_event_queue.event_count)
+        { len = process->mouse_event_queue.event_count; }
+        for(u64 i = 0; i < len; i++)
+        {
+            buf[i] = process->mouse_event_queue.events[i];
+        }
+        u64 event_queue_len = process->mouse_event_queue.event_count;
+        for(u64 i = 0; i < event_queue_len - len; i++)
+        {
+            process->mouse_event_queue.events[i] = process->mouse_event_queue.events[i + len];
+        }
+        frame->regs[10] = process->mouse_event_queue.event_count;
+        process->mouse_event_queue.event_count -= len;
     }
-    frame->regs[10] = mouse_count;
+    else
+    {
+        frame->regs[10] = process->mouse_event_queue.event_count;
+    }
+
     t->program_counter += 4;
 }
 
@@ -532,7 +545,7 @@ void do_syscall(Thread** current_thread, u64 mtime)
     else if(call_num == 3)
     { syscall_wait_for_surface_draw(current_thread, mtime); }
     else if(call_num == 4)
-    { syscall_get_raw_mouse(current_thread); }
+    { syscall_get_rawmouse_events(current_thread); }
     else if(call_num == 5)
     { syscall_get_keyboard_events(current_thread); }
     else if(call_num == 6)
