@@ -307,17 +307,18 @@ u64 m_trap(
             {
                 recieve_oak_packet();
             }
-            if(frame_has_been_requested && surface_has_commited(*surface))
+            if(frame_has_been_requested &&
+                surface_slot_has_commited(KERNEL_PROCESS_ARRAY[vos[current_vo].pid], 0))
             {
-                Framebuffer* temp = framebuffer;
-                framebuffer = surface->fb_present;
-                surface->fb_present = temp;
-                surface->has_commited = 0;
+                framebuffer = surface_slot_swap_present_buffer(
+                                KERNEL_PROCESS_ARRAY[vos[current_vo].pid],
+                                0,
+                                framebuffer
+                );
                 oak_send_video(framebuffer);
 
                 frame_has_been_requested = 0;
             }
-            surface->has_been_fired = 1;
 
 
             // Reset the Machine Timer

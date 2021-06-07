@@ -74,6 +74,9 @@ u64 AOS_create_process_from_file(u64 file_id, volatile u64* pid);
 u64 AOS_surface_consumer_create(u64 foriegn_pid, volatile u64* surface_consumer);
 u64 AOS_surface_consumer_fire(u64 consumer_slot);
 
+u64 AOS_surface_forward_to_consumer(u64 surface_slot, u64 consumer_slot);
+u64 AOS_surface_stop_forwarding_to_consumer(u64 surface_slot);
+
 // give file to proccess
 // give directory to proccess
  

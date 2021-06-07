@@ -96,9 +96,7 @@ void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
 
     for(u64 i = 0; i < surface_slot_count; i++)
     {
-        SurfaceSlot* slot=
-            ((SurfaceSlot*)KERNEL_PROCESS_ARRAY[t->process_pid]->surface_alloc.memory) + surface_slot_array[i];
-        if(!surface_has_commited(slot->surface))
+        if(!surface_slot_has_commited(process, surface_slot_array[i]))
         { should_sleep = 0; }
     }
 
@@ -148,7 +146,7 @@ void syscall_get_rawmouse_events(Thread** current_thread)
         {
             process->mouse_event_queue.events[i] = process->mouse_event_queue.events[i + len];
         }
-        frame->regs[10] = process->mouse_event_queue.event_count;
+        frame->regs[10] = len;
         process->mouse_event_queue.event_count -= len;
     }
     else
@@ -288,7 +286,6 @@ void syscall_shrink_allocation(Thread** current_thread)
         ret = 1;
     }
 
-printf("proc allocs count : %llu\n", process->allocations_count);
     frame->regs[10] = ret;
     t->program_counter += 4;
 }
@@ -530,7 +527,49 @@ void syscall_surface_consumer_fire(Thread** current_thread)
 
     frame->regs[10] = surface_consumer_fire(t->process_pid, consumer_slot);
     t->program_counter += 4;
-    return;
+}
+
+void syscall_surface_forward_to_consumer(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 surface_slot =  frame->regs[11];
+    u64 consumer_slot = frame->regs[12];
+
+    SurfaceSlot* slot = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot;
+    SurfaceConsumer* con = ((SurfaceConsumer*)process->surface_consumer_alloc.memory) + consumer_slot;
+
+    u64 ret = 0;
+    if(surface_slot < process->surface_count && slot->surface.is_initialized &&
+        consumer_slot < process->surface_consumer_count && con->is_initialized)
+    {
+        slot->is_defering_to_consumer_slot = 1;
+        slot->defer_consumer_slot = consumer_slot;
+        ret = 1;
+    }
+    frame->regs[10] = ret;
+    t->program_counter += 4;
+}
+
+void syscall_surface_stop_forwarding_to_consumer(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 surface_slot =  frame->regs[11];
+ 
+    SurfaceSlot* slot = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot;
+    u64 ret = 0;
+    if(surface_slot < process->surface_count && slot->surface.is_initialized)
+    {
+        slot->is_defering_to_consumer_slot = 0;
+        slot->surface.has_commited = 0;
+        slot->surface.has_been_fired = 1;
+        ret = 1;
+    }
+    frame->regs[10] = ret;
+    t->program_counter += 4;
 }
 
 void do_syscall(Thread** current_thread, u64 mtime)
@@ -576,6 +615,10 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_surface_consumer_create(current_thread); }
     else if(call_num == 28)
     { syscall_surface_consumer_fire(current_thread); }
+    else if(call_num == 29)
+    { syscall_surface_forward_to_consumer(current_thread); }
+    else if(call_num == 30)
+    { syscall_surface_stop_forwarding_to_consumer(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

@@ -176,3 +176,17 @@ AOS_surface_consumer_fire:
     ecall
     ret
 
+.global AOS_surface_forward_to_consumer
+AOS_surface_forward_to_consumer:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 29
+    ecall
+    ret
+
+.global AOS_surface_stop_forwarding_to_consumer
+AOS_surface_stop_forwarding_to_consumer:
+    mv a1, a0
+    addi a0, x0, 30
+    ecall
+    ret

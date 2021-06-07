@@ -92,8 +92,10 @@ typedef struct
 
 void oak_recieve_video_out_request(OakPacketVideoOutRequest* packet)
 {
-    Surface* surface = &((SurfaceSlot*)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]
-                       ->surface_alloc.memory)->surface;
+    Process* process = KERNEL_PROCESS_ARRAY[vos[current_vo].pid];
+    SurfaceSlot* surface_slot_array =
+        (SurfaceSlot*)process->surface_alloc.memory;
+    Surface* surface = &surface_slot_array[0].surface;
 
     surface->width = packet->width;
     surface->height = packet->height;
@@ -105,6 +107,7 @@ void oak_recieve_video_out_request(OakPacketVideoOutRequest* packet)
         kfree_pages(framebuffer->alloc);
         framebuffer = framebuffer_create(packet->width, packet->height);
     }
+    surface_slot_fire(process, 0);
     frame_has_been_requested = 1;
 }
 

@@ -42,6 +42,10 @@ typedef struct
     u64 vaddr;
     u8 has_acquired;
     Framebuffer fb_draw_control;
+
+    u8 is_defering_to_consumer_slot;
+    u64 defer_consumer_slot;
+
     Surface surface;
 } SurfaceSlot;
 
@@ -103,6 +107,7 @@ u64 surface_create(Process* p)
     s->surface.has_commited = 0;
     s->surface.has_been_fired = 0;
     s->surface.has_consumer = 0;
+    s->is_defering_to_consumer_slot = 0;
     s->has_acquired = 0;
     return p->surface_count - 1;
 }
@@ -166,10 +171,42 @@ u64 surface_consumer_create(Process* process, Process* surface_process, u64* con
     return 1;
 }
 
-u64 surface_has_commited(Surface s)
+u64 surface_slot_has_commited(Process* process, u64 surface_slot)
 {
-    return s.width == 0 || s.height == 0 ||
-        (s.has_commited && s.fb_present->width == s.width && s.fb_present->height == s.height);
+    SurfaceSlot* surface_slot_array = (SurfaceSlot*)process->surface_alloc.memory;
+    assert(surface_slot < process->surface_count && surface_slot_array[surface_slot].surface.is_initialized,
+        "this is a valid surface slot");
+ 
+    SurfaceSlot* slot = surface_slot_array + surface_slot;
+ 
+    SurfaceConsumer* consumer_array = (SurfaceConsumer*)process->surface_consumer_alloc.memory;
+    if( slot->is_defering_to_consumer_slot && slot->defer_consumer_slot < process->surface_consumer_count &&
+        consumer_array[slot->defer_consumer_slot].is_initialized &&
+        consumer_array[slot->defer_consumer_slot].has_surface &&
+        consumer_array[slot->defer_consumer_slot].surface_pid < KERNEL_PROCESS_ARRAY_LEN)
+    {
+        Process* process2 = KERNEL_PROCESS_ARRAY[consumer_array[slot->defer_consumer_slot].surface_pid];
+        if( process2->mmu_table &&
+            consumer_array[slot->defer_consumer_slot].surface_slot < process2->surface_count)
+        {
+            SurfaceSlot* slot2 = ((SurfaceSlot*)process2->surface_alloc.memory) +
+                consumer_array[slot->defer_consumer_slot].surface_slot;
+            if( slot2->surface.is_initialized && slot2->surface.has_consumer &&
+                slot2->surface.consumer_pid == process->pid &&
+                slot2->surface.consumer_slot == slot->defer_consumer_slot)
+            {
+                // successfull forward
+                slot2->surface.width = slot->surface.width;
+                slot2->surface.height = slot->surface.height;
+                return surface_slot_has_commited(process2, consumer_array[slot->defer_consumer_slot].surface_slot);
+            }
+        }
+    }
+    // otherwise
+
+    return slot->surface.width == 0 || slot->surface.height == 0 ||
+        (slot->surface.has_commited && slot->surface.fb_present->width == slot->surface.width &&
+            slot->surface.fb_present->height == slot->surface.height);
 }
 
 void surface_prepare_draw_framebuffer(u64 surface_slot, Process* process)
@@ -190,7 +227,8 @@ u64 surface_acquire(u64 surface_slot, Framebuffer* fb_location, Process* process
 {
     SurfaceSlot* s = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot;
 
-    if(surface_slot >= process->surface_count || surface_has_commited(s->surface) ||
+    if(surface_slot >= process->surface_count ||
+        surface_slot_has_commited(process, surface_slot) ||
         !s->surface.has_been_fired) { return 0; }
 
     s->fb_draw_control = *s->surface.fb_draw;
@@ -224,6 +262,84 @@ u64 surface_commit(u64 surface_slot, Process* process)
     return 1;
 }
 
+void surface_slot_fire(Process* process, u64 surface_slot)
+{
+    SurfaceSlot* surface_slot_array = (SurfaceSlot*)process->surface_alloc.memory;
+    assert(surface_slot < process->surface_count && surface_slot_array[surface_slot].surface.is_initialized,
+        "this is a valid surface slot");
+
+    SurfaceSlot* slot = surface_slot_array + surface_slot;
+
+    SurfaceConsumer* consumer_array = (SurfaceConsumer*)process->surface_consumer_alloc.memory;
+    if( slot->is_defering_to_consumer_slot && slot->defer_consumer_slot < process->surface_consumer_count &&
+        consumer_array[slot->defer_consumer_slot].is_initialized &&
+        consumer_array[slot->defer_consumer_slot].has_surface &&
+        consumer_array[slot->defer_consumer_slot].surface_pid < KERNEL_PROCESS_ARRAY_LEN)
+    {
+        Process* process2 = KERNEL_PROCESS_ARRAY[consumer_array[slot->defer_consumer_slot].surface_pid];
+        if( process2->mmu_table &&
+            consumer_array[slot->defer_consumer_slot].surface_slot < process2->surface_count)
+        {
+            SurfaceSlot* slot2 = ((SurfaceSlot*)process2->surface_alloc.memory) +
+                consumer_array[slot->defer_consumer_slot].surface_slot;
+            if( slot2->surface.is_initialized && slot2->surface.has_consumer &&
+                slot2->surface.consumer_pid == process->pid &&
+                slot2->surface.consumer_slot == slot->defer_consumer_slot)
+            {
+                // successfull forward
+                slot2->surface.width = slot->surface.width;
+                slot2->surface.height = slot->surface.height;
+                surface_slot_fire(process2, consumer_array[slot->defer_consumer_slot].surface_slot);
+                return;
+            }
+        }
+    }
+    // otherwise
+    slot->surface.has_been_fired = 1;
+}
+
+// You must pass a valid replacement buffer. It does not have to be the right size though.
+Framebuffer* surface_slot_swap_present_buffer(Process* process, u64 surface_slot, Framebuffer* replacement)
+{
+    SurfaceSlot* surface_slot_array = (SurfaceSlot*)process->surface_alloc.memory;
+    assert(surface_slot < process->surface_count && surface_slot_array[surface_slot].surface.is_initialized,
+        "this is a valid surface slot");
+ 
+    SurfaceSlot* slot = surface_slot_array + surface_slot;
+ 
+    SurfaceConsumer* consumer_array = (SurfaceConsumer*)process->surface_consumer_alloc.memory;
+    if( slot->is_defering_to_consumer_slot && slot->defer_consumer_slot < process->surface_consumer_count &&
+        consumer_array[slot->defer_consumer_slot].is_initialized &&
+        consumer_array[slot->defer_consumer_slot].has_surface &&
+        consumer_array[slot->defer_consumer_slot].surface_pid < KERNEL_PROCESS_ARRAY_LEN)
+    {
+        Process* process2 = KERNEL_PROCESS_ARRAY[consumer_array[slot->defer_consumer_slot].surface_pid];
+        if( process2->mmu_table &&
+            consumer_array[slot->defer_consumer_slot].surface_slot < process2->surface_count)
+        {
+            SurfaceSlot* slot2 = ((SurfaceSlot*)process2->surface_alloc.memory) +
+                consumer_array[slot->defer_consumer_slot].surface_slot;
+            if( slot2->surface.is_initialized && slot2->surface.has_consumer &&
+                slot2->surface.consumer_pid == process->pid &&
+                slot2->surface.consumer_slot == slot->defer_consumer_slot)
+            {
+                // successfull forward
+                return surface_slot_swap_present_buffer(
+                        process2,
+                        consumer_array[slot->defer_consumer_slot].surface_slot,
+                        replacement
+                    );
+            }
+        }
+    }
+    // otherwise
+    Framebuffer* temp = replacement;
+    replacement = slot->surface.fb_present;
+    slot->surface.fb_present = temp;
+    slot->surface.has_commited = 0;
+    return replacement;
+}
+
 u64 get_consumer_and_surface(u64 pid, u64 consumer_slot, SurfaceConsumer** c, Surface** surface)
 {
     if(pid >= KERNEL_PROCESS_ARRAY_LEN ||
@@ -251,7 +367,7 @@ u64 surface_consumer_has_commited(u64 pid, u64 consumer_slot)
     if(!get_consumer_and_surface(pid, consumer_slot, &con, &s))
     { return 0; }
 
-    return surface_has_commited(*s);
+    return surface_slot_has_commited(KERNEL_PROCESS_ARRAY[con->surface_pid], con->surface_slot);
 }
 
 u64 surface_consumer_get_size(u64 pid, u64 consumer_slot, u32* width, u32* height)

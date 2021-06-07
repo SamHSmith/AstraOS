@@ -73,109 +73,57 @@ void program_loader_program(u64 drive1_partitions_directory)
     f64 start_move_x = 0.0;
     f64 start_move_y = 0.0;
 
+    u8 is_fullscreen_mode = 0;
+
 while(1) {
 
-    cursor_x = new_cursor_x;
-    cursor_y = new_cursor_y;
-
-    // Set up consumers
-    {
-        for(u64 i = 0; i < window_count; i++)
+    { // Mouse events
+        u64 mouse_event_count = AOS_get_rawmouse_events(0, 0);
+        AOS_RawMouseEvent mouse_events[mouse_event_count];
+        mouse_event_count = AOS_get_rawmouse_events(mouse_events, mouse_event_count);
+        for(u64 i = 0; i < mouse_event_count; i++)
         {
-            // do move, not related to consumers
-            if(is_moving_window && i + 1 == window_count)
+            new_cursor_x += mouse_events[i].delta_x;
+            new_cursor_y += mouse_events[i].delta_y;
+
+            if(mouse_events[i].pressed && mouse_events[i].button == 0)
             {
-                windows[i].x = (s64)(cursor_x - start_move_x);
-                windows[i].y = (s64)(cursor_y - start_move_y);
-            }
-
-            windows[i].width = windows[i].new_width;
-            windows[i].height = windows[i].new_height;
-            AOS_surface_consumer_set_size(
-                windows[i].consumer,
-                windows[i].width  -2*BORDER_SIZE,
-                windows[i].height -2*BORDER_SIZE
-            );
-            AOS_surface_consumer_fire(windows[i].consumer);
-        }
-    }
-
-    u64 AOS_wait_surface = 0;
-    AOS_wait_for_surface_draw(&AOS_wait_surface, 1);
-
-    // Fetch from consumers
-    {
-        for(u64 i = 0; i < window_count; i++)
-        {
-            if(AOS_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
-            {
-                // allocate address space
-                windows[i].fb_page_count = AOS_surface_consumer_fetch(windows[i].consumer, 0, 0);
-                if(AOS_surface_consumer_fetch(
-                    windows[i].consumer,
-                    windows[i].fb,
-                    windows[i].fb_page_count
-                ))
+                u64 window = 0;
+                u8 any_window = 0;
+                for(s64 j = window_count-1; j >= 0; j--)
                 {
-                    windows[i].we_have_frame = 1;
+                    if( (s64)cursor_x >= windows[j].x &&
+                        (s64)cursor_y >= windows[j].y &&
+                        (s64)cursor_x < windows[j].x + (s64)windows[j].width &&
+                        (s64)cursor_y < windows[j].y + (s64)windows[j].height
+                    )
+                    {
+                        window = (u64)j;
+                        any_window = 1;
+                        break;
+                    }
                 }
+                if(any_window)
+                {
+                    Window temp = windows[window];
+                    for(u64 j = window; j + 1 < window_count; j++)
+                    { windows[j] = windows[j+1]; }
+                    windows[window_count-1] = temp;
+                    is_moving_window = 1;
+                    start_move_x = cursor_x - (f64)temp.x;
+                    start_move_y = cursor_y - (f64)temp.y;
+                }
+            }
+            else if(mouse_events[i].released && mouse_events[i].button == 0)
+            {
+                is_moving_window = 0;
             }
         }
     }
 
-    Framebuffer* fb = 0x54000;
-    u64 fb_page_count = AOS_surface_acquire(0, 0, 0);
-    if(AOS_surface_acquire(0, fb, fb_page_count))
-    {
-        double time_frame_start = AOS_time_get_seconds();
-
-        { // Mouse events
-            u64 mouse_event_count = AOS_get_rawmouse_events(0, 0);
-            RawMouseEvent mouse_events[mouse_event_count];
-            mouse_event_count = AOS_get_rawmouse_events(mouse_events, mouse_event_count);
-            for(u64 i = 0; i < mouse_event_count; i++)
-            {
-                new_cursor_x += mouse_events[i].delta_x;
-                new_cursor_y += mouse_events[i].delta_y;
-
-                if(mouse_events[i].pressed && mouse_events[i].button == 0)
-                {
-                    u64 window = 0;
-                    u8 any_window = 0;
-                    for(s64 j = window_count-1; j >= 0; j--)
-                    {
-                        if( (s64)cursor_x >= windows[j].x &&
-                            (s64)cursor_y >= windows[j].y &&
-                            (s64)cursor_x < windows[j].x + (s64)windows[j].width &&
-                            (s64)cursor_y < windows[j].y + (s64)windows[j].height
-                        )
-                        {
-                            window = (u64)j;
-                            any_window = 1;
-                            break;
-                        }
-                    }
-                    if(any_window)
-                    {
-                        Window temp = windows[window];
-                        for(u64 j = window; j + 1 < window_count; j++)
-                        { windows[j] = windows[j+1]; }
-                        windows[window_count-1] = temp;
-                        is_moving_window = 1;
-                        start_move_x = cursor_x - (f64)temp.x;
-                        start_move_y = cursor_y - (f64)temp.y;
-                    }
-                }
-                else if(mouse_events[i].released && mouse_events[i].button == 0)
-                {
-                    is_moving_window = 0;
-                }
-            }
-        }
-
-        { // Keyboard events
+    { // Keyboard events
         u64 kbd_event_count = AOS_get_keyboard_events(0, 0);
-        KeyboardEvent kbd_events[kbd_event_count];
+        AOS_KeyboardEvent kbd_events[kbd_event_count];
         u64 more = 0;
         do {
             more = 0;
@@ -214,6 +162,19 @@ while(1) {
                             if(windows[i].target_width > 2*BORDER_SIZE) { windows[i].target_width -= 10; }
                         }
                     }
+                    else if(scancode == 39 && window_count)
+                    {
+                        if(!is_fullscreen_mode)
+                        {
+                            if(AOS_surface_forward_to_consumer(0, windows[window_count-1].consumer))
+                            { is_fullscreen_mode = 1; }
+                        }
+                        else
+                        {
+                            if(AOS_surface_stop_forwarding_to_consumer(0))
+                            { is_fullscreen_mode = 0; }
+                        }
+                    }
 
                     if(scancode == 35 && slot_index < slot_count && window_count + 1 < 256)
                     {
@@ -227,7 +188,7 @@ while(1) {
                                 windows[window_count].consumer = con;
                                 windows[window_count].x = 20 + window_count*7;
                                 windows[window_count].y = 49*window_count;
-                                if(windows[window_count].y > 1000) { windows[window_count].y = 1000; }
+                                if(windows[window_count].y > 400) { windows[window_count].y = 400; }
                                 windows[window_count].width = 0;
                                 windows[window_count].height = 0;
                                 windows[window_count].new_width = 1;
@@ -258,13 +219,42 @@ while(1) {
                 printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
             }
         } while(more);
-        }
+    }
 
-        for(u64 i = 0; i < window_count; i++)
+    for(u64 i = 0; i < window_count; i++)
+    {
+        windows[i].new_width = (s64)windows[i].target_width +
+            (s64)(125.0 * (1.0+botched_sin((AOS_time_get_seconds() - windows[i].creation_time))));
+        windows[i].new_height = 70;
+    }
+
+//    u64 AOS_wait_surface = 0;
+//    AOS_wait_for_surface_draw(&AOS_wait_surface, 1);
+
+    Framebuffer* fb = 0x54000;
+    u64 fb_page_count = AOS_surface_acquire(0, 0, 0);
+    if(AOS_surface_acquire(0, fb, fb_page_count))
+    {
+        double time_frame_start = AOS_time_get_seconds();
+
+        // Fetch from consumers
         {
-            windows[i].new_width = (s64)windows[i].target_width +
-                (s64)(125.0 * (1.0+botched_sin((time_frame_start - windows[i].creation_time))));
-            windows[i].new_height = 70;
+            for(u64 i = 0; i < window_count; i++)
+            {
+                if(AOS_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
+                {
+                    // allocate address space
+                    windows[i].fb_page_count = AOS_surface_consumer_fetch(windows[i].consumer, 0, 0);
+                    if(AOS_surface_consumer_fetch(
+                        windows[i].consumer,
+                        windows[i].fb,
+                        windows[i].fb_page_count
+                    ))
+                    {
+                        windows[i].we_have_frame = 1;
+                    }
+                }
+            }
         }
 
         u64 column_count = (fb->width / 8);
@@ -430,6 +420,31 @@ while(1) {
             }
         }
         assert(AOS_surface_commit(0), "commited successfully");
+
+        cursor_x = new_cursor_x;
+        cursor_y = new_cursor_y;
+
+        // Set up consumers
+        {
+            for(u64 i = 0; i < window_count; i++)
+            {
+                // do move, not related to consumers
+                if(is_moving_window && i + 1 == window_count)
+                {
+                    windows[i].x = (s64)(cursor_x - start_move_x);
+                    windows[i].y = (s64)(cursor_y - start_move_y);
+                }
+
+                windows[i].width = windows[i].new_width;
+                windows[i].height = windows[i].new_height;
+                AOS_surface_consumer_set_size(
+                    windows[i].consumer,
+                    windows[i].width  -2*BORDER_SIZE,
+                    windows[i].height -2*BORDER_SIZE
+                );
+                AOS_surface_consumer_fire(windows[i].consumer);
+            }
+        }
     }
 }
 }

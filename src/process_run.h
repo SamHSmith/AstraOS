@@ -2,7 +2,8 @@
 
 u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
 {
-    Thread* t = &KERNEL_PROCESS_ARRAY[r.pid]->threads[r.tid];
+    Process* process = KERNEL_PROCESS_ARRAY[r.pid];
+    Thread* t = &process->threads[r.tid];
  
          if(t->thread_state == THREAD_STATE_RUNNING)
     {  return 1;  }
@@ -30,7 +31,9 @@ u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
             assert(t->surface_slot_wait.surface_slot[i] < KERNEL_PROCESS_ARRAY[r.pid]->surface_count
                     && slot->surface.is_initialized,
                     "thread_runtime_is_live: the surface slot contains a valid surface");
-            if(!surface_has_commited(slot->surface) && slot->surface.has_been_fired) { wake = 1; }
+            if( !slot->is_defering_to_consumer_slot &&
+                !surface_slot_has_commited(process, t->surface_slot_wait.surface_slot[i]) &&
+                slot->surface.has_been_fired) { wake = 1; }
         }
         if(wake || t->surface_slot_wait.count == 0)
         {
