@@ -12,8 +12,6 @@ typedef struct
     s64 x;
     s64 y;
     u64 consumer;
-    f64 creation_time;
-    u64 target_width;
     u64 width;
     u64 height;
     u64 new_width;
@@ -73,6 +71,16 @@ void program_loader_program(u64 drive1_partitions_directory)
     f64 start_move_x = 0.0;
     f64 start_move_y = 0.0;
 
+    u8 is_resizing_window = 0;
+    f64 start_resize_cursor_x = 0.0;
+    f64 start_resize_cursor_y = 0.0;
+    u8 resize_x_invert = 0;
+    u8 resize_y_invert = 0;
+    u64 start_resize_window_width = 0;
+    u64 start_resize_window_height = 0;
+    s64 start_resize_window_x = 0;
+    s64 start_resize_window_y = 0;
+
     u8 is_fullscreen_mode = 0;
 
 while(1) {
@@ -86,7 +94,7 @@ while(1) {
             new_cursor_x += mouse_events[i].delta_x;
             new_cursor_y += mouse_events[i].delta_y;
 
-            if(mouse_events[i].pressed && mouse_events[i].button == 0)
+            if(mouse_events[i].pressed && mouse_events[i].button == 0 && !is_resizing_window)
             {
                 u64 window = 0;
                 u8 any_window = 0;
@@ -118,6 +126,44 @@ while(1) {
             {
                 is_moving_window = 0;
             }
+            else if(mouse_events[i].pressed && mouse_events[i].button == 2 && !is_moving_window)
+            {
+                u64 window = 0;
+                u8 any_window = 0;
+                for(s64 j = window_count-1; j >= 0; j--)
+                {
+                    if( (s64)cursor_x >= windows[j].x &&
+                        (s64)cursor_y >= windows[j].y &&
+                        (s64)cursor_x < windows[j].x + (s64)windows[j].width &&
+                        (s64)cursor_y < windows[j].y + (s64)windows[j].height
+                    )
+                    {
+                        window = (u64)j;
+                        any_window = 1;
+                        break;
+                    }
+                }
+                if(any_window)
+                {
+                    Window temp = windows[window];
+                    for(u64 j = window; j + 1 < window_count; j++)
+                    { windows[j] = windows[j+1]; }
+                    windows[window_count-1] = temp;
+                    is_resizing_window = 1;
+                    start_resize_window_width = temp.width;
+                    start_resize_window_height = temp.height;
+                    start_resize_window_x = temp.x;
+                    start_resize_window_y = temp.y;
+                    start_resize_cursor_x = cursor_x;
+                    start_resize_cursor_y = cursor_y;
+                    resize_x_invert = temp.x + ((s64)temp.width / 2) > (s64)cursor_x;
+                    resize_y_invert = temp.y + ((s64)temp.height / 2) > (s64)cursor_y;
+                }
+            }
+            else if(mouse_events[i].released && mouse_events[i].button == 2)
+            {
+                is_resizing_window = 0;
+            }
         }
     }
 
@@ -148,26 +194,16 @@ while(1) {
                     { slot_index--; }
                     else if(scancode == 101 && slot_index + 1 < slot_count)
                     { slot_index++; }
-                    else if(scancode == 102)
-                    {
-                        for(u64 i = 0; i < window_count; i++)
-                        {
-                            windows[i].target_width += 10;
-                        }
-                    }
-                    else if(scancode == 99)
-                    {
-                        for(u64 i = 0; i < window_count; i++)
-                        {
-                            if(windows[i].target_width > 2*BORDER_SIZE) { windows[i].target_width -= 10; }
-                        }
-                    }
                     else if(scancode == 39 && window_count)
                     {
                         if(!is_fullscreen_mode)
                         {
                             if(AOS_surface_forward_to_consumer(0, windows[window_count-1].consumer))
-                            { is_fullscreen_mode = 1; }
+                            {
+                                is_fullscreen_mode = 1;
+                                is_moving_window = 0;
+                                is_resizing_window = 0;
+                            }
                         }
                         else
                         {
@@ -191,10 +227,8 @@ while(1) {
                                 if(windows[window_count].y > 400) { windows[window_count].y = 400; }
                                 windows[window_count].width = 0;
                                 windows[window_count].height = 0;
-                                windows[window_count].new_width = 1;
-                                windows[window_count].new_height = 1;
-                                windows[window_count].target_width = 2*BORDER_SIZE;
-                                windows[window_count].creation_time = AOS_time_get_seconds();
+                                windows[window_count].new_width = 40;
+                                windows[window_count].new_height = 40;
                                 windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                                 windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
                                 windows[window_count].we_have_frame = 0;
@@ -219,13 +253,6 @@ while(1) {
                 printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
             }
         } while(more);
-    }
-
-    for(u64 i = 0; i < window_count; i++)
-    {
-        windows[i].new_width = (s64)windows[i].target_width +
-            (s64)(125.0 * (1.0+botched_sin((AOS_time_get_seconds() - windows[i].creation_time))));
-        windows[i].new_height = 70;
     }
 
 //    u64 AOS_wait_surface = 0;
@@ -324,7 +351,8 @@ while(1) {
 
         for(s64 j = 0; j < window_count; j++)
         {
-            if(!windows[j].we_have_frame)
+            if(!windows[j].we_have_frame ||
+                windows[j].width <= 2*BORDER_SIZE || windows[j].height <= 2*BORDER_SIZE)
             {
                 for(u64 y = 0; y < windows[j].height; y++)
                 for(u64 x = 0; x < windows[j].width; x++)
@@ -336,9 +364,14 @@ while(1) {
                     u64 external_y = (u64)((s64)y + windows[j].y);
                     u64 i = external_x + (external_y * fb->width);
 
-                    fb->data[i*4 + 0] = (f32)x / (f32)windows[j].width;
-                    fb->data[i*4 + 1] = (f32)y / (f32)windows[j].height;
-                    fb->data[i*4 + 2] = 180.0/255.0;
+                    fb->data[i*4 + 0] = ((f32)x / (f32)windows[j].width)*0.08 + 0.2;
+                    fb->data[i*4 + 1] = ((f32)y / (f32)windows[j].height)*0.08 + 0.1;
+                    if(j + 1 == window_count && (is_moving_window || is_resizing_window))
+                    { fb->data[i*4 + 2] = 180.0/255.0; }
+                    else if(j + 1 == window_count)
+                    { fb->data[i*4 + 2] = 140.0/255.0; }
+                    else
+                    { fb->data[i*4 + 2] = 70.0/255.0; }
                     fb->data[i*4 + 3] = 1.0;
                 }
                 continue;
@@ -369,9 +402,14 @@ while(1) {
                 }
                 else
                 {
-                    fb->data[i*4 + 0] = (f32)x / (f32)windows[j].width;
-                    fb->data[i*4 + 1] = (f32)y / (f32)windows[j].height;
-                    fb->data[i*4 + 2] = 180.0/255.0;
+                    fb->data[i*4 + 0] = ((f32)x / (f32)windows[j].width)*0.08 + 0.2;
+                    fb->data[i*4 + 1] = ((f32)y / (f32)windows[j].height)*0.08 + 0.1;
+                    if(j + 1 == window_count && (is_moving_window || is_resizing_window))
+                    { fb->data[i*4 + 2] = 180.0/255.0; }
+                    else if(j + 1 == window_count)
+                    { fb->data[i*4 + 2] = 140.0/255.0; }
+                    else
+                    { fb->data[i*4 + 2] = 70.0/255.0; }
                     fb->data[i*4 + 3] = 1.0;
                 }
             }
@@ -433,6 +471,31 @@ while(1) {
                 {
                     windows[i].x = (s64)(cursor_x - start_move_x);
                     windows[i].y = (s64)(cursor_y - start_move_y);
+                }
+
+                // do resize, this is releated to consumers
+                if(is_resizing_window && i + 1 == window_count)
+                {
+                    s64 new_width = (s64)(cursor_x - start_resize_cursor_x);
+                    s64 new_height = (s64)(cursor_y - start_resize_cursor_y);
+                    if(resize_x_invert) {
+                        windows[i].x = start_resize_window_x + new_width;
+            if(windows[i].x > start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE)
+            { windows[i].x = start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE; }
+                        new_width *= -1;
+                    }
+                    if(resize_y_invert) {
+                        windows[i].y = start_resize_window_y + new_height;
+            if(windows[i].y > start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE)
+            { windows[i].y = start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE; }
+                        new_height *= -1;
+                    }
+                    new_width  += start_resize_window_width;
+                    new_height += start_resize_window_height;
+                    if(new_width < 2*BORDER_SIZE) { new_width = 2*BORDER_SIZE; }
+                    if(new_height < 2*BORDER_SIZE) { new_height = 2*BORDER_SIZE; }
+                    windows[i].new_width = (u64)new_width;
+                    windows[i].new_height = (u64)new_height;
                 }
 
                 windows[i].width = windows[i].new_width;
