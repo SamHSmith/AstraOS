@@ -227,8 +227,9 @@ u64 surface_acquire(u64 surface_slot, Framebuffer* fb_location, Process* process
 {
     SurfaceSlot* s = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot;
 
-    if(surface_slot >= process->surface_count ||
-        surface_slot_has_commited(process, surface_slot) ||
+    if(surface_slot >= process->surface_count) { return 0; }
+
+    if(surface_slot_has_commited(process, surface_slot) ||
         !s->surface.has_been_fired) { return 0; }
 
     s->fb_draw_control = *s->surface.fb_draw;
@@ -295,7 +296,8 @@ void surface_slot_fire(Process* process, u64 surface_slot)
         }
     }
     // otherwise
-    slot->surface.has_been_fired = 1;
+    if(!surface_slot_has_commited(process, surface_slot))
+    { slot->surface.has_been_fired = 1; }
 }
 
 // You must pass a valid replacement buffer. It does not have to be the right size though.
@@ -400,7 +402,7 @@ u64 surface_consumer_fire(u64 pid, u64 consumer_slot)
 
     s->width = con->not_yet_fired_width;
     s->height = con->not_yet_fired_height;
-    s->has_been_fired = 1;
+    surface_slot_fire(KERNEL_PROCESS_ARRAY[con->surface_pid], con->surface_slot);
     return 1;
 }
 
@@ -437,9 +439,11 @@ u64 surface_consumer_fetch(u64 pid, u64 consumer_slot, Framebuffer* fb_location,
         con->has_fetched = 0;
         *con->fb_fetched = con->fb_fetched_control;
     }
-    Framebuffer* temp = s->fb_present;
-    s->fb_present = con->fb_fetched;
-    con->fb_fetched = temp;
+    con->fb_fetched = surface_slot_swap_present_buffer(
+        KERNEL_PROCESS_ARRAY[con->surface_pid],
+        con->surface_slot,
+        con->fb_fetched
+    );
     con->fb_fetched_control = *con->fb_fetched;
     s->has_commited = 0;
     if(process_alloc_pages(process, fb_location, con->fb_fetched->alloc))

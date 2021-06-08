@@ -239,9 +239,10 @@ while(1) {
             }
         } while(more);
     }
-
-//    u64 AOS_wait_surface = 0;
-//    AOS_wait_for_surface_draw(&AOS_wait_surface, 1);
+//f64 pre_sleep = AOS_time_get_seconds();
+    u64 AOS_wait_surface = 0;
+    AOS_wait_for_surface_draw(&AOS_wait_surface, 1);
+//printf("temp slept for %lf seconds\n", AOS_time_get_seconds() - pre_sleep);
 
     Framebuffer* fb = 0x54000;
     u64 fb_page_count = AOS_surface_acquire(0, 0, 0);
@@ -336,11 +337,32 @@ while(1) {
 
         for(s64 j = 0; j < window_count; j++)
         {
+            u64 start_x = 0; if(windows[j].x < 0) { start_x = (s64)(-windows[j].x); }
+            u64 start_y = 0; if(windows[j].y < 0) { start_y = (s64)(-windows[j].y); }
+
+            u64 end_x = windows[j].width;
+            if(windows[j].x >= fb->width) { end_x = 0; }
+            else if(windows[j].x + (s64)windows[j].width > fb->width)
+            { end_x = (u64)((s64)fb->width - windows[j].x); }
+
+            u64 end_y = windows[j].height;
+            if(windows[j].y >= fb->height) { end_y = 0; }
+            else if(windows[j].y + (s64)windows[j].height > fb->height)
+            { end_y = (u64)((s64)fb->height - windows[j].y); }
+
+            f32 red = 0.2;
+            f32 green = 0.2;
+            f32 blue = 70.0/255.0;
+            if(j + 1 == window_count && (is_moving_window || is_resizing_window))
+            { blue = 180.0/255.0; }
+            else if(j + 1 == window_count)
+            { blue = 140.0/255.0; }
+
             if(!windows[j].we_have_frame ||
                 windows[j].width <= 2*BORDER_SIZE || windows[j].height <= 2*BORDER_SIZE)
             {
-                for(u64 y = 0; y < windows[j].height; y++)
-                for(u64 x = 0; x < windows[j].width; x++)
+                for(u64 y = start_y; y < end_y; y++)
+                for(u64 x = start_x; x < end_x; x++)
                 {
                     if((s64)x + windows[j].x < 0 || (s64)y + windows[j].y < 0 ||
                        (s64)x + windows[j].x >= fb->width || (s64)y + windows[j].y >= fb->height)
@@ -349,21 +371,16 @@ while(1) {
                     u64 external_y = (u64)((s64)y + windows[j].y);
                     u64 i = external_x + (external_y * fb->width);
 
-                    fb->data[i*4 + 0] = ((f32)x / (f32)windows[j].width)*0.08 + 0.2;
-                    fb->data[i*4 + 1] = ((f32)y / (f32)windows[j].height)*0.08 + 0.1;
-                    if(j + 1 == window_count && (is_moving_window || is_resizing_window))
-                    { fb->data[i*4 + 2] = 180.0/255.0; }
-                    else if(j + 1 == window_count)
-                    { fb->data[i*4 + 2] = 140.0/255.0; }
-                    else
-                    { fb->data[i*4 + 2] = 70.0/255.0; }
+                    fb->data[i*4 + 0] = red;
+                    fb->data[i*4 + 1] = green;
+                    fb->data[i*4 + 2] = blue;
                     fb->data[i*4 + 3] = 1.0;
                 }
                 continue;
             }
 
-            for(u64 y = 0; y < windows[j].height; y++)
-            for(u64 x = 0; x < windows[j].width; x++)
+            for(u64 y = start_y; y < end_y; y++)
+            for(u64 x = start_x; x < end_x; x++)
             {
                 if((s64)x + windows[j].x < 0 || (s64)y + windows[j].y < 0 ||
                    (s64)x + windows[j].x >= fb->width || (s64)y + windows[j].y >= fb->height)
@@ -379,22 +396,25 @@ while(1) {
                     u64 internal_y = y - BORDER_SIZE;
                     u64 k = internal_x + (internal_y * windows[j].fb->width);
 
+#if 0
+// this is the good version with clamping and alpha
                     float cover = 1.0 - clamp_01(windows[j].fb->data[k*4 + 3]);
         fb->data[i*4 + 0] = clamp_01(fb->data[i*4 + 0] * cover + clamp_01(windows[j].fb->data[k*4 + 0]));
         fb->data[i*4 + 1] = clamp_01(fb->data[i*4 + 1] * cover + clamp_01(windows[j].fb->data[k*4 + 1]));
         fb->data[i*4 + 2] = clamp_01(fb->data[i*4 + 2] * cover + clamp_01(windows[j].fb->data[k*4 + 2]));
+#else
+// this is the trash version with no clamping and no alpha
+        fb->data[i*4 + 0] = windows[j].fb->data[k*4 + 0];
+        fb->data[i*4 + 1] = windows[j].fb->data[k*4 + 1];
+        fb->data[i*4 + 2] = windows[j].fb->data[k*4 + 2];
+#endif
         fb->data[i*4 + 3] = 1.0;
                 }
                 else
                 {
-                    fb->data[i*4 + 0] = ((f32)x / (f32)windows[j].width)*0.08 + 0.2;
-                    fb->data[i*4 + 1] = ((f32)y / (f32)windows[j].height)*0.08 + 0.1;
-                    if(j + 1 == window_count && (is_moving_window || is_resizing_window))
-                    { fb->data[i*4 + 2] = 180.0/255.0; }
-                    else if(j + 1 == window_count)
-                    { fb->data[i*4 + 2] = 140.0/255.0; }
-                    else
-                    { fb->data[i*4 + 2] = 70.0/255.0; }
+                    fb->data[i*4 + 0] = red;
+                    fb->data[i*4 + 1] = green;
+                    fb->data[i*4 + 2] = blue;
                     fb->data[i*4 + 3] = 1.0;
                 }
             }
@@ -485,6 +505,7 @@ while(1) {
 
                 windows[i].width = windows[i].new_width;
                 windows[i].height = windows[i].new_height;
+
                 AOS_surface_consumer_set_size(
                     windows[i].consumer,
                     windows[i].width  -2*BORDER_SIZE,

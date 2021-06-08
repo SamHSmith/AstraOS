@@ -96,7 +96,10 @@ void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
 
     for(u64 i = 0; i < surface_slot_count; i++)
     {
-        if(!surface_slot_has_commited(process, surface_slot_array[i]))
+        if(surface_slot_array[i] >= process->surface_count) { continue; }
+        SurfaceSlot* slot = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot_array[i];
+        if(!surface_slot_has_commited(process, surface_slot_array[i]) &&
+            slot->surface.has_been_fired)
         { should_sleep = 0; }
     }
 
