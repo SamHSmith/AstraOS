@@ -94,9 +94,9 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret)
         { continue; }
 
         u64 bits = 0;
-        if(ph->flags & ELF_PROG_READ != 0)  { bits |= 2; }
-        if(ph->flags & ELF_PROG_WRITE != 0) { bits |= 4; }
-        if(ph->flags & ELF_PROG_EXECUTE !=0){ bits |= 8; }
+        if((ph->flags & ELF_PROG_READ) != 0)  { bits |= 2; }
+        if((ph->flags & ELF_PROG_WRITE) != 0) { bits |= 4; }
+        if((ph->flags & ELF_PROG_EXECUTE) !=0){ bits |= 8; }
 
         Kallocation section_alloc = kalloc_pages((ph->memsz + PAGE_SIZE) / PAGE_SIZE);
         memcpy(section_alloc.memory, ((u64)header) + ph->off, ph->memsz);

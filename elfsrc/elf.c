@@ -1,5 +1,7 @@
 #include "../userland/aos_syscalls.h"
 
+#include "../common/maths.h"
+
 #include "../src/uart.h"
 #include "../src/printf.h"
 void _putchar(char c)
@@ -18,7 +20,7 @@ void _start()
 {
     printf("Hi I'm dave and I live in an elf file on a partition on the RADICAL PARTITION SYSTEM\n");
 
-    double start_time = AOS_time_get_seconds();
+    f64 start_time = AOS_time_get_seconds();
 
 while(1)
 {
@@ -29,16 +31,10 @@ while(1)
     u64 fb_page_count = AOS_surface_acquire(surface, 0, 0);
     if(AOS_surface_acquire(surface, fb, fb_page_count))
     {
-        double time = AOS_time_get_seconds() - start_time;
-        float red = time/2.0 - (f64)((u64)(time/2.0));
-        if(red > 0.5) { red = 1.0 - red; }
-        red *= 2.0;
-        float green = time/3.0 - (f64)((u64)(time/3.0));
-        if(green > 0.5) { green = 1.0 - green; }
-        green *= 2.0;
-        float blue =  time/5.0 - (f64)((u64)(time/5.0));
-        if(blue > 0.5) { blue = 1.0 - blue; }
-        blue *= 2.0;
+        f32 time = AOS_time_get_seconds() - start_time;
+        f32 red = (sineF32((time*M_PI)/2.0) + 1.0) / 2.0;
+        f32 green = (sineF32((time*M_PI)/3.0) + 1.0) / 2.0;
+        f32 blue = (sineF32((time*M_PI)/5.0) + 1.0) / 2.0;
 
         for(u64 y = 0; y < fb->height; y++)
         for(u64 x = 0; x < fb->width; x++)

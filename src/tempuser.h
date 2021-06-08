@@ -28,21 +28,6 @@ f32 clamp_01(f32 f)
     return f;
 }
 
-f32 botched_sin(f32 t)
-{
-    t /= 3.14;
-    s64 off = (s64)(t/2.0);
-    t -= (f32)(off*2);
-    if(t < 1.0)
-    {
-        return 1.0 - (2.0*t);
-    }
-    else
-    {
-        return (2.0*(t-1.0)) - 1.0;
-    }
-}
-
 void program_loader_program(u64 drive1_partitions_directory)
 {
     u64 slot_count = AOS_directory_get_files(drive1_partitions_directory, 0, 0);

@@ -1,0 +1,1 @@
+-fno-merge-constants -mcmodel=medany -static -ffreestanding -nostdlib -march=rv64g -mabi=lp64
