@@ -43,19 +43,11 @@ while(1)
         f32 p1y =  0.25 * c + -0.25 * s;
         f32 p2x =  0.25 * c -  0.25 * s;
         f32 p2y =  0.25 * c +  0.25 * s;
-        f32 p3x =  0.25 * c - -0.25 * s;
-        f32 p3y = -0.25 * c +  0.25 * s;
-        f32 p4x = -0.25 * c - -0.25 * s;
-        f32 p4y = -0.25 * c + -0.25 * s;
 
         f32 d1x = p2x - p1x;
         f32 d1y = p2y - p1y;
-        f32 d2x = p3x - p2x;
-        f32 d2y = p3y - p2y;
-        f32 d3x = p4x - p3x;
-        f32 d3y = p4y - p3y;
-        f32 d4x = p1x - p4x;
-        f32 d4y = p1y - p4y;
+        f32 d2x = -p1x - p2x;
+        f32 d2y = -p1y - p2y;
 
         f32 dpfx = 2.0 / (f32)fb->width;
         f32 dpfy = 2.0 / (f32)fb->height;
@@ -67,11 +59,14 @@ while(1)
             {
                 u64 i = x + y * fb->width;
 
+                f32 e1 = pfx * d1y - pfy * d1x;
+                f32 e2 = pfx * d2y - pfy * d2x;
+
                 if(
-                (pfx+p1x) * d1y - (pfy+p1y) * d1x < 0.0 &&
-                (pfx+p2x) * d2y - (pfy+p2y) * d2x < 0.0 &&
-                (pfx+p3x) * d3y - (pfy+p3y) * d3x < 0.0 &&
-                (pfx+p4x) * d4y - (pfy+p4y) * d4x < 0.0
+                e1 <  0.125 &&
+                e2 <  0.125 &&
+                e1 > -0.125 &&
+                e2 > -0.125
                 )
                 {
                     fb->data[i*4 + 0] = red;
