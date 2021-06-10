@@ -40,10 +40,29 @@ while(1)
         for(u64 x = 0; x < fb->width; x++)
         {
             u64 i = x + y * fb->width;
-            fb->data[i*4 + 0] = red;
-            fb->data[i*4 + 1] = green;
-            fb->data[i*4 + 2] = blue;
-            fb->data[i*4 + 3] = 0.6;
+
+            f32 pfx = ((f32)x / (f32)fb->width) * 2.0 - 1.0;
+            f32 pfy = ((f32)y / (f32)fb->height) * 2.0 - 1.0;
+
+            f32 s = cosineF32(time * 2*M_PI);
+            f32 c = sineF32(time * 2*M_PI);
+            f32 fx = pfx*c - pfy*s;
+            f32 fy = pfy*c + pfx*s;
+
+            if(fx > -0.5 && fx < 0.5 && fy > -0.5 && fy < 0.5)
+            {
+                fb->data[i*4 + 0] = red;
+                fb->data[i*4 + 1] = green;
+                fb->data[i*4 + 2] = blue;
+                fb->data[i*4 + 3] = 0.6;
+            }
+            else
+            {
+                fb->data[i*4 + 0] = 0.0;
+                fb->data[i*4 + 1] = 0.0;
+                fb->data[i*4 + 2] = 0.0;
+                fb->data[i*4 + 3] = 0.0;
+            }
         }
         AOS_surface_commit(surface);
     }
