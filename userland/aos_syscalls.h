@@ -38,6 +38,9 @@ typedef struct
     u8 scancode;
     AOS_KeyboardState current_state;
 } AOS_KeyboardEvent;
+#define AOS_KEYBOARD_EVENT_NOTHING 0
+#define AOS_KEYBOARD_EVENT_PRESSED 1
+#define AOS_KEYBOARD_EVENT_RELEASED 2
 u64 AOS_get_keyboard_events(volatile AOS_KeyboardEvent* buf, u64 len);
  
 u64 AOS_switch_vo(u64 vo_id);
@@ -76,6 +79,8 @@ u64 AOS_surface_consumer_fire(u64 consumer_slot);
 
 u64 AOS_surface_forward_to_consumer(u64 surface_slot, u64 consumer_slot);
 u64 AOS_surface_stop_forwarding_to_consumer(u64 surface_slot);
+
+u64 AOS_forward_keyboard_events(AOS_KeyboardEvent* buf, u64 len, u64 pid);
 
 // give file to proccess
 // give directory to proccess

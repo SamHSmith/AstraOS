@@ -16,54 +16,55 @@ typedef struct
 #define KEYBOARD_EVENT_PRESSED 1
 #define KEYBOARD_EVENT_RELEASED 2
 
-#define KEYBOARD_EVENT_QUEUE_LEN 2028
+#define KEYBOARD_EVENT_QUEUE_LEN 454
 typedef struct
 {
     KeyboardState current_state;
     u64 count;
-    u16 new_events[KEYBOARD_EVENT_QUEUE_LEN];
+    KeyboardEvent new_events[KEYBOARD_EVENT_QUEUE_LEN];
 } KeyboardEventQueue;
 
-void keyboard_put_new_event(KeyboardEventQueue* queue, u8 event, u8 scancode)
+void keyboard_put_new_rolling_event(KeyboardEventQueue* queue, u8 event, u8 scancode)
 {
     if(queue->count + 1 >= KEYBOARD_EVENT_QUEUE_LEN)
     {  return;  }
 
-    u16 val = ((u16)scancode) << 8;
-    val |= event;
-    queue->new_events[queue->count] = val;
+    queue->new_events[queue->count].event = event;
+    queue->new_events[queue->count].scancode = scancode;
+    queue->new_events[queue->count].current_state = queue->current_state;
     queue->count += 1;
+
+    u64 change_index = scancode >> 6;
+    u64 change = ((u64)1) << (scancode & 0x3F);
+    if(event == KEYBOARD_EVENT_PRESSED)
+    {
+        queue->current_state.keys_down[change_index] |= change;
+    }
+    else if(event == KEYBOARD_EVENT_RELEASED)
+    {
+        queue->current_state.keys_down[change_index] &= ~change;
+    }
 }
 
-void keyboard_poll_events(KeyboardEventQueue* queue, KeyboardEvent* event)
+u64 keyboard_poll_events(KeyboardEventQueue* queue, KeyboardEvent* events, u64 len)
 {
-    u16* event16 = (u16*)event;
-    if(queue->count > 0)
+    if(len > queue->count) { len = queue->count; }
+    if(queue->count > 0 && len)
     {
-        *event16 = queue->new_events[0];
-        queue->count -= 1;
-
-        for(u64 i = 0; i < queue->count; i++)
+        for(u64 i = 0; i < len - 1; i++)
         {
+            events[i] = queue->new_events[i];
             queue->new_events[i] = queue->new_events[i+1];
         }
-
-        u64 change_index = event->scancode >> 6;
-        u64 change = ((u64)1) << (event->scancode & 0x3F);
-        if(event->event == KEYBOARD_EVENT_PRESSED)
-        {
-            queue->current_state.keys_down[change_index] |= change;
-        }
-        else if(event->event == KEYBOARD_EVENT_RELEASED)
-        {
-            queue->current_state.keys_down[change_index] &= ~change;
-        }
+        events[len-1] = queue->new_events[len-1];
+        queue->count -= len;
+        return len;
     }
     else
     {
-        event->event = KEYBOARD_EVENT_NOTHING;
+//        event->event = KEYBOARD_EVENT_NOTHING;
+        return 0;
     }
-    event->current_state = queue->current_state;
 }
 
 typedef struct

@@ -52,11 +52,11 @@ void oak_recieve_keyboard(OakPacketKeyboard* packet)
         &KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->kbd_event_queue;
     if(packet->was_pressed)
     {
-        keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_PRESSED, packet->scancode);
+        keyboard_put_new_rolling_event(kbd_event_queue, KEYBOARD_EVENT_PRESSED, packet->scancode);
     }
     else
     {
-        keyboard_put_new_event(kbd_event_queue, KEYBOARD_EVENT_RELEASED, packet->scancode);
+        keyboard_put_new_rolling_event(kbd_event_queue, KEYBOARD_EVENT_RELEASED, packet->scancode);
     }
 }
 

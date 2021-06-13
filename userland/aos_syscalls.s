@@ -190,3 +190,12 @@ AOS_surface_stop_forwarding_to_consumer:
     addi a0, x0, 30
     ecall
     ret
+
+.global AOS_forward_keyboard_events
+AOS_forward_keyboard_events:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 31
+    ecall
+    ret

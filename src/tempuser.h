@@ -11,6 +11,7 @@ typedef struct
 {
     s64 x;
     s64 y;
+    u64 pid;
     u64 consumer;
     u64 width;
     u64 height;
@@ -155,93 +156,102 @@ while(1) {
     { // Keyboard events
         u64 kbd_event_count = AOS_get_keyboard_events(0, 0);
         AOS_KeyboardEvent kbd_events[kbd_event_count];
-        u64 more = 0;
-        do {
-            more = 0;
-            kbd_event_count = AOS_get_keyboard_events(kbd_events, kbd_event_count);
-            for(u64 i = 0; i < kbd_event_count; i++)
+        kbd_event_count = AOS_get_keyboard_events(kbd_events, kbd_event_count);
+        for(u64 i = 0; i < kbd_event_count; i++)
+        {
+            if(kbd_events[i].event == KEYBOARD_EVENT_NOTHING)
+            { continue; }
+
+            if(is_fullscreen_mode)
             {
-                if(kbd_events[i].event == KEYBOARD_EVENT_NOTHING)
-                { continue; }
-                more = 1;
-
-                if(kbd_events[i].event == KEYBOARD_EVENT_PRESSED)
+                if( kbd_events[i].event == KEYBOARD_EVENT_PRESSED &&
+                    kbd_events[i].scancode == 39 &&
+                    /*ctrl*/ kbd_events[i].current_state.keys_down[0] & (1 << 5) &&
+                    window_count)
                 {
-                    u64 scancode = kbd_events[i].scancode;
-
-                    if(scancode >= 62 && scancode <= 71)
-                    {
-                        u64 fkey = scancode - 62;
-                        AOS_switch_vo(fkey);
-                    }
-
-                    if(scancode == 100 && slot_index > 0)
-                    { slot_index--; }
-                    else if(scancode == 101 && slot_index + 1 < slot_count)
-                    { slot_index++; }
-                    else if(scancode == 39 && window_count)
-                    {
-                        if(!is_fullscreen_mode)
-                        {
-                            if(AOS_surface_forward_to_consumer(0, windows[window_count-1].consumer))
-                            {
-                                is_fullscreen_mode = 1;
-                                is_moving_window = 0;
-                                is_resizing_window = 0;
-                            }
-                        }
-                        else
-                        {
-                            if(AOS_surface_stop_forwarding_to_consumer(0))
-                            { is_fullscreen_mode = 0; }
-                        }
-                    }
-
-                    if(scancode == 35 && slot_index < slot_count && window_count + 1 < 256)
-                    {
-                        u64 pid = 0;
-                        if(AOS_create_process_from_file(partitions[slot_index], &pid))
-                        {
-                            printf("PROCESS CREATED, PID=%llu\n", pid);
-                            u64 con = 0;
-                            if(AOS_surface_consumer_create(pid, &con))
-                            {
-                                windows[window_count].consumer = con;
-                                windows[window_count].x = 20 + window_count*7;
-                                windows[window_count].y = 49*window_count;
-                                if(windows[window_count].y > 400) { windows[window_count].y = 400; }
-                                windows[window_count].width = 0;
-                                windows[window_count].height = 0;
-                                windows[window_count].new_width = 40;
-                                windows[window_count].new_height = 40;
-                                windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
-                                windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
-                                windows[window_count].we_have_frame = 0;
-                                window_count++;
-
-                                if(is_moving_window)
-                                {
-                                    Window temp = windows[window_count-2];
-                                    windows[window_count-2] = windows[window_count-1];
-                                    windows[window_count-1] = temp;
-                                }
-                            }
-                            else { printf("Failed to create consumer for PID: %llu\n", pid); }
-                        }
-                        else { printf("failed to create process."); }
-                    }
+                    if(AOS_surface_stop_forwarding_to_consumer(0))
+                    { is_fullscreen_mode = 0; }
                 }
                 else
                 {
+                    AOS_forward_keyboard_events(&kbd_events[i], 1, windows[window_count-1].pid);
+                }
+                continue;
+            }
+
+            if(kbd_events[i].event == KEYBOARD_EVENT_PRESSED)
+            {
+                u64 scancode = kbd_events[i].scancode;
+
+                if(scancode >= 62 && scancode <= 71)
+                {
+                    u64 fkey = scancode - 62;
+                    AOS_switch_vo(fkey);
                 }
 
-                printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+                if(scancode == 100 && slot_index > 0)
+                { slot_index--; }
+                else if(scancode == 101 && slot_index + 1 < slot_count)
+                { slot_index++; }
+                else if(scancode == 39 &&
+                    /*ctrl*/ kbd_events[i].current_state.keys_down[0] & (1 << 5) &&
+                    window_count)
+                {
+                    if(!is_fullscreen_mode)
+                    {
+                        if(AOS_surface_forward_to_consumer(0, windows[window_count-1].consumer))
+                        {
+                            is_fullscreen_mode = 1;
+                            is_moving_window = 0;
+                            is_resizing_window = 0;
+                        }
+                    }
+                }
+
+                if(scancode == 35 && slot_index < slot_count && window_count + 1 < 256)
+                {
+                    u64 pid = 0;
+                    if(AOS_create_process_from_file(partitions[slot_index], &pid))
+                    {
+                        printf("PROCESS CREATED, PID=%llu\n", pid);
+                        u64 con = 0;
+                        if(AOS_surface_consumer_create(pid, &con))
+                        {
+                            windows[window_count].pid = pid;
+                            windows[window_count].consumer = con;
+                            windows[window_count].x = 20 + window_count*7;
+                            windows[window_count].y = 49*window_count;
+                            if(windows[window_count].y > 400) { windows[window_count].y = 400; }
+                            windows[window_count].width = 0;
+                            windows[window_count].height = 0;
+                            windows[window_count].new_width = 40;
+                            windows[window_count].new_height = 40;
+                            windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
+                            windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
+                            windows[window_count].we_have_frame = 0;
+                            window_count++;
+
+                            if(is_moving_window)
+                            {
+                                Window temp = windows[window_count-2];
+                                windows[window_count-2] = windows[window_count-1];
+                                windows[window_count-1] = temp;
+                            }
+                        }
+                        else { printf("Failed to create consumer for PID: %llu\n", pid); }
+                    }
+                    else { printf("failed to create process."); }
+                }
             }
-        } while(more);
+            else
+            {
+            }
+//            printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+        }
     }
 //f64 pre_sleep = AOS_time_get_seconds();
     u64 AOS_wait_surface = 0;
-    AOS_wait_for_surface_draw(&AOS_wait_surface, 1);
+//    AOS_wait_for_surface_draw(&AOS_wait_surface, 1);
 //printf("temp slept for %lf seconds\n", AOS_time_get_seconds() - pre_sleep);
 
     Framebuffer* fb = 0x54000;

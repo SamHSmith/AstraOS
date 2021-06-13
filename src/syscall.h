@@ -165,26 +165,28 @@ void syscall_get_keyboard_events(Thread** current_thread)
     Thread* t = *current_thread;
     TrapFrame* frame = &t->frame;
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
- 
+
     u64 user_buf = frame->regs[11];
     u64 len = frame->regs[12];
- 
-    u64 kbd_count = 1;
- 
+
     if(user_buf != 0)
     {
         KeyboardEvent* buf;
         assert(
+            mmu_virt_to_phys(process->mmu_table, user_buf + sizeof(KeyboardEvent)*len, (u64*)&buf) == 0,
+            "you didn't do a memory bad"
+        );
+        assert(
             mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf) == 0,
             "you didn't do a memory bad"
         );
-        if(len < kbd_count) { kbd_count = len; }
-        for(u64 i = 0; i < kbd_count; i++)
-        {
-            keyboard_poll_events(&process->kbd_event_queue, buf);
-        }
+        len = keyboard_poll_events(&process->kbd_event_queue, buf, len);
     }
-    frame->regs[10] = kbd_count;
+    else
+    {
+        len = process->kbd_event_queue.count;
+    }
+    frame->regs[10] = len;
     t->program_counter += 4;
 }
 
@@ -575,6 +577,65 @@ void syscall_surface_stop_forwarding_to_consumer(Thread** current_thread)
     t->program_counter += 4;
 }
 
+void syscall_forward_keyboard_events(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process_orig = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_buf = frame->regs[11];
+    u64 user_len = frame->regs[12];
+    u64 user_pid = frame->regs[13];
+
+    // TODO: do proper security to only allow sending keystrokes to *owned* processes.
+    Process* process_other = KERNEL_PROCESS_ARRAY[user_pid];
+    if(user_pid >= KERNEL_PROCESS_ARRAY_LEN || !process_other->mmu_table)
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        return;
+    }
+
+    u64 ret = 1;
+
+    if(user_len + process_other->kbd_event_queue.count > KEYBOARD_EVENT_QUEUE_LEN)
+    { user_len = KEYBOARD_EVENT_QUEUE_LEN - process_other->kbd_event_queue.count; }
+
+    if(!user_len)
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        return;
+    }
+
+    u64 page_count = (user_len * sizeof(KeyboardEvent) + PAGE_SIZE - 1) / PAGE_SIZE;
+    u64 user_ptr = user_buf + page_count * PAGE_SIZE;
+    u64 ptr;
+
+    for(u64 i = 0; i < page_count; i++)
+    {
+        user_ptr -= PAGE_SIZE;
+        if(mmu_virt_to_phys(process_orig->mmu_table, user_ptr, (u64*)&ptr) != 0)
+        {
+            ret = 0;
+            break;
+        }
+    }
+    if(ret)
+    {
+        KeyboardEvent* event_buf = ptr;
+        u64 start_index = process_other->kbd_event_queue.count;
+        process_other->kbd_event_queue.count += user_len;
+        for(u64 i = 0; i < user_len; i++)
+        {
+            process_other->kbd_event_queue.new_events[i+start_index] = event_buf[i];
+        }
+        frame->regs[10] = user_len;
+    }
+    else
+    { frame->regs[10] = 0; }
+    t->program_counter += 4;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -622,6 +683,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_surface_forward_to_consumer(current_thread); }
     else if(call_num == 30)
     { syscall_surface_stop_forwarding_to_consumer(current_thread); }
+    else if(call_num == 31)
+    { syscall_forward_keyboard_events(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

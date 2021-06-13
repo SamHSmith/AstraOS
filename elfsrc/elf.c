@@ -31,6 +31,33 @@ while(1)
     u64 fb_page_count = AOS_surface_acquire(surface, 0, 0);
     if(AOS_surface_acquire(surface, fb, fb_page_count))
     {
+
+        { // Keyboard events
+            u64 kbd_event_count = AOS_get_keyboard_events(0, 0);
+            AOS_KeyboardEvent kbd_events[kbd_event_count];
+            u64 more = 0;
+            do {
+                more = 0;
+                kbd_event_count = AOS_get_keyboard_events(kbd_events, kbd_event_count);
+                for(u64 i = 0; i < kbd_event_count; i++)
+                {
+                    if(kbd_events[i].event == AOS_KEYBOARD_EVENT_NOTHING)
+                    { continue; }
+                    more = 1;
+
+                    if(kbd_events[i].event == AOS_KEYBOARD_EVENT_PRESSED)
+                    {
+                        u64 scancode = kbd_events[i].scancode;
+                    }
+                    else
+                    {
+                    }
+                    printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+                }
+            } while(more);
+        }
+
+
         f64 frame_start = AOS_time_get_seconds();
         f32 time = frame_start - start_time;
         f32 red = (sineF32((time*M_PI)/2.0) + 1.0) / 2.0;
@@ -88,7 +115,7 @@ while(1)
         }
         AOS_surface_commit(surface);
         f64 frame_end = AOS_time_get_seconds();
-        printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
+//        printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
     }
 }
 }
