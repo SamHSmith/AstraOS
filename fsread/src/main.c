@@ -1,5 +1,5 @@
 
-#include "../../src/types.h"
+#include "../../common/types.h"
 #include <stdio.h>
 
 #include <sys/types.h>

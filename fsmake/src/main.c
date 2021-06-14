@@ -40,6 +40,7 @@ void main(int argc, char** argv)
     if(drive_fd < 0) { printf("%s already exists or there was an error opening the file\n", argv[1]); return; }
 
     u8 block[4096];
+    memset(block, 0, 4096);
     for(u64 i = 0; i < 2048*32; i++)
     {
         write(drive_fd, block, 4096);
@@ -63,8 +64,8 @@ void main(int argc, char** argv)
     int layout_fd = open(layout_path, O_RDONLY);
 
     u8 name_buf[64];
-    u8 num_buf[32];
-    u8 type_buf[32];
+    u8 num_buf[33];
+    u8 type_buf[33];
     u8 reading_layout = 1;
     s64 partition_index = -1;
     u64 current_block = (sizeof(RAD_PartitionTable) / 4096)*TABLE_COUNT;

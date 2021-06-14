@@ -1,2 +1,5 @@
-kernel.bin
 drive1.dsk
+bin/
+fsmake/bin/
+fsread/bin/
+disk_dir/partitions/
