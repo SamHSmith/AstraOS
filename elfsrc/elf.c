@@ -22,6 +22,11 @@ void _start()
 
     f64 start_time = AOS_time_get_seconds();
 
+    f64 square_x = 0.0;
+    f64 square_y = 0.0;
+    f64 last_frame_time = start_time;
+    u8 input = 0;
+
 while(1)
 {
     u64 surface = 0;
@@ -31,34 +36,56 @@ while(1)
     u64 fb_page_count = AOS_surface_acquire(surface, 0, 0);
     if(AOS_surface_acquire(surface, fb, fb_page_count))
     {
+        f64 frame_start = AOS_time_get_seconds();
+        f64 delta_time = frame_start - last_frame_time;
+        last_frame_time = frame_start;
 
         { // Keyboard events
             u64 kbd_event_count = AOS_get_keyboard_events(0, 0);
             AOS_KeyboardEvent kbd_events[kbd_event_count];
-            u64 more = 0;
-            do {
-                more = 0;
-                kbd_event_count = AOS_get_keyboard_events(kbd_events, kbd_event_count);
-                for(u64 i = 0; i < kbd_event_count; i++)
-                {
-                    if(kbd_events[i].event == AOS_KEYBOARD_EVENT_NOTHING)
-                    { continue; }
-                    more = 1;
+            kbd_event_count = AOS_get_keyboard_events(kbd_events, kbd_event_count);
+            for(u64 i = 0; i < kbd_event_count; i++)
+            {
+                if(kbd_events[i].event == AOS_KEYBOARD_EVENT_NOTHING)
+                { continue; }
 
-                    if(kbd_events[i].event == AOS_KEYBOARD_EVENT_PRESSED)
-                    {
-                        u64 scancode = kbd_events[i].scancode;
-                    }
-                    else
-                    {
-                    }
-                    printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+                if(kbd_events[i].event == AOS_KEYBOARD_EVENT_PRESSED)
+                {
+                    u64 scancode = kbd_events[i].scancode;
+                    if(scancode == 99)
+                    { input = input | 1; }
+                    else if(scancode == 100)
+                    { input = input | 2; }
+                    else if(scancode == 101)
+                    { input = input | 4; }
+                    else if(scancode == 102)
+                    { input = input | 8; }
                 }
-            } while(more);
+                else
+                {
+                    u64 scancode = kbd_events[i].scancode;
+                    if(scancode == 99)
+                    { input = input & ~1; }
+                    else if(scancode == 100)
+                    { input = input & ~2; }
+                    else if(scancode == 101)
+                    { input = input & ~4; }
+                    else if(scancode == 102)
+                    { input = input & ~8; }
+                }
+                printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+            }
         }
 
+        if(input & 1)
+        { square_x -= delta_time; }
+        if(input & 2)
+        { square_y += delta_time; }
+        if(input & 4)
+        { square_y -= delta_time; }
+        if(input & 8)
+        { square_x += delta_time; }
 
-        f64 frame_start = AOS_time_get_seconds();
         f32 time = frame_start - start_time;
         f32 red = (sineF32((time*M_PI)/2.0) + 1.0) / 2.0;
         f32 green = (sineF32((time*M_PI)/3.0) + 1.0) / 2.0;
@@ -86,8 +113,8 @@ while(1)
             {
                 u64 i = x + y * fb->width;
 
-                f32 e1 = pfx * d1y - pfy * d1x;
-                f32 e2 = pfx * d2y - pfy * d2x;
+                f32 e1 = (pfx-square_x) * d1y - (pfy+square_y) * d1x;
+                f32 e2 = (pfx-square_x) * d2y - (pfy+square_y) * d2x;
 
                 if(
                 e1 <  0.125 &&
