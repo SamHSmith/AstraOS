@@ -6,29 +6,31 @@ typedef struct
     u64 satp;
 } TrapFrame;
 
-#define THREAD_STATE_UNINITIALIZED 0
-#define THREAD_STATE_INITIALIZED 1
-#define THREAD_STATE_RUNNING 2
-#define THREAD_STATE_TIME_SLEEP 3
-#define THREAD_STATE_SURFACE_WAIT 4
+#define THREAD_AWAKE_TIME 0
+#define THREAD_AWAKE_SURFACE 1
 
 typedef struct
 {
-    u64 count;
-    u64 surface_slot[512];
-} ThreadSurfaceSlotWait;
+    u64 awake_type;
+    union
+    {
+        u64 awake_time;
+        u64 surface_slot;
+    };
+} ThreadAwakeCondition;
+
+#define THREAD_MAX_AWAKE_COUNT 64
 typedef struct
 {
     TrapFrame frame;
     Kallocation stack_alloc;
     u64 program_counter;
-    u64 thread_state;
     u64 process_pid;
-    union
-    {
-        u64 sleep_time;
-        ThreadSurfaceSlotWait surface_slot_wait;
-    }
+    u8 is_initialized;
+    u8 is_running;
+    u8 _padding[2];
+    u32 awake_count;
+    ThreadAwakeCondition awakes[THREAD_MAX_AWAKE_COUNT];
 } Thread;
 
 typedef struct
@@ -135,9 +137,9 @@ u32 process_thread_create(u64 pid)
 
     for(u32 i = 0; i < KERNEL_PROCESS_ARRAY[pid]->thread_count; i++)
     {
-        if(KERNEL_PROCESS_ARRAY[pid]->threads[i].thread_state == THREAD_STATE_UNINITIALIZED)
+        if(!KERNEL_PROCESS_ARRAY[pid]->threads[i].is_initialized)
         {
-            KERNEL_PROCESS_ARRAY[pid]->threads[i].thread_state = THREAD_STATE_INITIALIZED;
+            KERNEL_PROCESS_ARRAY[pid]->threads[i].is_initialized = 1;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].process_pid = pid;
             tid = i;
@@ -165,7 +167,7 @@ u32 process_thread_create(u64 pid)
         tid = KERNEL_PROCESS_ARRAY[pid]->thread_count;
         KERNEL_PROCESS_ARRAY[pid]->thread_count += 1;
 
-        KERNEL_PROCESS_ARRAY[pid]->threads[tid].thread_state = THREAD_STATE_INITIALIZED;
+        KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_initialized = 1;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].process_pid = pid;
     }

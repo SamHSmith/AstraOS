@@ -16,15 +16,15 @@ AOS_surface_acquire:
     ecall
     ret
 
-.global AOS_thread_sleep
-AOS_thread_sleep:
+.global AOS_thread_awake_time
+AOS_thread_awake_time:
     mv a1, a0
     addi a0, x0, 2
     ecall
     ret
 
-.global AOS_wait_for_surface_draw
-AOS_wait_for_surface_draw:
+.global AOS_awake_on_surface
+AOS_awake_on_surface:
     mv a2, a1
     mv a1, a0
     addi a0, x0, 3
@@ -197,5 +197,11 @@ AOS_forward_keyboard_events:
     mv a2, a1
     mv a1, a0
     addi a0, x0, 31
+    ecall
+    ret
+
+.global AOS_thread_sleep
+AOS_thread_sleep:
+    addi a0, x0, 32
     ecall
     ret

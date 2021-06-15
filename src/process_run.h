@@ -1,13 +1,39 @@
 #define SCHEDUALER_MIX_IN_WINDOW 50
 
-u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
+u64 thread_runtime_is_live(Thread* t, u64 mtime)
 {
-    Process* process = KERNEL_PROCESS_ARRAY[r.pid];
-    Thread* t = &process->threads[r.tid];
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
  
-         if(t->thread_state == THREAD_STATE_RUNNING)
+    if(t->is_running)
     {  return 1;  }
-    else if(t->thread_state == THREAD_STATE_TIME_SLEEP)
+
+    for(u64 i = 0; i < t->awake_count; i++)
+    {
+        u8 wake_up = 0;
+        if(t->awakes[i].awake_type == THREAD_AWAKE_TIME)
+        {
+            if(mtime >= t->awakes[i].awake_time)
+            { wake_up = 1; }
+        }
+        else if(t->awakes[i].awake_type == THREAD_AWAKE_SURFACE)
+        {
+            SurfaceSlot* slot=((SurfaceSlot*)process->surface_alloc.memory)
+                    + t->awakes[i].surface_slot;
+            assert(t->awakes[i].surface_slot < process->surface_count
+                    && slot->surface.is_initialized,
+                    "thread_runtime_is_live: the surface slot contains a valid surface");
+            if( !slot->is_defering_to_consumer_slot &&
+                !surface_slot_has_commited(process, t->awakes[i].surface_slot) &&
+                slot->surface.has_been_fired) { wake_up = 1; }
+        }
+        if(wake_up)
+        {
+            t->awake_count = 0;
+            t->is_running = 1;
+            return 1;
+        }
+    }
+/*    else if(t->thread_state == THREAD_STATE_TIME_SLEEP)
     {
         if(t->sleep_time > time_passed)
         {
@@ -41,6 +67,7 @@ u64 thread_runtime_is_live(ThreadRuntime r, u64 time_passed)
             return 1;
         }
     }
+*/
     return 0;
 }
 
@@ -72,7 +99,9 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
             KERNEL_THREAD_RUNTIME_ARRAY[i].runtime *= SCHEDUALER_MIX_IN_WINDOW-1;
             KERNEL_THREAD_RUNTIME_ARRAY[i].runtime /= SCHEDUALER_MIX_IN_WINDOW;
         }
-        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY[i], time_passed))
+        Thread* thread = &KERNEL_PROCESS_ARRAY[KERNEL_THREAD_RUNTIME_ARRAY[i].pid]
+                            ->threads[KERNEL_THREAD_RUNTIME_ARRAY[i].tid];
+        if(thread_runtime_is_live(thread, new_mtime))
         {
             total_runtime += KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
             participant_count += 1;
@@ -91,7 +120,9 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
 
     for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
     {
-        if(thread_runtime_is_live(KERNEL_THREAD_RUNTIME_ARRAY[i], 0))
+        Thread* thread = &KERNEL_PROCESS_ARRAY[KERNEL_THREAD_RUNTIME_ARRAY[i].pid]
+                            ->threads[KERNEL_THREAD_RUNTIME_ARRAY[i].tid];
+        if(thread_runtime_is_live(thread, new_mtime))
         {
             u64 point = total_runtime - KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
             bump += point * to_umax_factor;
@@ -152,7 +183,7 @@ void process_init()
     tarr[thread1].program_counter = (u64)program_loader_program;
     tarr[thread1].frame.regs[10] = drive1_partition_directory;
 
-    tarr[thread1].thread_state = THREAD_STATE_RUNNING;
+    tarr[thread1].is_running = 1;
 
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;

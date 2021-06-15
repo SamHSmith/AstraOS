@@ -12,8 +12,8 @@ typedef struct
 u64 AOS_surface_commit(u64 surface_slot);
 u64 AOS_surface_acquire(u64 surface_slot, AOS_Framebuffer* fb, u64 page_count);
  
-void AOS_thread_sleep(u64 duration);
-void AOS_wait_for_surface_draw(u64* surface_slots, u64 count);
+u64 AOS_thread_awake_time(u64 duration);
+u64 AOS_awake_on_surface(u64* surface_slots, u64 count);
 
 typedef struct
 {
@@ -81,6 +81,8 @@ u64 AOS_surface_forward_to_consumer(u64 surface_slot, u64 consumer_slot);
 u64 AOS_surface_stop_forwarding_to_consumer(u64 surface_slot);
 
 u64 AOS_forward_keyboard_events(AOS_KeyboardEvent* buf, u64 len, u64 pid);
+
+u64 AOS_thread_sleep();
 
 // give file to proccess
 // give directory to proccess

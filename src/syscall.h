@@ -50,29 +50,38 @@ void syscall_surface_acquire(volatile Thread** current_thread)
     (*current_thread)->program_counter += 4;
 }
 
-void syscall_thread_sleep(Thread** current_thread, u64 mtime)
+void syscall_thread_awake_time(Thread** current_thread, u64 mtime)
 {
     TrapFrame* frame = &(*current_thread)->frame;
     u64 sleep_time = frame->regs[11];
     Thread* t = *current_thread;
-
-    t->thread_state = THREAD_STATE_INITIALIZED; // Switch to a different thread
-    *current_thread = kernel_choose_new_thread(mtime, 1);
-
-    t->thread_state = THREAD_STATE_TIME_SLEEP; // Then set the sleep time
-    t->sleep_time = sleep_time;
     t->program_counter += 4;
+
+    if(t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
+    { frame->regs[10] = 0; return; }
+
+    u64 awake_index = t->awake_count;
+    t->awake_count++;
+
+    t->awakes[awake_index].awake_type = THREAD_AWAKE_TIME;
+    t->awakes[awake_index].awake_time = sleep_time + mtime;
+
+    frame->regs[10] = 1;
 }
 
-void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
+void syscall_awake_on_surface(Thread** current_thread, u64 mtime)
 {
     Thread* t = *current_thread;
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
     TrapFrame* frame = &t->frame;
     u64 user_surface_slots = frame->regs[11];
     u64 count = frame->regs[12];
+    t->program_counter += 4;
 
-    u64 surface_slot_array[512];
+    if(count == 0 || t->awake_count + count > THREAD_MAX_AWAKE_COUNT)
+    { frame->regs[10] = 0; return; }
+
+    u64 surface_slot_array[THREAD_MAX_AWAKE_COUNT];
     u64 surface_slot_count = 0;
 
     for(u64 i = 0; i < count; i++)
@@ -81,9 +90,9 @@ void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
         if(mmu_virt_to_phys(process->mmu_table, user_surface_slots + i*8, (u64*)&surface_slot) == 0)
         {
             SurfaceSlot* slot=
-        ((SurfaceSlot*)KERNEL_PROCESS_ARRAY[t->process_pid]->surface_alloc.memory) + *surface_slot;
+        ((SurfaceSlot*)process->surface_alloc.memory) + *surface_slot;
 
-            if(*surface_slot < KERNEL_PROCESS_ARRAY[t->process_pid]->surface_count &&
+            if(*surface_slot < process->surface_count &&
                 slot->surface.is_initialized)
             {
                 surface_slot_array[surface_slot_count] = *surface_slot;
@@ -92,30 +101,34 @@ void syscall_wait_for_surface_draw(Thread** current_thread, u64 mtime)
         }
     }
 
-    u8 should_sleep = surface_slot_count > 0;
+    if(surface_slot_count == 0)
+    { frame->regs[10] = 0; return; }
 
+    u64 awake_index = t->awake_count;
+    t->awake_count += surface_slot_count;
     for(u64 i = 0; i < surface_slot_count; i++)
     {
-        if(surface_slot_array[i] >= process->surface_count) { continue; }
-        SurfaceSlot* slot = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot_array[i];
-        if(!surface_slot_has_commited(process, surface_slot_array[i]) &&
-            slot->surface.has_been_fired)
-        { should_sleep = 0; }
+        t->awakes[awake_index + i].awake_type = THREAD_AWAKE_SURFACE;
+        t->awakes[awake_index + i].surface_slot = surface_slot_array[i];
     }
+    frame->regs[10] = 1;
+}
 
-    if(should_sleep)
-    {
-        ThreadSurfaceSlotWait surface_slot_wait = {0};
-        surface_slot_wait.count = surface_slot_count;
-        for(u64 i = 0; i < surface_slot_count; i++)
-        {
-            surface_slot_wait.surface_slot[i] = surface_slot_array[i];
-        }
-        t->surface_slot_wait = surface_slot_wait;
-        t->thread_state = THREAD_STATE_SURFACE_WAIT;
-        *current_thread = kernel_choose_new_thread(mtime, 1);
-    }
+void syscall_thread_sleep(Thread** current_thread, u64 mtime)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
     t->program_counter += 4;
+
+    t->is_running = t->awake_count == 0;
+    if(thread_runtime_is_live(t, mtime))
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+    // go to sleep
+    frame->regs[10] = 1;
+    *current_thread = kernel_choose_new_thread(mtime, 1);
 }
 
 void syscall_get_rawmouse_events(Thread** current_thread)
@@ -644,9 +657,9 @@ void do_syscall(Thread** current_thread, u64 mtime)
     else if(call_num == 1)
     { syscall_surface_acquire(current_thread); }
     else if(call_num == 2)
-    { syscall_thread_sleep(current_thread, mtime); }
+    { syscall_thread_awake_time(current_thread, mtime); }
     else if(call_num == 3)
-    { syscall_wait_for_surface_draw(current_thread, mtime); }
+    { syscall_awake_on_surface(current_thread, mtime); }
     else if(call_num == 4)
     { syscall_get_rawmouse_events(current_thread); }
     else if(call_num == 5)
@@ -685,6 +698,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_surface_stop_forwarding_to_consumer(current_thread); }
     else if(call_num == 31)
     { syscall_forward_keyboard_events(current_thread); }
+    else if(call_num == 32)
+    { syscall_thread_sleep(current_thread, mtime); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

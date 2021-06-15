@@ -30,7 +30,8 @@ void _start()
 while(1)
 {
     u64 surface = 0;
-    AOS_wait_for_surface_draw(&surface, 1);
+    AOS_awake_on_surface(&surface, 1);
+    AOS_thread_sleep();
 
     AOS_Framebuffer* fb = 0x424242000; // the three zeroes alignes it to the page boundry
     u64 fb_page_count = AOS_surface_acquire(surface, 0, 0);

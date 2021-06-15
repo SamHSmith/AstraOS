@@ -41,7 +41,7 @@ void program_loader_program(u64 drive1_partitions_directory)
         partition_names[i][0] = 0;
         AOS_file_get_name(partitions[i], partition_names[i], 64);
         partition_name_lens[i] = strlen(partition_names[i]);
-        printf("tempAOS has found %s\n", partition_names[i]);
+        printf("temp_AOS has found %s\n", partition_names[i]);
     }
     u64 slot_index = 0;
 
@@ -251,7 +251,8 @@ while(1) {
     }
 //f64 pre_sleep = AOS_time_get_seconds();
     u64 AOS_wait_surface = 0;
-//    AOS_wait_for_surface_draw(&AOS_wait_surface, 1);
+    AOS_awake_on_surface(&AOS_wait_surface, 1);
+//    AOS_thread_sleep();
 //printf("temp slept for %lf seconds\n", AOS_time_get_seconds() - pre_sleep);
 
     Framebuffer* fb = 0x54000;

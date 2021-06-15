@@ -96,7 +96,7 @@ u64 is_valid_file_id(u64 file_id)
 
 u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
 {
-    if(!is_valid_file_id(file_id)) { return 0; }
+    if(!is_valid_file_id(file_id) || !buf_size) { return 0; }
     KernelFile* file = KERNEL_FILE_ARRAY + file_id;
     if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
     {
@@ -114,10 +114,10 @@ u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
         KernelFileDrivePartition* part = &file->drive_partition;
         u64 name_len = strnlen_s(part->name, 54);
  
-        u64 cpy_len = name_len; if(cpy_len > buf_size) { cpy_len = buf_size; }
+        u64 cpy_len = name_len; if(cpy_len + 1 > buf_size) { cpy_len = buf_size - 1; }
         strncpy(buf, part->name, cpy_len);
-        if(buf_size > 54) { buf[54] = 0; }
-        else if(buf_size > 0) { buf[buf_size-1] = 0; }
+        if(buf_size > cpy_len) { buf[cpy_len] = 0; }
+        else { buf[buf_size-1] = 0; }
         return name_len + 1;
     }
     else
