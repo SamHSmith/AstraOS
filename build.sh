@@ -30,6 +30,11 @@ then
  
 $QEMU $QEMU_FLAGS
 
+elif [ "$1" == "debug" ]
+then
+ 
+$QEMU $QEMU_FLAGS -s -S
+ 
 else
 
 #do build
