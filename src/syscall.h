@@ -33,7 +33,7 @@ void syscall_surface_acquire(volatile Thread** current_thread)
 
     SurfaceSlot* slot = &((SurfaceSlot*)process->surface_alloc.memory)[surface_slot];
 
-    if(surface_slot < process->surface_count && slot->surface.is_initialized)
+    if(surface_slot < process->surface_count && slot->surface.is_initialized && slot->surface.has_been_fired)
     {
         assert(!slot->has_acquired, "you have not already acquired");
         surface_prepare_draw_framebuffer(surface_slot, process);
@@ -50,7 +50,7 @@ void syscall_surface_acquire(volatile Thread** current_thread)
     (*current_thread)->program_counter += 4;
 }
 
-void syscall_thread_awake_time(Thread** current_thread, u64 mtime)
+void syscall_thread_awake_after_time(Thread** current_thread, u64 mtime)
 {
     TrapFrame* frame = &(*current_thread)->frame;
     u64 sleep_time = frame->regs[11];
@@ -129,6 +129,40 @@ void syscall_thread_sleep(Thread** current_thread, u64 mtime)
     // go to sleep
     frame->regs[10] = 1;
     *current_thread = kernel_choose_new_thread(mtime, 1);
+}
+
+void syscall_thread_awake_on_keyboard(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
+    t->program_counter += 4;
+
+    if(t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
+    { frame->regs[10] = 0; return; }
+
+    u64 awake_index = t->awake_count;
+    t->awake_count++;
+
+    t->awakes[awake_index].awake_type = THREAD_AWAKE_KEYBOARD;
+
+    frame->regs[10] = 1;
+}
+
+void syscall_thread_awake_on_mouse(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    TrapFrame* frame = &t->frame;
+    t->program_counter += 4;
+
+    if(t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
+    { frame->regs[10] = 0; return; }
+
+    u64 awake_index = t->awake_count;
+    t->awake_count++;
+
+    t->awakes[awake_index].awake_type = THREAD_AWAKE_MOUSE;
+
+    frame->regs[10] = 1;
 }
 
 void syscall_get_rawmouse_events(Thread** current_thread)
@@ -564,6 +598,7 @@ void syscall_surface_forward_to_consumer(Thread** current_thread)
     {
         slot->is_defering_to_consumer_slot = 1;
         slot->defer_consumer_slot = consumer_slot;
+        surface_slot_fire(process, surface_slot);
         ret = 1;
     }
     frame->regs[10] = ret;
@@ -657,7 +692,7 @@ void do_syscall(Thread** current_thread, u64 mtime)
     else if(call_num == 1)
     { syscall_surface_acquire(current_thread); }
     else if(call_num == 2)
-    { syscall_thread_awake_time(current_thread, mtime); }
+    { syscall_thread_awake_after_time(current_thread, mtime); }
     else if(call_num == 3)
     { syscall_awake_on_surface(current_thread, mtime); }
     else if(call_num == 4)
@@ -700,6 +735,10 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_forward_keyboard_events(current_thread); }
     else if(call_num == 32)
     { syscall_thread_sleep(current_thread, mtime); }
+    else if(call_num == 33)
+    { syscall_thread_awake_on_keyboard(current_thread); }
+    else if(call_num == 34)
+    { syscall_thread_awake_on_mouse(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

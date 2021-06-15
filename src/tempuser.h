@@ -251,8 +251,10 @@ while(1) {
     }
 //f64 pre_sleep = AOS_time_get_seconds();
     u64 AOS_wait_surface = 0;
-    AOS_awake_on_surface(&AOS_wait_surface, 1);
-//    AOS_thread_sleep();
+    AOS_thread_awake_on_surface(&AOS_wait_surface, 1);
+    AOS_thread_awake_on_mouse();
+    AOS_thread_awake_on_keyboard();
+    AOS_thread_sleep();
 //printf("temp slept for %lf seconds\n", AOS_time_get_seconds() - pre_sleep);
 
     Framebuffer* fb = 0x54000;

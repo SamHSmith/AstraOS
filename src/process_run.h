@@ -26,6 +26,16 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
                 !surface_slot_has_commited(process, t->awakes[i].surface_slot) &&
                 slot->surface.has_been_fired) { wake_up = 1; }
         }
+        else if(t->awakes[i].awake_type == THREAD_AWAKE_KEYBOARD)
+        {
+            if(process->kbd_event_queue.count)
+            { wake_up = 1; }
+        }
+        else if(t->awakes[i].awake_type == THREAD_AWAKE_MOUSE)
+        {
+            if(process->mouse_event_queue.event_count)
+            { wake_up = 1; }
+        }
         if(wake_up)
         {
             t->awake_count = 0;

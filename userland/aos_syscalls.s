@@ -16,15 +16,15 @@ AOS_surface_acquire:
     ecall
     ret
 
-.global AOS_thread_awake_time
-AOS_thread_awake_time:
+.global AOS_thread_awake_after_time
+AOS_thread_awake_after_time:
     mv a1, a0
     addi a0, x0, 2
     ecall
     ret
 
-.global AOS_awake_on_surface
-AOS_awake_on_surface:
+.global AOS_thread_awake_on_surface
+AOS_thread_awake_on_surface:
     mv a2, a1
     mv a1, a0
     addi a0, x0, 3
@@ -203,5 +203,17 @@ AOS_forward_keyboard_events:
 .global AOS_thread_sleep
 AOS_thread_sleep:
     addi a0, x0, 32
+    ecall
+    ret
+
+.global AOS_thread_awake_on_keyboard
+AOS_thread_awake_on_keyboard:
+    addi a0, x0, 33
+    ecall
+    ret
+
+.global AOS_thread_awake_on_mouse
+AOS_thread_awake_on_mouse:
+    addi a0, x0, 34
     ecall
     ret

@@ -8,6 +8,8 @@ typedef struct
 
 #define THREAD_AWAKE_TIME 0
 #define THREAD_AWAKE_SURFACE 1
+#define THREAD_AWAKE_KEYBOARD 2
+#define THREAD_AWAKE_MOUSE 3
 
 typedef struct
 {
