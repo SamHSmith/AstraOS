@@ -105,6 +105,7 @@ while(1)
 
         f32 dpfx = 2.0 / (f32)fb->width;
         f32 dpfy = 2.0 / (f32)fb->height;
+        f32 alias_by = (dpfx + dpfy) / 2.0;
         f32 pfx = -1.0;
         f32 pfy = -1.0;
         for(u64 y = 0; y < fb->height; y++)
@@ -123,10 +124,24 @@ while(1)
                 e2 > -0.125
                 )
                 {
-                    fb->data[i*4 + 0] = red;
-                    fb->data[i*4 + 1] = green;
-                    fb->data[i*4 + 2] = blue;
-                    fb->data[i*4 + 3] = 0.6;
+                    f32 cover1 = 1.0;
+                    f32 cover2 = 1.0;
+                    if(e1 > 0.0 && 0.125 - e1 < alias_by)
+                    { cover1 = (0.125 - e1) / alias_by; }
+                    else if(e1 < 0.0 && 0.125 + e1 < alias_by)
+                    { cover1 = (0.125 + e1) / alias_by; }
+                    if(e2 > 0.0 && 0.125 - e2 < alias_by)
+                    { cover2 = (0.125 - e2) / alias_by; }
+                    else if(e2 < 0.0 && 0.125 + e2 < alias_by)
+                    { cover2 = (0.125 + e2) / alias_by; }
+
+                    f32 cover = cover1;
+                    if(cover2 < cover1) { cover = cover2; }
+
+                    fb->data[i*4 + 0] = red * cover;
+                    fb->data[i*4 + 1] = green * cover;
+                    fb->data[i*4 + 2] = blue * cover;
+                    fb->data[i*4 + 3] = 0.6 * cover;
                 }
                 else
                 {
