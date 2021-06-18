@@ -7,7 +7,7 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 #echo $SCRIPTPATH
 cd $SCRIPTPATH
 
-if [ "$1" == "clean" ]
+if [ "$1" = "clean" ]
 then
 rm -drf bin
 else

@@ -19,18 +19,18 @@ KERNEL_SOURCES="src/*.s src/*.c src/cyclone_crypto/hash/sha512.c src/cyclone_cry
 SQUARE_SOURCES="square_src/elf.c userland/aos_syscalls.s src/printf.c"
 
 
-if [ "$1" == "clean" ]
+if [ "$1" = "clean" ]
 then
 rm -drf bin
 fsmake/build.sh clean
 fsread/build.sh clean
 
-elif [ "$1" == "run" ]
+elif [ "$1" = "run" ]
 then
  
 $QEMU $QEMU_FLAGS
 
-elif [ "$1" == "debug" ]
+elif [ "$1" = "debug" ]
 then
  
 $QEMU $QEMU_FLAGS -s -S
