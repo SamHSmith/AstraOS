@@ -684,6 +684,18 @@ void syscall_forward_keyboard_events(Thread** current_thread)
     t->program_counter += 4;
 }
 
+void syscall_stream_put(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process_orig = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_out_stream = frame->regs[11];
+    u64 user_memory = frame->regs[12];
+    u64 user_count = frame->regs[13];
+
+    u64 page_count = (user_count+PAGE_SIZE-1) / PAGE_SIZE;
+}
+
 void do_syscall(Thread** current_thread, u64 mtime)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
