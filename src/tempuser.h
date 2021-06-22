@@ -1,4 +1,5 @@
 #include "../userland/aos_syscalls.h"
+#include "../userland/aos_helper.h"
 
 #include "samorak.h"
 //#include "qwerty.h"
@@ -44,7 +45,7 @@ void program_loader_program(u64 drive1_partitions_directory)
         partition_names[i][0] = 0;
         AOS_file_get_name(partitions[i], partition_names[i], 64);
         partition_name_lens[i] = strlen(partition_names[i]);
-        printf("temp_AOS has found %s\n", partition_names[i]);
+        aos_h_printf("temp_AOS has found %s\n", partition_names[i]);
     }
     u64 slot_index = 0;
 
@@ -216,7 +217,7 @@ while(1) {
                     u64 pid = 0;
                     if(AOS_create_process_from_file(partitions[slot_index], &pid))
                     {
-                        printf("PROCESS CREATED, PID=%llu\n", pid);
+                        aos_h_printf("PROCESS CREATED, PID=%llu\n", pid);
                         u64 con = 0;
                         if(AOS_surface_consumer_create(pid, &con))
                         {
@@ -241,15 +242,15 @@ while(1) {
                                 windows[window_count-1] = temp;
                             }
                         }
-                        else { printf("Failed to create consumer for PID: %llu\n", pid); }
+                        else { aos_h_printf("Failed to create consumer for PID: %llu\n", pid); }
                     }
-                    else { printf("failed to create process."); }
+                    else { aos_h_printf("failed to create process."); }
                 }
             }
             else
             {
             }
-//            printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+//            aos_h_printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
         }
     }
 //f64 pre_sleep = AOS_time_get_seconds();
@@ -258,7 +259,7 @@ while(1) {
     AOS_thread_awake_on_mouse();
     AOS_thread_awake_on_keyboard();
     AOS_thread_sleep();
-//printf("temp slept for %lf seconds\n", AOS_time_get_seconds() - pre_sleep);
+//aos_h_printf("temp slept for %lf seconds\n", AOS_time_get_seconds() - pre_sleep);
 
     Framebuffer* fb = 0x54000;
     u64 fb_page_count = AOS_surface_acquire(0, 0, 0);
@@ -294,7 +295,7 @@ while(1) {
         u64 cvo = 0;
         if(AOS_get_vo_id(&cvo))
         {
-            sprintf(bottom_banner, "Virtual Output #%llu", cvo);
+            aos_h_sprintf(bottom_banner, "Virtual Output #%llu", cvo);
         }
         u64 bottom_banner_len = strlen(bottom_banner);
         if(bottom_banner_len > column_count || row_count <= 1) { bottom_banner_len = column_count; }
@@ -462,7 +463,7 @@ while(1) {
         double time_frame_end = AOS_time_get_seconds();
         double frame_time = (time_frame_end-time_frame_start) *1000.0;
         u8 frame_counter_string[16];
-        sprintf(frame_counter_string, "%4.4lf ms", frame_time);
+        aos_h_sprintf(frame_counter_string, "%4.4lf ms", frame_time);
         u64 frame_counter_width = strlen(frame_counter_string) * 8;
         u64 xoff = fb->width - frame_counter_width;
         for(u64 y = bottom_banner_y; y < fb->height; y++)

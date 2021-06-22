@@ -313,10 +313,6 @@ u64 m_trap(
                 Stream* out_stream = *((Stream**)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_alloc.memory);
                 u64 byte_count = 0;
                 stream_take(out_stream, 0, 0, &byte_count);
-                if(byte_count)
-                {
-                    printf("VO#%llu: ", current_vo);
-                }
                 while(byte_count)
                 {
                     u8 buffer[32];
