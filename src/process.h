@@ -53,6 +53,12 @@ typedef struct
     Kallocation file_access_permissions_alloc; // u8 array of flags
     u64 file_access_count;
 
+    Kallocation out_stream_alloc; // Stream* array
+    u64 out_stream_count;
+
+    Kallocation in_stream_alloc; // Stream* array
+    u64 in_stream_count;
+
     KeyboardEventQueue kbd_event_queue;
     RawMouseEventQueue mouse_event_queue;
 
@@ -393,4 +399,42 @@ u64 process_get_read_access(Process* process, u64 local_file_id, u64* file_id)
         (FILE_ACCESS_PERMISSION_READ_BIT | FILE_ACCESS_PERMISSION_READ_WRITE_BIT) == 0) { return 0; }
     if(file_id) { *file_id = redirects[local_file_id]; }
     return 1;
+}
+
+
+
+u64 process_create_out_stream(Process* process)
+{
+    for(u64 i = 0; i < process->out_stream_count; i++)
+    {
+        Stream** out_streams = process->out_stream_alloc.memory;
+        if(out_streams[i] == 0)
+        {
+            out_streams[i] = stream_create();
+            return i;
+        }
+    }
+
+    if((process->out_stream_count + 1) * sizeof(Stream*) > process->out_stream_alloc.page_count * PAGE_SIZE)
+    {
+        Kallocation new_alloc = kalloc_pages(process->out_stream_alloc.page_count + 1);
+        Stream** new_array = new_alloc.memory;
+        Stream** old_array = process->out_stream_alloc.memory;
+        for(u64 i = 0; i < process->out_stream_count; i++)
+        {
+            new_array[i] = old_array[i];
+        }
+        if(process->out_stream_alloc.page_count)
+        {
+            kfree_pages(process->out_stream_alloc);
+        }
+        process->out_stream_alloc = new_alloc;
+    }
+
+    u64 index = process->out_stream_count;
+    process->out_stream_count++;
+
+    Stream** array = process->out_stream_alloc.memory;
+    array[index] = stream_create();
+    return index;
 }

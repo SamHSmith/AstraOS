@@ -86,6 +86,8 @@ u64 AOS_thread_sleep();
 u64 AOS_thread_awake_on_keyboard();
 u64 AOS_thread_awake_on_mouse();
 
+u64 AOS_stream_put(u64 out_stream, u8* memory, u64 count);
+
 // give file to proccess
 // give directory to proccess
  

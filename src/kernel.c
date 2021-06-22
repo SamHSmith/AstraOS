@@ -307,6 +307,23 @@ u64 m_trap(
                 frame_has_been_requested = 0;
             }
 
+            // Output VO stream out to serial
+            if(KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_count > 0)
+            {
+                Stream* out_stream = *((Stream**)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_alloc.memory);
+                u64 byte_count = 0;
+                stream_take(out_stream, 0, 0, &byte_count);
+                if(byte_count)
+                {
+                    printf("VO#%llu: ", current_vo);
+                }
+                while(byte_count)
+                {
+                    u8 buffer[32];
+                    u64 count = stream_take(out_stream, buffer, 32, &byte_count);
+                    printf("%.*s", count, buffer);
+                }
+            }
 
             // Reset the Machine Timer
             volatile u64* mtimecmp = (u64*)0x02004000;

@@ -217,3 +217,12 @@ AOS_thread_awake_on_mouse:
     addi a0, x0, 34
     ecall
     ret
+
+.global AOS_stream_put
+AOS_stream_put:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 35
+    ecall
+    ret

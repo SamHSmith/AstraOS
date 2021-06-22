@@ -162,6 +162,7 @@ void process_init()
 {
     u64 pid = process_create();
 
+    process_create_out_stream(KERNEL_PROCESS_ARRAY[pid]);
     surface_create(KERNEL_PROCESS_ARRAY[pid]);
 
     vos[0].pid = pid;

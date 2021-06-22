@@ -31,6 +31,9 @@ f32 clamp_01(f32 f)
 
 void program_loader_program(u64 drive1_partitions_directory)
 {
+    u8* print_text = "program loader program has started.\n";
+    AOS_stream_put(0, print_text, strlen(print_text));
+
     u64 slot_count = AOS_directory_get_files(drive1_partitions_directory, 0, 0);
     u64 partitions[slot_count];
     u8 partition_names[slot_count][64];

@@ -687,13 +687,39 @@ void syscall_forward_keyboard_events(Thread** current_thread)
 void syscall_stream_put(Thread** current_thread)
 {
     Thread* t = *current_thread;
-    Process* process_orig = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
     TrapFrame* frame = &t->frame;
     u64 user_out_stream = frame->regs[11];
     u64 user_memory = frame->regs[12];
     u64 user_count = frame->regs[13];
+    t->program_counter += 4;
+
+    Stream** out_stream_array = process->out_stream_alloc.memory;
+    if(user_out_stream >= process->out_stream_count || out_stream_array[user_out_stream] == 0)
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+    Stream* out_stream = out_stream_array[user_out_stream];
 
     u64 page_count = (user_count+PAGE_SIZE-1) / PAGE_SIZE;
+
+    u8* memory = 0;
+    {
+    u64 i = page_count;
+    while(1)
+    {
+        if(mmu_virt_to_phys(process->mmu_table, user_memory + PAGE_SIZE * i, (u64*)&memory) != 0)
+        {
+            frame->regs[10] = 0;
+            return;
+        }
+        if(i == 0) { break; }
+        i--;
+    }
+    }
+
+    frame->regs[10] = stream_put(out_stream, memory, user_count);
 }
 
 void do_syscall(Thread** current_thread, u64 mtime)
@@ -751,6 +777,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_thread_awake_on_keyboard(current_thread); }
     else if(call_num == 34)
     { syscall_thread_awake_on_mouse(current_thread); }
+    else if(call_num == 35)
+    { syscall_stream_put(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }
