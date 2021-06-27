@@ -75,6 +75,20 @@ void program_loader_program(u64 drive1_partitions_directory)
 
 while(1) {
 
+    { // Read from stdin
+        while(1)
+        {
+            u64 byte_count;
+            AOS_stream_take(AOS_STREAM_STDIN, 0, 0, &byte_count);
+            char character;
+            if(byte_count && AOS_stream_take(AOS_STREAM_STDIN, &character, 1, &byte_count))
+            {
+                aos_h_printf("you typed the character %c on stdin\n", character);
+            }
+            else { break; }
+        }
+    }
+
     { // Mouse events
         u64 mouse_event_count = AOS_get_rawmouse_events(0, 0);
         AOS_RawMouseEvent mouse_events[mouse_event_count];

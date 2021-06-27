@@ -365,9 +365,15 @@ u64 m_trap(
 
             u32 interrupt;
             char character;
-            while(plic_interrupt_next(&interrupt))
+            while(plic_interrupt_next(&interrupt) && interrupt == 10)
             {
-                printf("you entered the character: %c over serial\n", character);
+                uart_read(&character, 1);
+                if(KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_count > 0)
+                {
+                    Stream* in_stream =
+                        *((Stream**)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->in_stream_alloc.memory);
+                    stream_put(in_stream, &character, 1);
+                }
                 plic_interrupt_complete(interrupt);
             }
             if(kernel_current_thread != 0)

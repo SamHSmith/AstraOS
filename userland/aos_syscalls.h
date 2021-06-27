@@ -89,6 +89,7 @@ u64 AOS_thread_awake_on_mouse();
 #define AOS_STREAM_STDOUT 0
 #define AOS_STREAM_STDIN 0
 u64 AOS_stream_put(u64 out_stream, u8* memory, u64 count);
+u64 AOS_stream_take(u64 in_stream, u8* buffer, u64 buffer_size, u64* byte_count_in_stream);
 
 // give file to proccess
 // give directory to proccess

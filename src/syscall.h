@@ -705,6 +705,7 @@ void syscall_stream_put(Thread** current_thread)
     u64 page_count = (user_count+PAGE_SIZE-1) / PAGE_SIZE;
 
     u8* memory = 0;
+    if(page_count)
     {
     u64 i = page_count;
     while(1)
@@ -720,6 +721,57 @@ void syscall_stream_put(Thread** current_thread)
     }
 
     frame->regs[10] = stream_put(out_stream, memory, user_count);
+}
+
+void syscall_stream_take(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_in_stream = frame->regs[11];
+    u64 user_buffer = frame->regs[12];
+    u64 user_buffer_size = frame->regs[13];
+    u64 user_byte_count_in_stream = frame->regs[14];
+    t->program_counter += 4;
+
+    u64* byte_count_in_stream_ptr;
+    if(mmu_virt_to_phys(process->mmu_table, user_byte_count_in_stream + sizeof(u64),
+                        (u64*)&byte_count_in_stream_ptr) != 0 ||
+       mmu_virt_to_phys(process->mmu_table, user_byte_count_in_stream,
+                        (u64*)&byte_count_in_stream_ptr) != 0)
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+    *byte_count_in_stream_ptr = 0;
+
+    Stream** in_stream_array = process->in_stream_alloc.memory;
+    if(user_in_stream >= process->in_stream_count || in_stream_array[user_in_stream] == 0)
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+    Stream* in_stream = in_stream_array[user_in_stream];
+
+    u64 page_count = (user_buffer_size+PAGE_SIZE-1) / PAGE_SIZE;
+ 
+    u8* buffer = 0;
+    if(page_count)
+    {
+    u64 i = page_count;
+    while(1)
+    {
+        if(mmu_virt_to_phys(process->mmu_table, user_buffer + PAGE_SIZE * i, (u64*)&buffer) != 0)
+        {
+            frame->regs[10] = 0;
+            return;
+        }
+        if(i == 0) { break; }
+        i--;
+    }
+    }
+
+    frame->regs[10] = stream_take(in_stream, buffer, user_buffer_size, byte_count_in_stream_ptr);
 }
 
 void do_syscall(Thread** current_thread, u64 mtime)
@@ -779,6 +831,8 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_thread_awake_on_mouse(current_thread); }
     else if(call_num == 35)
     { syscall_stream_put(current_thread); }
+    else if(call_num == 36)
+    { syscall_stream_take(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

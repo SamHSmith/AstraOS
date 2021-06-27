@@ -38,7 +38,8 @@ u64 stream_put(Stream* stream, u8* memory, u64 count)
 // returns the amount of bytes taken out of the stream and put
 // in the buffer. Always less then or equal to buffer_size.
 // can be called with NULL buffer, 0 buffer_size and a valid bytes_in_stream
-// pointer to get the amount of bytes in the stream.
+// pointer to get the amount of bytes in the stream after the operation has
+// completed.
 u64 stream_take(Stream* stream, u8* buffer, u64 buffer_size, u64* bytes_in_stream)
 {
     u64 taken_count = 0;

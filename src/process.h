@@ -438,3 +438,39 @@ u64 process_create_out_stream(Process* process)
     array[index] = stream_create();
     return index;
 }
+
+u64 process_create_in_stream(Process* process)
+{
+    for(u64 i = 0; i < process->in_stream_count; i++)
+    {
+        Stream** in_streams = process->in_stream_alloc.memory;
+        if(in_streams[i] == 0)
+        {
+            in_streams[i] = stream_create();
+            return i;
+        }
+    }
+ 
+    if((process->in_stream_count + 1) * sizeof(Stream*) > process->in_stream_alloc.page_count * PAGE_SIZE)
+    {
+        Kallocation new_alloc = kalloc_pages(process->in_stream_alloc.page_count + 1);
+        Stream** new_array = new_alloc.memory;
+        Stream** old_array = process->in_stream_alloc.memory;
+        for(u64 i = 0; i < process->in_stream_count; i++)
+        {
+            new_array[i] = old_array[i];
+        }
+        if(process->in_stream_alloc.page_count)
+        {
+            kfree_pages(process->in_stream_alloc);
+        }
+        process->in_stream_alloc = new_alloc;
+    }
+ 
+    u64 index = process->in_stream_count;
+    process->in_stream_count++;
+ 
+    Stream** array = process->in_stream_alloc.memory;
+    array[index] = stream_create();
+    return index;
+}
