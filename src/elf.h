@@ -125,7 +125,6 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret)
     mmu_kernel_map_range(proc->mmu_table, 0x10000000, 0x10000000, 2 + 4); // UART
 
     proc->threads[thread1].program_counter = header->entry_addr;
-    proc->threads[thread1].is_running = 1;
 
     *pid_ret = pid;
     return 1;

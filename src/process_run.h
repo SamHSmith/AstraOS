@@ -162,8 +162,10 @@ void process_init()
 {
     u64 pid = process_create();
 
-    process_create_out_stream(KERNEL_PROCESS_ARRAY[pid]);
-    process_create_in_stream(KERNEL_PROCESS_ARRAY[pid]);
+    u64 out_stream = process_create_out_stream_slot(KERNEL_PROCESS_ARRAY[pid]);
+    ((Stream**)KERNEL_PROCESS_ARRAY[pid]->out_stream_alloc.memory)[out_stream] = stream_create();
+    u64 in_stream = process_create_in_stream_slot(KERNEL_PROCESS_ARRAY[pid]);
+    ((Stream**)KERNEL_PROCESS_ARRAY[pid]->in_stream_alloc.memory)[in_stream] = stream_create();
     surface_create(KERNEL_PROCESS_ARRAY[pid]);
 
     vos[0].pid = pid;

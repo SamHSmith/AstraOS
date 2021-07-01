@@ -16,7 +16,7 @@ CFLAGS="$CFLAGS $(cat always_to_be_used_compiler_flags)"
 
 KERNEL_SOURCES="src/*.s src/*.c src/cyclone_crypto/hash/sha512.c src/cyclone_crypto/common/cpu_endian.c userland/aos_syscalls.s"
 
-SQUARE_SOURCES="square_src/elf.c userland/aos_syscalls.s src/printf.c"
+SQUARE_SOURCES="square_src/elf.c userland/aos_syscalls.s"
 
 
 if [ "$1" = "clean" ]

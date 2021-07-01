@@ -702,15 +702,16 @@ void syscall_stream_put(Thread** current_thread)
     }
     Stream* out_stream = out_stream_array[user_out_stream];
 
-    u64 page_count = (user_count+PAGE_SIZE-1) / PAGE_SIZE;
+    u64 page_count = (user_count+(user_memory % PAGE_SIZE) + PAGE_SIZE - 1) / PAGE_SIZE;
 
     u8* memory = 0;
     if(page_count)
     {
-    u64 i = page_count;
+    u64 i = page_count - 1;
     while(1)
     {
-        if(mmu_virt_to_phys(process->mmu_table, user_memory + PAGE_SIZE * i, (u64*)&memory) != 0)
+        if(mmu_virt_to_phys(process->mmu_table, user_memory + (PAGE_SIZE * i),
+            (u64*)&memory) != 0)
         {
             frame->regs[10] = 0;
             return;
@@ -753,12 +754,12 @@ void syscall_stream_take(Thread** current_thread)
     }
     Stream* in_stream = in_stream_array[user_in_stream];
 
-    u64 page_count = (user_buffer_size+PAGE_SIZE-1) / PAGE_SIZE;
+    u64 page_count = (user_buffer_size+(user_buffer % PAGE_SIZE) + PAGE_SIZE - 1) / PAGE_SIZE;
  
     u8* buffer = 0;
     if(page_count)
     {
-    u64 i = page_count;
+    u64 i = page_count - 1;
     while(1)
     {
         if(mmu_virt_to_phys(process->mmu_table, user_buffer + PAGE_SIZE * i, (u64*)&buffer) != 0)
@@ -772,6 +773,123 @@ void syscall_stream_take(Thread** current_thread)
     }
 
     frame->regs[10] = stream_take(in_stream, buffer, user_buffer_size, byte_count_in_stream_ptr);
+}
+
+void syscall_process_create_out_stream(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_process_handle = frame->regs[11]; // as of now just the pid, very insecure
+    u64 user_foreign_out_stream_ptr = frame->regs[12];
+    u64 user_owned_in_stream_ptr = frame->regs[13];
+    t->program_counter += 4;
+
+    if( user_process_handle >= KERNEL_PROCESS_ARRAY_LEN ||
+        KERNEL_PROCESS_ARRAY[user_process_handle]->mmu_table == 0)
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+    Process* foreign = KERNEL_PROCESS_ARRAY[user_process_handle];
+ 
+    u64* foreign_out_stream_ptr = 0;
+    if(user_foreign_out_stream_ptr &&
+      (mmu_virt_to_phys(process->mmu_table, user_foreign_out_stream_ptr + sizeof(u64),
+                        (u64*)&foreign_out_stream_ptr) != 0 ||
+       mmu_virt_to_phys(process->mmu_table, user_foreign_out_stream_ptr,
+                        (u64*)&foreign_out_stream_ptr) != 0))
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+
+    u64* owned_in_stream_ptr = 0;
+    if(user_owned_in_stream_ptr &&
+      (mmu_virt_to_phys(process->mmu_table, user_owned_in_stream_ptr + sizeof(u64),
+                        (u64*)&owned_in_stream_ptr) != 0 ||
+       mmu_virt_to_phys(process->mmu_table, user_owned_in_stream_ptr,
+                        (u64*)&owned_in_stream_ptr) != 0))
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+
+    u64 out_stream;
+    u64 in_stream;
+    process_create_between_stream(foreign, process, &out_stream, &in_stream);
+
+    frame->regs[10] = 1;
+    if(foreign_out_stream_ptr) { *foreign_out_stream_ptr = out_stream; }
+    if(owned_in_stream_ptr)    { *owned_in_stream_ptr = in_stream; }
+}
+
+void syscall_process_create_in_stream(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_process_handle = frame->regs[11]; // as of now just the pid, very insecure
+    u64 user_owned_out_stream_ptr = frame->regs[12];
+    u64 user_foreign_in_stream_ptr = frame->regs[13];
+    t->program_counter += 4;
+ 
+    if( user_process_handle >= KERNEL_PROCESS_ARRAY_LEN ||
+        KERNEL_PROCESS_ARRAY[user_process_handle]->mmu_table == 0)
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+    Process* foreign = KERNEL_PROCESS_ARRAY[user_process_handle];
+ 
+    u64* owned_out_stream_ptr = 0;
+    if(user_owned_out_stream_ptr &&
+      (mmu_virt_to_phys(process->mmu_table, user_owned_out_stream_ptr + sizeof(u64),
+                        (u64*)&owned_out_stream_ptr) != 0 ||
+       mmu_virt_to_phys(process->mmu_table, user_owned_out_stream_ptr,
+                        (u64*)&owned_out_stream_ptr) != 0))
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+ 
+    u64* foreign_in_stream_ptr = 0;
+    if(user_foreign_in_stream_ptr &&
+      (mmu_virt_to_phys(process->mmu_table, user_foreign_in_stream_ptr + sizeof(u64),
+                        (u64*)&foreign_in_stream_ptr) != 0 ||
+       mmu_virt_to_phys(process->mmu_table, user_foreign_in_stream_ptr,
+                        (u64*)&foreign_in_stream_ptr) != 0))
+    {
+        frame->regs[10] = 0;
+        return;
+    }
+ 
+    u64 out_stream;
+    u64 in_stream;
+    process_create_between_stream(process, foreign, &out_stream, &in_stream);
+ 
+    frame->regs[10] = 1;
+    if(owned_out_stream_ptr)  { *owned_out_stream_ptr = out_stream; }
+    if(foreign_in_stream_ptr) { *foreign_in_stream_ptr = in_stream; }
+}
+
+void syscall_process_start(Thread** current_thread)
+{
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    t->program_counter += 4;
+    u64 user_process_handle = frame->regs[11];
+
+    if(user_process_handle >= KERNEL_PROCESS_ARRAY_LEN ||
+        KERNEL_PROCESS_ARRAY[user_process_handle]->mmu_table == 0)
+    { return; }
+    Process* foreign = KERNEL_PROCESS_ARRAY[user_process_handle];
+
+    if(foreign->thread_count == 0 || foreign->threads[0].is_initialized == 0)
+    { return; }
+
+    foreign->threads[0].is_running = 1;
 }
 
 void do_syscall(Thread** current_thread, u64 mtime)
@@ -833,6 +951,12 @@ void do_syscall(Thread** current_thread, u64 mtime)
     { syscall_stream_put(current_thread); }
     else if(call_num == 36)
     { syscall_stream_take(current_thread); }
+    else if(call_num == 37)
+    { syscall_process_create_out_stream(current_thread); }
+    else if(call_num == 38)
+    { syscall_process_create_in_stream(current_thread); }
+    else if(call_num == 39)
+    { syscall_process_start(current_thread); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

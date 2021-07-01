@@ -403,14 +403,14 @@ u64 process_get_read_access(Process* process, u64 local_file_id, u64* file_id)
 
 
 
-u64 process_create_out_stream(Process* process)
+u64 process_create_out_stream_slot(Process* process)
 {
     for(u64 i = 0; i < process->out_stream_count; i++)
     {
         Stream** out_streams = process->out_stream_alloc.memory;
         if(out_streams[i] == 0)
         {
-            out_streams[i] = stream_create();
+            out_streams[i] = 0;
             return i;
         }
     }
@@ -435,18 +435,18 @@ u64 process_create_out_stream(Process* process)
     process->out_stream_count++;
 
     Stream** array = process->out_stream_alloc.memory;
-    array[index] = stream_create();
+    array[index] = 0;
     return index;
 }
 
-u64 process_create_in_stream(Process* process)
+u64 process_create_in_stream_slot(Process* process)
 {
     for(u64 i = 0; i < process->in_stream_count; i++)
     {
         Stream** in_streams = process->in_stream_alloc.memory;
         if(in_streams[i] == 0)
         {
-            in_streams[i] = stream_create();
+            in_streams[i] = 0;
             return i;
         }
     }
@@ -471,6 +471,17 @@ u64 process_create_in_stream(Process* process)
     process->in_stream_count++;
  
     Stream** array = process->in_stream_alloc.memory;
-    array[index] = stream_create();
+    array[index] = 0;
     return index;
+}
+
+void process_create_between_stream(Process* p1, Process* p2, u64* out_stream_ret, u64* in_stream_ret)
+{
+    u64 out_stream_index = process_create_out_stream_slot(p1);
+    u64 in_stream_index  = process_create_in_stream_slot(p2);
+    Stream* stream = stream_create();
+    ((Stream**) p1->out_stream_alloc.memory)[out_stream_index] = stream;
+    ((Stream**) p2->in_stream_alloc.memory)[in_stream_index]   = stream;
+    *out_stream_ret = out_stream_index;
+    *in_stream_ret = in_stream_index;
 }

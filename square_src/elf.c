@@ -1,24 +1,21 @@
 #include "../userland/aos_syscalls.h"
+#include "../userland/aos_helper.h"
 
 #include "../common/maths.h"
 
-#include "../src/uart.h"
-#include "../src/printf.h"
-void _putchar(char c)
-{
-    uart_write(&c, 1);
-}
-
+#if 0
 u64 strlen(char* str)
 {
     u64 i = 0;
     while(str[i] != 0) { i++; }
     return i;
 }
-
+#endif
 void _start()
 {
-    printf("Hi I'm dave and I live in an elf file on a partition on the RADICAL PARTITION SYSTEM\n");
+    AOS_H_printf(
+        "Hi I'm square-dave and I live in an elf file on a partition on the RADICAL PARTITION SYSTEM\n"
+    );
 
     f64 start_time = AOS_time_get_seconds();
 
@@ -32,6 +29,21 @@ while(1)
     u64 surface = 0;
     AOS_thread_awake_on_surface(&surface, 1);
     AOS_thread_sleep();
+
+    { // read from stdin
+        while(1)
+        {
+            u64 byte_count;
+            AOS_stream_take(AOS_STREAM_STDIN, 0, 0, &byte_count);
+            char character;
+            if(byte_count && AOS_stream_take(AOS_STREAM_STDIN, &character, 1, &byte_count))
+            {
+                AOS_stream_put(AOS_STREAM_STDOUT, &character, 1);
+            }
+            else
+            { break; }
+        }
+    }
 
     AOS_Framebuffer* fb = 0x424242000; // the three zeroes alignes it to the page boundry
     u64 fb_page_count = AOS_surface_acquire(surface, 0, 0);
@@ -74,7 +86,7 @@ while(1)
                     else if(scancode == 102)
                     { input = input & ~8; }
                 }
-                printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+                AOS_H_printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
             }
         }
 
@@ -158,7 +170,7 @@ while(1)
         }
         AOS_surface_commit(surface);
         f64 frame_end = AOS_time_get_seconds();
-//        printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
+//        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
     }
 }
 }

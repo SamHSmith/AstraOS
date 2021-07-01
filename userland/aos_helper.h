@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include "../common/types.h"
+#include "aos_syscalls.h"
 
 
 #ifdef __cplusplus
@@ -17,7 +18,7 @@ extern "C" {
  * \return The number of characters that are written into the array,
     not counting the terminating null character
  */
-s32 aos_h_printf(const char* format, ...);
+s32 AOS_H_printf(const char* format, ...);
 
 
 /**
@@ -29,7 +30,7 @@ s32 aos_h_printf(const char* format, ...);
  * \return The number of characters that are WRITTEN into the buffer, not
     counting the terminating null character
  */
-s32 aos_h_sprintf(char* buffer, const char* format, ...);
+s32 AOS_H_sprintf(char* buffer, const char* format, ...);
 
 
 /**
@@ -44,8 +45,8 @@ s32 aos_h_sprintf(char* buffer, const char* format, ...);
     Only when the returned value
  *         is non-negative and less than count, the string has been completely written.
  */
-s32  aos_h_snprintf(char* buffer, size_t count, const char* format, ...);
-s32 aos_h_vsnprintf(char* buffer, size_t count, const char* format, va_list va);
+s32  AOS_H_snprintf(char* buffer, size_t count, const char* format, ...);
+s32 AOS_H_vsnprintf(char* buffer, size_t count, const char* format, va_list va);
 
 /* Tiny vprintf implementation
  * \param format A string that specifies the format of the output
@@ -53,7 +54,7 @@ s32 aos_h_vsnprintf(char* buffer, size_t count, const char* format, va_list va);
  * \return The number of characters that are WRITTEN into the buffer, not
     counting the terminating null character
  */
-s32 aos_h_vprintf(const char* format, va_list va);
+s32 AOS_H_vprintf(const char* format, va_list va);
  
  
 /**
@@ -65,7 +66,7 @@ s32 aos_h_vprintf(const char* format, va_list va);
  * \return The number of characters that are sent to the output function,
     not counting the terminating null character
  */
-s32 aos_h_fctprintf(void (*out)(char character, void* arg), void* arg, const char* format, ...);
+s32 AOS_H_fctprintf(void (*out)(char character, void* arg), void* arg, const char* format, ...);
  
  
 #ifdef __cplusplus
@@ -925,7 +926,7 @@ static int _vsnprintf(out_fct_type out, char* buffer, const size_t maxlen, const
 
 ///////////////////////////////////////////////////////////////////////////////
 
-s32 aos_h_printf(const char* format, ...)
+s32 AOS_H_printf(const char* format, ...)
 {
   va_list va;
   va_start(va, format);
@@ -936,7 +937,7 @@ s32 aos_h_printf(const char* format, ...)
 }
 
 
-s32 aos_h_sprintf(char* buffer, const char* format, ...)
+s32 AOS_H_sprintf(char* buffer, const char* format, ...)
 {
   va_list va;
   va_start(va, format);
@@ -946,7 +947,7 @@ s32 aos_h_sprintf(char* buffer, const char* format, ...)
 }
 
 
-s32 aos_h_snprintf(char* buffer, size_t count, const char* format, ...)
+s32 AOS_H_snprintf(char* buffer, size_t count, const char* format, ...)
 {
   va_list va;
   va_start(va, format);
@@ -956,20 +957,20 @@ s32 aos_h_snprintf(char* buffer, size_t count, const char* format, ...)
 }
 
 
-s32 aos_h_vprintf(const char* format, va_list va)
+s32 AOS_H_vprintf(const char* format, va_list va)
 {
   char buffer[1];
   return _vsnprintf(_out_char, buffer, (size_t)-1, format, va);
 }
 
 
-s32 aos_h_vsnprintf(char* buffer, size_t count, const char* format, va_list va)
+s32 AOS_H_vsnprintf(char* buffer, size_t count, const char* format, va_list va)
 {
   return _vsnprintf(_out_buffer, buffer, count, format, va);
 }
 
 
-s32 aos_h_fctprintf(void (*out)(char character, void* arg), void* arg, const char* format, ...)
+s32 AOS_H_fctprintf(void (*out)(char character, void* arg), void* arg, const char* format, ...)
 {
   va_list va;
   va_start(va, format);

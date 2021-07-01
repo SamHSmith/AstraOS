@@ -236,3 +236,28 @@ AOS_stream_take:
     addi a0, x0, 36
     ecall
     ret
+
+.global AOS_process_create_out_stream
+AOS_process_create_out_stream:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 37
+    ecall
+    ret
+
+.global AOS_process_create_in_stream
+AOS_process_create_in_stream:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 38
+    ecall
+    ret
+
+.global AOS_process_start
+AOS_process_start:
+    mv a1, a0
+    addi a0, x0, 39
+    ecall
+    ret
