@@ -288,8 +288,8 @@ u64 m_trap(
             volatile u8* viewer = 0x10000100;
             volatile u8* viewer_should_read = 0x10000101;
 
-            Surface* surface = &((SurfaceSlot*)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]
-                               ->surface_alloc.memory)->surface;
+            SurfaceSlot* surface = (SurfaceSlot*)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]
+                               ->surface_alloc.memory;
 
             while(*viewer_should_read)
             {

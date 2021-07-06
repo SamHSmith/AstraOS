@@ -20,11 +20,11 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
             SurfaceSlot* slot=((SurfaceSlot*)process->surface_alloc.memory)
                     + t->awakes[i].surface_slot;
             assert(t->awakes[i].surface_slot < process->surface_count
-                    && slot->surface.is_initialized,
+                    && slot->is_initialized,
                     "thread_runtime_is_live: the surface slot contains a valid surface");
             if( !slot->is_defering_to_consumer_slot &&
                 !surface_slot_has_commited(process, t->awakes[i].surface_slot) &&
-                slot->surface.has_been_fired) { wake_up = 1; }
+                slot->has_been_fired) { wake_up = 1; }
         }
         else if(t->awakes[i].awake_type == THREAD_AWAKE_KEYBOARD)
         {
@@ -65,11 +65,11 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
             SurfaceSlot* slot=((SurfaceSlot*)KERNEL_PROCESS_ARRAY[t->process_pid]->surface_alloc.memory)
                     + t->surface_slot_wait.surface_slot[i];
             assert(t->surface_slot_wait.surface_slot[i] < KERNEL_PROCESS_ARRAY[r.pid]->surface_count
-                    && slot->surface.is_initialized,
+                    && slot->is_initialized,
                     "thread_runtime_is_live: the surface slot contains a valid surface");
             if( !slot->is_defering_to_consumer_slot &&
                 !surface_slot_has_commited(process, t->surface_slot_wait.surface_slot[i]) &&
-                slot->surface.has_been_fired) { wake = 1; }
+                slot->has_been_fired) { wake = 1; }
         }
         if(wake || t->surface_slot_wait.count == 0)
         {

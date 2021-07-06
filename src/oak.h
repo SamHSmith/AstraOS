@@ -95,7 +95,7 @@ void oak_recieve_video_out_request(OakPacketVideoOutRequest* packet)
     Process* process = KERNEL_PROCESS_ARRAY[vos[current_vo].pid];
     SurfaceSlot* surface_slot_array =
         (SurfaceSlot*)process->surface_alloc.memory;
-    Surface* surface = &surface_slot_array[0].surface;
+    SurfaceSlot* surface = surface_slot_array;
 
     surface->width = packet->width;
     surface->height = packet->height;

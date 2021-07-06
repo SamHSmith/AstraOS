@@ -7,7 +7,7 @@ void syscall_surface_commit(Thread** current_thread)
     u64 surface_slot = frame->regs[11];
 
     assert(surface_slot < process->surface_count &&
-        ((SurfaceSlot*)process->surface_alloc.memory)[surface_slot].surface.is_initialized,
+        ((SurfaceSlot*)process->surface_alloc.memory)[surface_slot].is_initialized,
         "surface_commit: the surface slot contains to a valid surface");
 
     frame->regs[10] = surface_commit(surface_slot, process);
@@ -33,15 +33,15 @@ void syscall_surface_acquire(volatile Thread** current_thread)
 
     SurfaceSlot* slot = &((SurfaceSlot*)process->surface_alloc.memory)[surface_slot];
 
-    if(surface_slot < process->surface_count && slot->surface.is_initialized && slot->surface.has_been_fired)
+    if(surface_slot < process->surface_count && slot->is_initialized && slot->has_been_fired)
     {
         assert(!slot->has_acquired, "you have not already acquired");
         surface_prepare_draw_framebuffer(surface_slot, process);
         if(page_count == 0 && !fb)
         {
-            ret = slot->surface.fb_draw->alloc.page_count;
+            ret = slot->fb_draw->alloc.page_count;
         }
-        else if(page_count >= slot->surface.fb_draw->alloc.page_count)
+        else if(page_count >= slot->fb_draw->alloc.page_count)
         {
             ret = surface_acquire(surface_slot, fb, process);
         }
@@ -93,7 +93,7 @@ void syscall_awake_on_surface(Thread** current_thread, u64 mtime)
         ((SurfaceSlot*)process->surface_alloc.memory) + *surface_slot;
 
             if(*surface_slot < process->surface_count &&
-                slot->surface.is_initialized)
+                slot->is_initialized)
             {
                 surface_slot_array[surface_slot_count] = *surface_slot;
                 surface_slot_count++;
@@ -593,7 +593,7 @@ void syscall_surface_forward_to_consumer(Thread** current_thread)
     SurfaceConsumer* con = ((SurfaceConsumer*)process->surface_consumer_alloc.memory) + consumer_slot;
 
     u64 ret = 0;
-    if(surface_slot < process->surface_count && slot->surface.is_initialized &&
+    if(surface_slot < process->surface_count && slot->is_initialized &&
         consumer_slot < process->surface_consumer_count && con->is_initialized)
     {
         slot->is_defering_to_consumer_slot = 1;
@@ -614,11 +614,11 @@ void syscall_surface_stop_forwarding_to_consumer(Thread** current_thread)
  
     SurfaceSlot* slot = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot;
     u64 ret = 0;
-    if(surface_slot < process->surface_count && slot->surface.is_initialized)
+    if(surface_slot < process->surface_count && slot->is_initialized)
     {
         slot->is_defering_to_consumer_slot = 0;
-        slot->surface.has_commited = 0;
-        slot->surface.has_been_fired = 1;
+        slot->has_commited = 0;
+        slot->has_been_fired = 1;
         ret = 1;
     }
     frame->regs[10] = ret;
