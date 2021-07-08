@@ -30,7 +30,8 @@ typedef struct
     u64 process_pid;
     u8 is_initialized;
     u8 is_running;
-    u8 _padding[2];
+    u8 picked_up_by_hart;
+    u8 _padding[1];
     u32 awake_count;
     ThreadAwakeCondition awakes[THREAD_MAX_AWAKE_COUNT];
 } Thread;
@@ -148,6 +149,8 @@ u32 process_thread_create(u64 pid)
         if(!KERNEL_PROCESS_ARRAY[pid]->threads[i].is_initialized)
         {
             KERNEL_PROCESS_ARRAY[pid]->threads[i].is_initialized = 1;
+            KERNEL_PROCESS_ARRAY[pid]->threads[i].is_running = 0;
+            KERNEL_PROCESS_ARRAY[pid]->threads[i].picked_up_by_hart = 0;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].process_pid = pid;
             tid = i;
@@ -176,6 +179,8 @@ u32 process_thread_create(u64 pid)
         KERNEL_PROCESS_ARRAY[pid]->thread_count += 1;
 
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_initialized = 1;
+        KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_running = 0;
+        KERNEL_PROCESS_ARRAY[pid]->threads[tid].picked_up_by_hart = 0;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].process_pid = pid;
     }

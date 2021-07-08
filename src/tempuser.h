@@ -51,7 +51,7 @@ void program_loader_program(u64 drive1_partitions_directory)
     }
     u64 slot_index = 0;
 
-    Window windows[256];
+    Window windows[32];
     u64 window_count = 0;
 
     f64 cursor_x = 0.0;
@@ -74,6 +74,10 @@ void program_loader_program(u64 drive1_partitions_directory)
     s64 start_resize_window_y = 0;
 
     u8 is_fullscreen_mode = 0;
+
+    f64 last_frame_time = 0.0;
+    f64 rolling_time_passed = 0.0;
+    f64 rolling_frame_time = 0.0;
 
 while(1) {
 
@@ -247,7 +251,7 @@ while(1) {
                     }
                 }
 
-                if(scancode == 35 && slot_index < slot_count && window_count + 1 < 256)
+                if(scancode == 35 && slot_index < slot_count && window_count + 1 < 32)
                 {
                     u64 pid = 0;
                     if(AOS_create_process_from_file(partitions[slot_index], &pid))
@@ -263,8 +267,8 @@ while(1) {
                             if(windows[window_count].y > 400) { windows[window_count].y = 400; }
                             windows[window_count].width = 0;
                             windows[window_count].height = 0;
-                            windows[window_count].new_width = 40;
-                            windows[window_count].new_height = 40;
+                            windows[window_count].new_width = 128;
+                            windows[window_count].new_height = 128;
                             windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                             windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
                             windows[window_count].we_have_frame = 0;
@@ -498,8 +502,11 @@ while(1) {
             }
         }
 
-        double time_frame_end = AOS_time_get_seconds();
-        double frame_time = (time_frame_end-time_frame_start) *1000.0;
+        // frame time, bottom right
+        f64 time_frame_end = AOS_time_get_seconds();
+        f64 frame_time = (time_frame_end-time_frame_start) *1000.0;
+        rolling_frame_time = rolling_frame_time * 0.9 + frame_time * 0.1;
+        frame_time = rolling_frame_time;
         u8 frame_counter_string[16];
         AOS_H_sprintf(frame_counter_string, "%4.4lf ms", frame_time);
         u64 frame_counter_width = strlen(frame_counter_string) * 8;
@@ -517,6 +524,34 @@ while(1) {
                 fb->data[i*4 + 3] = 1.0;
             }
         }
+
+        // time since last frame, bottom right, above frametime
+        f64 time_right_now = AOS_time_get_seconds();
+        f64 time_passed = (time_right_now-last_frame_time) *1000.0;
+        rolling_time_passed = rolling_time_passed *0.9 + time_passed *0.1;
+        time_passed = rolling_time_passed;
+        last_frame_time = time_right_now;
+        AOS_H_sprintf(frame_counter_string, "%4.4lf ms", time_passed);
+        u64 time_passed_counter_width = strlen(frame_counter_string) * 8;
+        u64 passed_xoff = fb->width - time_passed_counter_width;
+        s64 bottom_banner_up = bottom_banner_y - 16;
+        if(bottom_banner_up < 0) { bottom_banner_y = 0; }
+        u64 bottom_banner_end = bottom_banner_up + 16;
+        if(bottom_banner_end > fb->height) { bottom_banner_end = fb->height; }
+        for(u64 y = bottom_banner_up; y < bottom_banner_end; y++)
+        for(u64 x = 0; x < time_passed_counter_width; x++)
+        {
+            u64 font_id = frame_counter_string[x/8];
+            if(font8_16_pixel_filled(font_id, x%8, y - bottom_banner_up))
+            {
+                u64 i = (x+passed_xoff) + (y * fb->width);
+                fb->data[i*4 + 0] = (f32) (fb->data[i*4 + 0] < 0.5);
+                fb->data[i*4 + 1] = (f32) (fb->data[i*4 + 1] < 0.5);
+                fb->data[i*4 + 2] = (f32) (fb->data[i*4 + 2] < 0.5);
+                fb->data[i*4 + 3] = 1.0;
+            }
+        }
+
         assert(AOS_surface_commit(0), "commited successfully");
 
         cursor_x = new_cursor_x;

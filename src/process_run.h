@@ -3,7 +3,9 @@
 u64 thread_runtime_is_live(Thread* t, u64 mtime)
 {
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
- 
+
+    if(t->picked_up_by_hart)
+    { return 0; } 
     if(t->is_running)
     {  return 1;  }
 
@@ -43,59 +45,31 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
             return 1;
         }
     }
-/*    else if(t->thread_state == THREAD_STATE_TIME_SLEEP)
-    {
-        if(t->sleep_time > time_passed)
-        {
-            t->sleep_time -= time_passed;
-            return 0;
-        }
-        else
-        {
-            t->sleep_time = 0;
-            t->thread_state = THREAD_STATE_RUNNING;
-            return 1;
-        }
-    }
-    else if(t->thread_state == THREAD_STATE_SURFACE_WAIT)
-    {
-        u8 wake = 0;
-        for(u64 i = 0; i < t->surface_slot_wait.count; i++)
-        {
-            SurfaceSlot* slot=((SurfaceSlot*)KERNEL_PROCESS_ARRAY[t->process_pid]->surface_alloc.memory)
-                    + t->surface_slot_wait.surface_slot[i];
-            assert(t->surface_slot_wait.surface_slot[i] < KERNEL_PROCESS_ARRAY[r.pid]->surface_count
-                    && slot->is_initialized,
-                    "thread_runtime_is_live: the surface slot contains a valid surface");
-            if( !slot->is_defering_to_consumer_slot &&
-                !surface_slot_has_commited(process, t->surface_slot_wait.surface_slot[i]) &&
-                slot->has_been_fired) { wake = 1; }
-        }
-        if(wake || t->surface_slot_wait.count == 0)
-        {
-            t->thread_state = THREAD_STATE_RUNNING;
-            return 1;
-        }
-    }
-*/
     return 0;
 }
 
-Thread* kernel_current_thread;
+Thread* kernel_current_threads[KERNEL_MAX_HART_COUNT];
 
-u64 current_thread_runtime = 0;
+u64 current_thread_runtimes[KERNEL_MAX_HART_COUNT];
 
-u64 last_mtime = 0;
+u64 last_mtimes[KERNEL_MAX_HART_COUNT];
+
 struct xoshiro256ss_state rando_state = {5, 42, 68, 1};
-Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
+void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
 {
+    u64 apply_time = 1;
+    if(*out_thread)
+    { (*out_thread)->picked_up_by_hart = 0; }
+    else
+    { apply_time = 0; }
+
     u64 time_passed = 0;
-    if(last_mtime != 0) { time_passed = new_mtime - last_mtime; }
-    last_mtime = new_mtime;
+    if(last_mtimes[hart] != 0) { time_passed = new_mtime - last_mtimes[hart]; }
+    last_mtimes[hart] = new_mtime;
 
     if(apply_time) {
-        KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime = ( time_passed +
-        (KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime].runtime* (SCHEDUALER_MIX_IN_WINDOW-1))
+        KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtimes[hart]].runtime = ( time_passed +
+        (KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtimes[hart]].runtime* (SCHEDUALER_MIX_IN_WINDOW-1))
           )  / SCHEDUALER_MIX_IN_WINDOW;
     }
 
@@ -104,7 +78,7 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
 
     for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
     {
-        if(apply_time && i != current_thread_runtime)
+        if(apply_time && i != current_thread_runtimes[hart])
         {
             KERNEL_THREAD_RUNTIME_ARRAY[i].runtime *= SCHEDUALER_MIX_IN_WINDOW-1;
             KERNEL_THREAD_RUNTIME_ARRAY[i].runtime /= SCHEDUALER_MIX_IN_WINDOW;
@@ -147,12 +121,17 @@ Thread* kernel_choose_new_thread(u64 new_mtime, u64 apply_time)
     }
 
     if(!found_new_thread)
-    {  return 0;  } // Causes the KERNEL nop thread to be loaded
+    {
+        // Causes the KERNEL nop thread to be loaded
+        *out_thread = 0;
+        return;
+    }
 
-    current_thread_runtime = new_thread_runtime;
+    current_thread_runtimes[hart] = new_thread_runtime;
 
-    ThreadRuntime runtime = KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtime];
-    return &KERNEL_PROCESS_ARRAY[runtime.pid]->threads[runtime.tid];
+    ThreadRuntime runtime = KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtimes[hart]];
+    *out_thread = &KERNEL_PROCESS_ARRAY[runtime.pid]->threads[runtime.tid];
+    (*out_thread)->picked_up_by_hart = 1;
 }
 
 
@@ -160,6 +139,11 @@ void program_loader_program(u64 drive1_partitions_directory);
 
 void process_init()
 {
+    for(u64 i = 0; i < KERNEL_MAX_HART_COUNT; i++)
+    {
+        last_mtimes[i] = 0;
+    }
+
     u64 pid = process_create();
 
     u64 out_stream = process_create_out_stream_slot(KERNEL_PROCESS_ARRAY[pid]);
@@ -198,11 +182,5 @@ void process_init()
     tarr[thread1].frame.regs[10] = drive1_partition_directory;
 
     tarr[thread1].is_running = 1;
-
-    spinlock_release(&KERNEL_SPINLOCK);
-
-    u64* mtimecmp = (u64*)0x02004000;
-    u64* mtime = (u64*)0x0200bff8;
-    *mtimecmp = *mtime;
 }
 

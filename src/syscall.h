@@ -114,7 +114,7 @@ void syscall_awake_on_surface(Thread** current_thread, u64 mtime)
     frame->regs[10] = 1;
 }
 
-void syscall_thread_sleep(Thread** current_thread, u64 mtime)
+void syscall_thread_sleep(Thread** current_thread, u64 mtime, u64 hart)
 {
     Thread* t = *current_thread;
     TrapFrame* frame = &t->frame;
@@ -128,7 +128,7 @@ void syscall_thread_sleep(Thread** current_thread, u64 mtime)
     }
     // go to sleep
     frame->regs[10] = 1;
-    *current_thread = kernel_choose_new_thread(mtime, 1);
+    kernel_choose_new_thread(current_thread, mtime, hart);
 }
 
 void syscall_thread_awake_on_keyboard(Thread** current_thread)
@@ -892,7 +892,7 @@ void syscall_process_start(Thread** current_thread)
     foreign->threads[0].is_running = 1;
 }
 
-void do_syscall(Thread** current_thread, u64 mtime)
+void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
          if(call_num == 0)
@@ -942,7 +942,7 @@ void do_syscall(Thread** current_thread, u64 mtime)
     else if(call_num == 31)
     { syscall_forward_keyboard_events(current_thread); }
     else if(call_num == 32)
-    { syscall_thread_sleep(current_thread, mtime); }
+    { syscall_thread_sleep(current_thread, mtime, hart); }
     else if(call_num == 33)
     { syscall_thread_awake_on_keyboard(current_thread); }
     else if(call_num == 34)

@@ -62,6 +62,23 @@ void assert(u64 stat, char* error)
 #include "video.h"
 #include "elf.h"
 
+
+extern u64 KERNEL_START_OTHER_HARTS;
+atomic_s64 KERNEL_HART_COUNT;
+ 
+u64 KERNEL_MMU_TABLE;
+u64 KERNEL_SATP_VALUE;
+ 
+#define KERNEL_MAX_HART_COUNT 64
+u64 KERNEL_TRAP_STACK_TOP[KERNEL_MAX_HART_COUNT];
+Kallocation KERNEL_TRAP_STACK_ALLOCS[KERNEL_MAX_HART_COUNT];
+ 
+u64 KERNEL_STACK_TOP[KERNEL_MAX_HART_COUNT];
+Kallocation KERNEL_STACK_ALLOCS[KERNEL_MAX_HART_COUNT-1];
+ 
+Thread KERNEL_THREADS[KERNEL_MAX_HART_COUNT];
+
+
 #include "process_run.h"
 
 #include "syscall.h"
@@ -78,18 +95,6 @@ void uart_write_string(char* str)
     uart_write((u8*)str, strlen(str));
 }
 
-extern u64 KERNEL_START_OTHER_HARTS;
-atomic_s64 KERNEL_HART_COUNT;
-
-u64 KERNEL_MMU_TABLE;
-Thread KERNEL_THREAD;
-
-#define KERNEL_MAX_HART_COUNT 64
-u64 KERNEL_TRAP_STACK_TOP[KERNEL_MAX_HART_COUNT];
-Kallocation KERNEL_TRAP_STACK_ALLOCS[KERNEL_MAX_HART_COUNT];
-
-u64 KERNEL_STACK_TOP[KERNEL_MAX_HART_COUNT];
-Kallocation KERNEL_STACK_ALLOCS[KERNEL_MAX_HART_COUNT-1];
 
 u64 kinit()
 {
@@ -99,7 +104,7 @@ u64 kinit()
     KERNEL_HART_COUNT.value = 0;
     atomic_s64_increment(&KERNEL_HART_COUNT);
     KERNEL_START_OTHER_HARTS = 0; // causes other harts to increment and get ready
-    for(u64 i = 0; i < 50000; i++) {} // wait
+    for(u64 i = 0; i < 100000; i++) { __asm__("nop"); } // wait
     printf("    There are %lld HARTS.\n", KERNEL_HART_COUNT.value);
 
     KERNEL_MMU_TABLE = (u64)mem_init();
@@ -120,10 +125,10 @@ u64 kinit()
         KERNEL_STACK_ALLOCS[i-1] = stack;
     }
 
-    u64 satp_val = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
+    KERNEL_SATP_VALUE = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
 
     printf("Entering supervisor mode...");
-    return satp_val;
+    return KERNEL_SATP_VALUE;
 }
 
 void kmain()
@@ -236,21 +241,31 @@ mem_debug_dump_table_counts(1);
     plic_interrupt_enable(10);
     plic_interrupt_set_priority(10, 1);
 
+    for(u64 i = 0; i < 100000; i++) { __asm__("nop"); } // wait
     KERNEL_START_OTHER_HARTS = 1;
 
     process_init();
+    spinlock_release(&KERNEL_SPINLOCK);
+
+    u64* mtimecmp = ((u64*)0x02004000) + 0; // hartid is 0
+    u64* mtime = (u64*)0x0200bff8;
+    *mtimecmp = *mtime;
 
     while(1)
-    {
-//        printf("Kernel Bored :(\n");
-//        for(u64 i = 0; i < 640000000; i++) {}
-    }
+    { __asm__("wfi"); }
 }
 
-void kinit_hart(u64 hartid)
+void kmain_hart(u64 hartid)
 {
-    printf("kinit_hart, hartid=%llu\n", hartid);
-    while(1) {}
+    spinlock_acquire(&KERNEL_SPINLOCK);
+    printf("initialized hart#%llu\n", hartid);
+    spinlock_release(&KERNEL_SPINLOCK);
+
+    u64* mtimecmp = ((u64*)0x02004000) + hartid;
+    u64* mtime = (u64*)0x0200bff8;
+    *mtimecmp = *mtime;
+    while(1)
+    { __asm__("wfi"); }
 }
 
 void trap_hang_kernel(
@@ -317,15 +332,15 @@ u64 m_trap(
             spinlock_acquire(&KERNEL_SPINLOCK);
 
             // Store thread
-            if(kernel_current_thread != 0)
+            if(kernel_current_threads[hart] != 0)
             {
-                kernel_current_thread->frame = *frame;
-                kernel_current_thread->program_counter = epc;
+                kernel_current_threads[hart]->frame = *frame;
+                kernel_current_threads[hart]->program_counter = epc;
             }
             else // Store kernel thread
             {
-                KERNEL_THREAD.frame = *frame;
-                KERNEL_THREAD.program_counter = epc;
+                KERNEL_THREADS[hart].frame = *frame;
+                KERNEL_THREADS[hart].program_counter = epc;
             }
 
             // talk to viewer
@@ -367,26 +382,30 @@ u64 m_trap(
             }
 
             // Reset the Machine Timer
-            volatile u64* mtimecmp = (u64*)0x02004000;
+            volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
             volatile u64* mtime = (u64*)0x0200bff8;
 
-            kernel_current_thread = kernel_choose_new_thread(*mtime, kernel_current_thread != 0);
+            kernel_choose_new_thread(
+                &kernel_current_threads[hart],
+                *mtime,
+                hart
+            );
             *mtimecmp = *mtime + (10000000 / 1000);
 
-            if(kernel_current_thread != 0)
+            if(kernel_current_threads[hart] != 0)
             {
                 // Load thread
-                *frame = kernel_current_thread->frame;
+                *frame = kernel_current_threads[hart]->frame;
 
                 spinlock_release(&KERNEL_SPINLOCK);
-                return kernel_current_thread->program_counter;
+                return kernel_current_threads[hart]->program_counter;
             }
             else // Load kernel thread
             {
-                *frame = KERNEL_THREAD.frame;
+                *frame = KERNEL_THREADS[hart].frame;
 
                 spinlock_release(&KERNEL_SPINLOCK);
-                return KERNEL_THREAD.program_counter;
+                return KERNEL_THREADS[hart].program_counter;
             }
         }
         else if(cause_num == 8) {
@@ -404,15 +423,15 @@ u64 m_trap(
 
 //            printf("Machine external interrupt CPU%lld\n", hart);
             // Store thread
-            if(kernel_current_thread != 0)
+            if(kernel_current_threads[hart] != 0)
             {
-                kernel_current_thread->frame = *frame;
-                kernel_current_thread->program_counter = epc;
+                kernel_current_threads[hart]->frame = *frame;
+                kernel_current_threads[hart]->program_counter = epc;
             }
             else // Store kernel thread
             {
-                KERNEL_THREAD.frame = *frame;
-                KERNEL_THREAD.program_counter = epc;
+                KERNEL_THREADS[hart].frame = *frame;
+                KERNEL_THREADS[hart].program_counter = epc;
             }
 
             u32 interrupt;
@@ -428,20 +447,21 @@ u64 m_trap(
                 }
                 plic_interrupt_complete(interrupt);
             }
-            if(kernel_current_thread != 0)
+
+            if(kernel_current_threads[hart] != 0)
             {
                 // Load thread
-                *frame = kernel_current_thread->frame;
+                *frame = kernel_current_threads[hart]->frame;
 
                 spinlock_release(&KERNEL_SPINLOCK);
-                return kernel_current_thread->program_counter;
+                return kernel_current_threads[hart]->program_counter;
             }
             else // Load kernel thread
             {
-                *frame = KERNEL_THREAD.frame;
+                *frame = KERNEL_THREADS[hart].frame;
 
                 spinlock_release(&KERNEL_SPINLOCK);
-                return KERNEL_THREAD.program_counter;
+                return KERNEL_THREADS[hart].program_counter;
             }
         }
     }
@@ -488,34 +508,34 @@ u64 m_trap(
             spinlock_acquire(&KERNEL_SPINLOCK);
 
             // Store thread
-            if(kernel_current_thread != 0)
+            if(kernel_current_threads[hart] != 0)
             {
-                kernel_current_thread->frame = *frame;
-                kernel_current_thread->program_counter = epc;
+                kernel_current_threads[hart]->frame = *frame;
+                kernel_current_threads[hart]->program_counter = epc;
             }
             else // Store kernel thread
             {
-                KERNEL_THREAD.frame = *frame;
-                KERNEL_THREAD.program_counter = epc;
+                KERNEL_THREADS[hart].frame = *frame;
+                KERNEL_THREADS[hart].program_counter = epc;
             }
 
             volatile u64* mtime = (u64*)0x0200bff8;
-            do_syscall(&kernel_current_thread, *mtime);
+            do_syscall(&kernel_current_threads[hart], *mtime, hart);
 
-            if(kernel_current_thread != 0)
+            if(kernel_current_threads[hart] != 0)
             {
                 // Load thread
-                *frame = kernel_current_thread->frame;
+                *frame = kernel_current_threads[hart]->frame;
 
                 spinlock_release(&KERNEL_SPINLOCK);
-                return kernel_current_thread->program_counter;
+                return kernel_current_threads[hart]->program_counter;
             }
             else // Load kernel thread
             {
-                *frame = KERNEL_THREAD.frame;
+                *frame = KERNEL_THREADS[hart].frame;
 
                 spinlock_release(&KERNEL_SPINLOCK);
-                return KERNEL_THREAD.program_counter;
+                return KERNEL_THREADS[hart].program_counter;
             }
         }
         else if(cause_num == 11) {
