@@ -17,18 +17,12 @@ m_trap_vector:
 	# csrrw will atomically swap t6 into mscratch and the old
 	# value of mscratch into t6. This is nice because we just
 	# switched values and didn't destroy anything -- all atomically!
-	# in cpu.rs we have a structure of:
-	#  32 gp regs		0
-	#  32 fp regs		256
-	#  SATP register	512
-	#  Trap stack       520
-	#  CPU HARTID		528
 	# We use t6 as the temporary register because it is the very
 	# bottom register (x31)
 
-    csrrw t6, mscratch, t6
-    la t6, KERNEL_TRAP_STACK
-    ld t6, (t6)
+    csrrw t6, mscratch, t6 # mscratch contains the top of our trap stack
+
+    # we have a new stack
     addi t6, t6, -65*8
 
 .altmacro
@@ -79,10 +73,14 @@ m_trap_vector:
 	# m_trap will return the return address via a0.
 
     csrw	mepc, a0
-    la t6, KERNEL_TRAP_STACK
-    ld t6, (t6)
-    addi t6, t6, -65*8
- 
+    mv t6, sp
+
+    # write satp
+    addi t6, t6, 64*8
+    ld t5, (t6)
+    csrw satp, t5
+    addi t6, t6, -64*8
+
 .altmacro
 .macro intreg_place num
     ld x\num, (t6)
@@ -110,11 +108,10 @@ m_trap_vector:
     .set i,i+1
 .endr
 
-    ld t6, (t6)
-    csrw satp, t6
-
     # Now swap the real t6 into t6
-    csrr	t6, mscratch
+    # And store the top of our trap stack in mscratch
+    addi t6, t6, 8
+    csrrw t6, mscratch, t6
 
     sfence.vma
 

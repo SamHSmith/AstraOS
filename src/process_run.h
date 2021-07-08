@@ -199,6 +199,8 @@ void process_init()
 
     tarr[thread1].is_running = 1;
 
+    spinlock_release(&KERNEL_SPINLOCK);
+
     u64* mtimecmp = (u64*)0x02004000;
     u64* mtime = (u64*)0x0200bff8;
     *mtimecmp = *mtime;

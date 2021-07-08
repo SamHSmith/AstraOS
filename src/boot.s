@@ -4,14 +4,22 @@
 # Define a .data section.
 .section .data
 
+.global KERNEL_START_OTHER_HARTS
+KERNEL_START_OTHER_HARTS: .dword 4
+
 # Define a .text.init section.
 .section .text.init
 
 # Execution starts here.
 .global _start
 _start:
-	# Any hardware threads (hart) that are not bootstrapping
-	# need to wait for an IPI
+    la t1, KERNEL_HART_COUNT
+    sd x0, (t1)
+
+    la t1, KERNEL_START_OTHER_HARTS
+    addi t0, x0, 4
+    sd t0, (t1)
+
 	csrr	t0, mhartid
 	bnez	t0, 3f
 	# SATP should be zero, but let's make sure
@@ -56,7 +64,24 @@ _start:
 	mret
 kpost_init:
 	# We set the return address (ra above) to this label. When kinit() is finished
-	# in Rust, it will return here.
+    # it will return here.
+
+    # We need to set the value of mscratch to contain the address of our harts
+    # trap stack.
+    la t6, KERNEL_TRAP_STACK_TOP
+    csrr t5, mhartid
+    add t6, t6, t5 #1 # We are indexing the array
+    add t6, t6, t5 #2
+    add t6, t6, t5 #3
+    add t6, t6, t5 #4
+    add t6, t6, t5 #5
+    add t6, t6, t5 #6
+    add t6, t6, t5 #7
+    add t6, t6, t5 #8
+
+    ld t6, (t6)
+    csrw mscratch, t6
+
     # Setting `sstatus` (supervisor status) register:
     # 1 << 8    : Supervisor's previous protection mode is 1 (SPP=1 [Supervisor]).
     # 1 << 5    : Supervisor's previous interrupt-enable bit is 1 (SPIE=1 [Enabled]).
@@ -81,20 +106,36 @@ kpost_init:
 	# grabs a fresh copy of the SATP register and associated tables.
 	sfence.vma
 	# sret will put us in supervisor mode and re-enable interrupts
-	sret
+    sret
 3:
 
-	# Parked harts go here. We need to set these
-	# to only awaken if it receives a software interrupt,
-	# which we're going to call the SIPI (Software Intra-Processor Interrupt).
-	# We call the SIPI by writing the software interrupt into the Core Local Interruptor (CLINT)
-	# Which is calculated by: base_address + hart * 4
-	# where base address is 0x0200_0000 (MMIO CLINT base address)
-	# We only use additional harts to run user-space programs, although this may
-	# change.
+    # Parked harts go here.
+
+    la t1, KERNEL_START_OTHER_HARTS
+    ld t1, (t1)
+    bnez t1, 3b
+
+    la a0, KERNEL_HART_COUNT
+    la ra, ready
+    j atomic_s64_increment_no_stack
+ready:
+    la t1, KERNEL_START_OTHER_HARTS
+    ld t1, (t1)
+    beq t1, x0, ready
+
+enter_kernel:
+    la a0, KERNEL_SPINLOCK
+    la ra, enter_kernel2
+#    j spinlock_acquire_no_stack
+enter_kernel2:
+
+has_entered:
+    nop
+    j has_entered
+
 4:
-	wfi
-	j		4b
+    wfi
+    j        4b
 
 
 .global read_fp_register

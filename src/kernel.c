@@ -1,5 +1,10 @@
 #include "../common/types.h"
 #include "../common/maths.h"
+#include "../common/spinlock.h"
+#include "../common/atomics.h"
+
+Spinlock KERNEL_SPINLOCK;
+
 #include "random.h"
 
 #include "uart.h"
@@ -73,15 +78,47 @@ void uart_write_string(char* str)
     uart_write((u8*)str, strlen(str));
 }
 
+extern u64 KERNEL_START_OTHER_HARTS;
+atomic_s64 KERNEL_HART_COUNT;
+
 u64 KERNEL_MMU_TABLE;
 Thread KERNEL_THREAD;
-u64 KERNEL_TRAP_STACK = 0; // will need more when we have multicore
+
+#define KERNEL_MAX_HART_COUNT 64
+u64 KERNEL_TRAP_STACK_TOP[KERNEL_MAX_HART_COUNT];
+Kallocation KERNEL_TRAP_STACK_ALLOCS[KERNEL_MAX_HART_COUNT];
+
+u64 KERNEL_STACK_TOP[KERNEL_MAX_HART_COUNT];
+Kallocation KERNEL_STACK_ALLOCS[KERNEL_MAX_HART_COUNT-1];
+
 u64 kinit()
 {
     uart_init();
+
+    printf("Counting HARTS...");
+    KERNEL_HART_COUNT.value = 0;
+    atomic_s64_increment(&KERNEL_HART_COUNT);
+    KERNEL_START_OTHER_HARTS = 0; // causes other harts to increment and get ready
+    for(u64 i = 0; i < 50000; i++) {} // wait
+    printf("    There are %lld HARTS.\n", KERNEL_HART_COUNT.value);
+
     KERNEL_MMU_TABLE = (u64)mem_init();
-    Kallocation stack = kalloc_pages(8);
-    KERNEL_TRAP_STACK = stack.memory + (PAGE_SIZE * stack.page_count);
+
+    for(s64 i = 0; i < KERNEL_HART_COUNT.value; i++)
+    {
+        Kallocation trap_stack = kalloc_pages(8);
+        KERNEL_TRAP_STACK_TOP[i] = trap_stack.memory + (PAGE_SIZE * trap_stack.page_count);
+        KERNEL_TRAP_STACK_ALLOCS[i] = trap_stack;
+
+        if(i == 0)
+        {
+            KERNEL_STACK_TOP[0] = KERNEL_STACK_END;
+            continue;
+        }
+        Kallocation stack = kalloc_pages(8);
+        KERNEL_STACK_TOP[i] = stack.memory + (PAGE_SIZE * trap_stack.page_count);
+        KERNEL_STACK_ALLOCS[i-1] = stack;
+    }
 
     u64 satp_val = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
 
@@ -93,6 +130,10 @@ void kmain()
 {
     printf("done.\n    Successfully entered kmain with supervisor mode enabled.\n\n");
     uart_write_string("Hello there, welcome to the ROS operating system\nYou have no idea the pain I went through to make these characters you type appear on screen\n\n");
+
+    // lock kernel
+    spinlock_acquire(&KERNEL_SPINLOCK);
+    KERNEL_START_OTHER_HARTS = 0;
 
     /* TESTING */
     u64 dir_id = kernel_directory_create_imaginary("Über directory");
@@ -195,7 +236,7 @@ mem_debug_dump_table_counts(1);
     plic_interrupt_enable(10);
     plic_interrupt_set_priority(10, 1);
 
-    for(s64 i = 0; i < 5; i++) { uart_write_string("\n"); } //tells the viewer we have initialized
+    KERNEL_START_OTHER_HARTS = 1;
 
     process_init();
 
@@ -208,7 +249,8 @@ mem_debug_dump_table_counts(1);
 
 void kinit_hart(u64 hartid)
 {
-
+    printf("kinit_hart, hartid=%llu\n", hartid);
+    while(1) {}
 }
 
 void trap_hang_kernel(
@@ -272,6 +314,8 @@ u64 m_trap(
         }
         else if(cause_num == 7) {
 
+            spinlock_acquire(&KERNEL_SPINLOCK);
+
             // Store thread
             if(kernel_current_thread != 0)
             {
@@ -333,11 +377,15 @@ u64 m_trap(
             {
                 // Load thread
                 *frame = kernel_current_thread->frame;
+
+                spinlock_release(&KERNEL_SPINLOCK);
                 return kernel_current_thread->program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREAD.frame;
+
+                spinlock_release(&KERNEL_SPINLOCK);
                 return KERNEL_THREAD.program_counter;
             }
         }
@@ -351,6 +399,9 @@ u64 m_trap(
         }
         else if(cause_num == 11)
         {
+
+            spinlock_acquire(&KERNEL_SPINLOCK);
+
 //            printf("Machine external interrupt CPU%lld\n", hart);
             // Store thread
             if(kernel_current_thread != 0)
@@ -381,11 +432,15 @@ u64 m_trap(
             {
                 // Load thread
                 *frame = kernel_current_thread->frame;
+
+                spinlock_release(&KERNEL_SPINLOCK);
                 return kernel_current_thread->program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREAD.frame;
+
+                spinlock_release(&KERNEL_SPINLOCK);
                 return KERNEL_THREAD.program_counter;
             }
         }
@@ -429,6 +484,9 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 9) {
+
+            spinlock_acquire(&KERNEL_SPINLOCK);
+
             // Store thread
             if(kernel_current_thread != 0)
             {
@@ -448,11 +506,15 @@ u64 m_trap(
             {
                 // Load thread
                 *frame = kernel_current_thread->frame;
+
+                spinlock_release(&KERNEL_SPINLOCK);
                 return kernel_current_thread->program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREAD.frame;
+
+                spinlock_release(&KERNEL_SPINLOCK);
                 return KERNEL_THREAD.program_counter;
             }
         }
