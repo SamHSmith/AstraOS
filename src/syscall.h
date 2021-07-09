@@ -768,7 +768,7 @@ void syscall_forward_keyboard_events(Thread** current_thread)
 
 void syscall_stream_put(Thread** current_thread)
 {
-    rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
     Thread* t = *current_thread;
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
     TrapFrame* frame = &t->frame;
@@ -781,7 +781,7 @@ void syscall_stream_put(Thread** current_thread)
     if(user_out_stream >= process->out_stream_count || out_stream_array[user_out_stream] == 0)
     {
         frame->regs[10] = 0;
-        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
     Stream* out_stream = out_stream_array[user_out_stream];
@@ -798,7 +798,7 @@ void syscall_stream_put(Thread** current_thread)
             (u64*)&memory) != 0)
         {
             frame->regs[10] = 0;
-            rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
             return;
         }
         if(i == 0) { break; }
@@ -807,12 +807,12 @@ void syscall_stream_put(Thread** current_thread)
     }
 
     frame->regs[10] = stream_put(out_stream, memory, user_count);
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void syscall_stream_take(Thread** current_thread)
 {
-    rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
     Thread* t = *current_thread;
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
     TrapFrame* frame = &t->frame;
@@ -829,7 +829,7 @@ void syscall_stream_take(Thread** current_thread)
                         (u64*)&byte_count_in_stream_ptr) != 0)
     {
         frame->regs[10] = 0;
-        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
     *byte_count_in_stream_ptr = 0;
@@ -838,7 +838,7 @@ void syscall_stream_take(Thread** current_thread)
     if(user_in_stream >= process->in_stream_count || in_stream_array[user_in_stream] == 0)
     {
         frame->regs[10] = 0;
-        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
     Stream* in_stream = in_stream_array[user_in_stream];
@@ -854,7 +854,7 @@ void syscall_stream_take(Thread** current_thread)
         if(mmu_virt_to_phys(process->mmu_table, user_buffer + PAGE_SIZE * i, (u64*)&buffer) != 0)
         {
             frame->regs[10] = 0;
-            rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
             return;
         }
         if(i == 0) { break; }
@@ -863,7 +863,7 @@ void syscall_stream_take(Thread** current_thread)
     }
 
     frame->regs[10] = stream_take(in_stream, buffer, user_buffer_size, byte_count_in_stream_ptr);
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void syscall_process_create_out_stream(Thread** current_thread)

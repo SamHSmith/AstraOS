@@ -1,11 +1,12 @@
 
 #define STREAM_PAGE_COUNT 1
-#define STREAM_SIZE 4072
+#define STREAM_SIZE (PAGE_SIZE*STREAM_PAGE_COUNT - (sizeof(Kallocation) + sizeof(u32)*2 + sizeof(Spinlock)))
 typedef struct
 {
     Kallocation alloc;
     u32 put_index;
     u32 get_index;
+    Spinlock lock;
     u8 buffer[STREAM_SIZE];
 } Stream;
 
@@ -16,12 +17,14 @@ Stream* stream_create()
     stream->alloc = alloc;
     stream->put_index = 0;
     stream->get_index = 0;
+    spinlock_create(&stream->lock);
     return stream;
 }
 
 // returns the amount of bytes that got pushed into the stream
 u64 stream_put(Stream* stream, u8* memory, u64 count)
 {
+    spinlock_acquire(&stream->lock);
     u64 written_count = 0;
     for(u64 i = 0; i < count; i++)
     {
@@ -32,6 +35,7 @@ u64 stream_put(Stream* stream, u8* memory, u64 count)
         written_count++;
         stream->put_index = new_put;
     }
+    spinlock_release(&stream->lock);
     return written_count;
 }
 
@@ -42,6 +46,7 @@ u64 stream_put(Stream* stream, u8* memory, u64 count)
 // completed.
 u64 stream_take(Stream* stream, u8* buffer, u64 buffer_size, u64* bytes_in_stream)
 {
+    spinlock_acquire(&stream->lock);
     u64 taken_count = 0;
     for(u64 i = 0; i < buffer_size; i++)
     {
@@ -57,5 +62,6 @@ u64 stream_take(Stream* stream, u8* buffer, u64 buffer_size, u64* bytes_in_strea
     u64 byte_count = real_put_index - stream->get_index;
     *bytes_in_stream = byte_count;
 
+    spinlock_release(&stream->lock);
     return taken_count;
 }
