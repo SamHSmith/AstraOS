@@ -139,10 +139,12 @@ void program_loader_program(u64 drive1_partitions_directory);
 
 void process_init()
 {
+    // system initialization
     for(u64 i = 0; i < KERNEL_MAX_HART_COUNT; i++)
     {
         last_mtimes[i] = 0;
     }
+    rwlock_create(&KERNEL_PROCESS_ARRAY_RWLOCK);
 
     u64 pid = process_create();
 

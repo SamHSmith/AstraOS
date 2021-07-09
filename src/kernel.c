@@ -2,6 +2,7 @@
 #include "../common/maths.h"
 #include "../common/spinlock.h"
 #include "../common/atomics.h"
+//#include "../common/rwlock.h"
 
 Spinlock KERNEL_SPINLOCK;
 
@@ -13,6 +14,7 @@ void _putchar(char c)
 {
     uart_write(&c, 1);
 }
+#include "../common/rwlock.h"
 
 void print_stacktrace(u64 start_frame, u64 program_counter, u64 return_address)
 {
@@ -241,11 +243,11 @@ mem_debug_dump_table_counts(1);
     plic_interrupt_enable(10);
     plic_interrupt_set_priority(10, 1);
 
-    for(u64 i = 0; i < 100000; i++) { __asm__("nop"); } // wait
-    KERNEL_START_OTHER_HARTS = 1;
-
     process_init();
     spinlock_release(&KERNEL_SPINLOCK);
+
+    for(u64 i = 0; i < 10000; i++) { __asm__("nop"); } // wait
+    KERNEL_START_OTHER_HARTS = 1;
 
     u64* mtimecmp = ((u64*)0x02004000) + 0; // hartid is 0
     u64* mtime = (u64*)0x0200bff8;
@@ -330,6 +332,7 @@ u64 m_trap(
         else if(cause_num == 7) {
 
             spinlock_acquire(&KERNEL_SPINLOCK);
+            rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK); // maybe change to read later
 
             // Store thread
             if(kernel_current_threads[hart] != 0)
@@ -392,19 +395,18 @@ u64 m_trap(
             );
             *mtimecmp = *mtime + (10000000 / 1000);
 
+            rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK); // todo change to read
+            spinlock_release(&KERNEL_SPINLOCK);
+
             if(kernel_current_threads[hart] != 0)
             {
                 // Load thread
                 *frame = kernel_current_threads[hart]->frame;
-
-                spinlock_release(&KERNEL_SPINLOCK);
                 return kernel_current_threads[hart]->program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREADS[hart].frame;
-
-                spinlock_release(&KERNEL_SPINLOCK);
                 return KERNEL_THREADS[hart].program_counter;
             }
         }
@@ -420,6 +422,7 @@ u64 m_trap(
         {
 
             spinlock_acquire(&KERNEL_SPINLOCK);
+            rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK); // todo change to read
 
 //            printf("Machine external interrupt CPU%lld\n", hart);
             // Store thread
@@ -448,19 +451,18 @@ u64 m_trap(
                 plic_interrupt_complete(interrupt);
             }
 
+            rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK); // todo change to read
+            spinlock_release(&KERNEL_SPINLOCK);
+
             if(kernel_current_threads[hart] != 0)
             {
                 // Load thread
                 *frame = kernel_current_threads[hart]->frame;
-
-                spinlock_release(&KERNEL_SPINLOCK);
                 return kernel_current_threads[hart]->program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREADS[hart].frame;
-
-                spinlock_release(&KERNEL_SPINLOCK);
                 return KERNEL_THREADS[hart].program_counter;
             }
         }
@@ -505,8 +507,6 @@ u64 m_trap(
         }
         else if(cause_num == 9) {
 
-            spinlock_acquire(&KERNEL_SPINLOCK);
-
             // Store thread
             if(kernel_current_threads[hart] != 0)
             {
@@ -520,21 +520,18 @@ u64 m_trap(
             }
 
             volatile u64* mtime = (u64*)0x0200bff8;
+            // locking happens inside do_syscall
             do_syscall(&kernel_current_threads[hart], *mtime, hart);
 
             if(kernel_current_threads[hart] != 0)
             {
                 // Load thread
                 *frame = kernel_current_threads[hart]->frame;
-
-                spinlock_release(&KERNEL_SPINLOCK);
                 return kernel_current_threads[hart]->program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREADS[hart].frame;
-
-                spinlock_release(&KERNEL_SPINLOCK);
                 return KERNEL_THREADS[hart].program_counter;
             }
         }

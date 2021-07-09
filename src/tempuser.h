@@ -51,7 +51,7 @@ void program_loader_program(u64 drive1_partitions_directory)
     }
     u64 slot_index = 0;
 
-    Window windows[32];
+    Window windows[320];
     u64 window_count = 0;
 
     f64 cursor_x = 0.0;
@@ -251,8 +251,10 @@ while(1) {
                     }
                 }
 
-                if(scancode == 35 && slot_index < slot_count && window_count + 1 < 32)
+                if(scancode == 35 && slot_index < slot_count)
                 {
+                    for(u64 i = 0; i + window_count < 320 && i < 200; i++)
+                    {
                     u64 pid = 0;
                     if(AOS_create_process_from_file(partitions[slot_index], &pid))
                     {
@@ -267,8 +269,8 @@ while(1) {
                             if(windows[window_count].y > 400) { windows[window_count].y = 400; }
                             windows[window_count].width = 0;
                             windows[window_count].height = 0;
-                            windows[window_count].new_width = 128;
-                            windows[window_count].new_height = 128;
+                            windows[window_count].new_width = 64;
+                            windows[window_count].new_height = 64;
                             windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                             windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
                             windows[window_count].we_have_frame = 0;
@@ -287,6 +289,7 @@ while(1) {
                         else { AOS_H_printf("Failed to create consumer for PID: %llu\n", pid); }
                     }
                     else { AOS_H_printf("failed to create process."); }
+                    }
                 }
             }
             else
