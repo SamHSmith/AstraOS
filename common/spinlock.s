@@ -22,6 +22,20 @@ try_acquire:
     bnez t0, try_acquire
     ret
 
+.global spinlock_try_acquire
+spinlock_try_acquire:
+    fence
+    lr.w t0, (a0)
+    bnez t0, acquire_fail
+    addi t1, x0, 1
+    sc.w t0, t1, (a0)
+    bnez t0, acquire_fail
+    addi a0, x0, 1
+    ret
+acquire_fail:
+    addi a0, x0, 0
+    ret
+
 .global spinlock_release
 spinlock_release:
     fence

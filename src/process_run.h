@@ -1,11 +1,11 @@
 #define SCHEDUALER_MIX_IN_WINDOW 50
+#define SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR 3
+
 
 u64 thread_runtime_is_live(Thread* t, u64 mtime)
 {
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
 
-    if(t->picked_up_by_hart)
-    { return 0; } 
     if(t->is_running)
     {  return 1;  }
 
@@ -48,46 +48,141 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
     return 0;
 }
 
+
+
 Thread* kernel_current_threads[KERNEL_MAX_HART_COUNT];
 
 u64 current_thread_runtimes[KERNEL_MAX_HART_COUNT];
 
 u64 last_mtimes[KERNEL_MAX_HART_COUNT];
 
-struct xoshiro256ss_state rando_state = {5, 42, 68, 1};
+struct xoshiro256ss_state kernel_choose_new_thread_rando_state[KERNEL_MAX_HART_COUNT];
 void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
 {
     u64 apply_time = 1;
-    if(*out_thread)
-    { (*out_thread)->picked_up_by_hart = 0; }
-    else
+    if(!*out_thread)
     { apply_time = 0; }
 
     u64 time_passed = 0;
     if(last_mtimes[hart] != 0) { time_passed = new_mtime - last_mtimes[hart]; }
     last_mtimes[hart] = new_mtime;
 
+    if(spinlock_try_acquire(&thread_runtime_commons_lock))
+    {
+
+        u64 own_count = 0;
+        u64 total_in_queue_time = 0;
+        ThreadRuntime* own_arr = local_thread_runtimes[hart].memory_alloc.memory;
+        for(u64 i = 0; i < local_thread_runtimes[hart].len; i++)
+        {
+            own_arr[i].time_in_runqueue += time_passed;
+            if(own_arr[i].state == THREAD_RUNTIME_INITIALIZED && own_arr[i].time_in_runqueue > 0)
+            {
+                own_count += 1;
+                total_in_queue_time += own_arr[i].time_in_runqueue;
+            }
+        }
+        //printf("hart#%llu has %llu\n", hart, own_count);
+
+        for(u64 i = 0; i < local_thread_runtimes[hart].len; i++)
+        {
+            if(own_arr[i].state == THREAD_RUNTIME_INITIALIZED && own_arr[i].time_in_runqueue > 0)
+            {
+                u64 random_number = xoshiro256ss(&kernel_choose_new_thread_rando_state[hart]);
+                u64 bar = U64_MAX / SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR;
+                u64 amount = (u64)own_arr[i].time_in_runqueue;
+                u64 total = total_in_queue_time/own_count;
+                if(amount > total) { amount = total; }
+                bar /= total;
+                bar *= amount;
+                //printf("%llu < to commons %llu\n%llu\n", random_number, random_number < bar, bar);
+                if(!(random_number < bar))
+                { continue; }
+                own_arr[i].time_in_runqueue = 0;
+                thread_runtime_array_add(&thread_runtime_commons, own_arr[i]);
+                own_arr[i].state = THREAD_RUNTIME_UNINITIALIZED;
+            }
+        }
+
+        s64 count = 0;
+        u64 total_out_of_queue_count = 0;
+        ThreadRuntime* arr = thread_runtime_commons.memory_alloc.memory;
+        for(u64 i = 0; i < thread_runtime_commons.len; i++)
+        {
+            arr[i].time_in_runqueue -= (s64)time_passed;
+            if(arr[i].state == THREAD_RUNTIME_INITIALIZED && arr[i].time_in_runqueue < 0)
+            {
+                count += 1;
+                total_out_of_queue_count += (u64)(-arr[i].time_in_runqueue);
+            }
+        }
+        //printf("In the commons there are %llu\n", count);
+
+        for(u64 i = 0; i < thread_runtime_commons.len; i++)
+        {
+            if(arr[i].state == THREAD_RUNTIME_INITIALIZED && arr[i].time_in_runqueue < 0)
+            {
+                u64 random_number = xoshiro256ss(&kernel_choose_new_thread_rando_state[hart]);
+                u64 bar = (U64_MAX / SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR);
+                u64 amount = (u64)(-arr[i].time_in_runqueue);
+                u64 total = total_out_of_queue_count/count;
+                if(amount > total) { amount = total; }
+                bar /= total;
+                bar *= amount;
+                //printf("%llu < to queue %llu\n%llu\n", random_number, random_number < bar, bar);
+                if(!(random_number < bar))
+                { continue; }
+                arr[i].time_in_runqueue = 0;
+                thread_runtime_array_add(&local_thread_runtimes[hart], arr[i]);
+                arr[i].state = THREAD_RUNTIME_UNINITIALIZED;
+            }
+        }
+
+        //temp
+        {
+            u64 own_count = 0;
+        u64 total_in_queue_time = 0;
+        ThreadRuntime* own_arr = local_thread_runtimes[hart].memory_alloc.memory;
+        for(u64 i = 0; i < local_thread_runtimes[hart].len; i++)
+        {
+            own_arr[i].time_in_runqueue += time_passed;
+            if(own_arr[i].state == THREAD_RUNTIME_INITIALIZED && own_arr[i].time_in_runqueue > 0)
+            {
+                own_count += 1;
+                total_in_queue_time += own_arr[i].time_in_runqueue;
+            }
+        }
+        //printf("hart#%llu has %llu\n", hart, own_count);
+        }
+
+        spinlock_release(&thread_runtime_commons_lock);
+    }
+    ThreadRuntime* runtime_array = local_thread_runtimes[hart].memory_alloc.memory;
+    u64 runtime_array_len = local_thread_runtimes[hart].len;
+
     if(apply_time) {
-        KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtimes[hart]].runtime = ( time_passed +
-        (KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtimes[hart]].runtime* (SCHEDUALER_MIX_IN_WINDOW-1))
+        runtime_array[current_thread_runtimes[hart]].runtime = ( time_passed +
+        (runtime_array[current_thread_runtimes[hart]].runtime* (SCHEDUALER_MIX_IN_WINDOW-1))
           )  / SCHEDUALER_MIX_IN_WINDOW;
     }
 
     u64 total_runtime = 0;
     u64 participant_count = 0;
 
-    for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
+    for(u64 i = 0; i < runtime_array_len; i++)
     {
+        if(runtime_array[i].state != THREAD_RUNTIME_INITIALIZED)
+        { continue; }
         if(apply_time && i != current_thread_runtimes[hart])
         {
-            KERNEL_THREAD_RUNTIME_ARRAY[i].runtime *= SCHEDUALER_MIX_IN_WINDOW-1;
-            KERNEL_THREAD_RUNTIME_ARRAY[i].runtime /= SCHEDUALER_MIX_IN_WINDOW;
+            runtime_array[i].runtime *= SCHEDUALER_MIX_IN_WINDOW-1;
+            runtime_array[i].runtime /= SCHEDUALER_MIX_IN_WINDOW;
         }
-        Thread* thread = &KERNEL_PROCESS_ARRAY[KERNEL_THREAD_RUNTIME_ARRAY[i].pid]
-                            ->threads[KERNEL_THREAD_RUNTIME_ARRAY[i].tid];
+        Thread* thread = &KERNEL_PROCESS_ARRAY[runtime_array[i].pid]
+                            ->threads[runtime_array[i].tid];
         if(thread_runtime_is_live(thread, new_mtime))
         {
-            total_runtime += KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
+            total_runtime += runtime_array[i].runtime;
             participant_count += 1;
         }
     }
@@ -95,20 +190,22 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
     u64 total_points = total_runtime * (participant_count - 1);
     u64 to_umax_factor = U64_MAX / total_points;
 
-    u64 rando = xoshiro256ss(&rando_state);
+    u64 rando = xoshiro256ss(&kernel_choose_new_thread_rando_state[hart]);
     u64 bump = 0;
     u64 participant = 0;
-  
+
     u8 found_new_thread = 0;
     u64 new_thread_runtime = 0;
 
-    for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
+    for(u64 i = 0; i < runtime_array_len; i++)
     {
-        Thread* thread = &KERNEL_PROCESS_ARRAY[KERNEL_THREAD_RUNTIME_ARRAY[i].pid]
-                            ->threads[KERNEL_THREAD_RUNTIME_ARRAY[i].tid];
+        if(runtime_array[i].state != THREAD_RUNTIME_INITIALIZED)
+        { continue; }
+        Thread* thread = &KERNEL_PROCESS_ARRAY[runtime_array[i].pid]
+                            ->threads[runtime_array[i].tid];
         if(thread_runtime_is_live(thread, new_mtime))
         {
-            u64 point = total_runtime - KERNEL_THREAD_RUNTIME_ARRAY[i].runtime;
+            u64 point = total_runtime - runtime_array[i].runtime;
             bump += point * to_umax_factor;
             if(bump >= rando || participant == (participant_count - 1))
             {
@@ -129,9 +226,8 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
 
     current_thread_runtimes[hart] = new_thread_runtime;
 
-    ThreadRuntime runtime = KERNEL_THREAD_RUNTIME_ARRAY[current_thread_runtimes[hart]];
+    ThreadRuntime runtime = runtime_array[current_thread_runtimes[hart]];
     *out_thread = &KERNEL_PROCESS_ARRAY[runtime.pid]->threads[runtime.tid];
-    (*out_thread)->picked_up_by_hart = 1;
 }
 
 

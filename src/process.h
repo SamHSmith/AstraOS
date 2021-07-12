@@ -30,8 +30,7 @@ typedef struct
     u64 process_pid;
     u8 is_initialized;
     u8 is_running;
-    u8 picked_up_by_hart;
-    u8 _padding[1];
+    u8 _padding[2];
     u32 awake_count;
     ThreadAwakeCondition awakes[THREAD_MAX_AWAKE_COUNT];
 } Thread;
@@ -126,14 +125,60 @@ typedef struct
     u32 tid;
     u32 state;
     u64 runtime;
+
+    s64 time_in_runqueue;
 } ThreadRuntime;
 
 #define THREAD_RUNTIME_UNINITIALIZED 0
 #define THREAD_RUNTIME_INITIALIZED 1
 
-Kallocation KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION = {0};
-#define KERNEL_THREAD_RUNTIME_ARRAY ((ThreadRuntime*)KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.memory)
-u64 KERNEL_THREAD_RUNTIME_ARRAY_LEN = 0;
+typedef struct
+{
+    Kallocation memory_alloc;
+    u64 len;
+} ThreadRuntimeArray;
+
+void thread_runtime_array_add(ThreadRuntimeArray* array, ThreadRuntime item)
+{
+#define THREAD_RUNTIME_ARRAY ((ThreadRuntime*)array->memory_alloc.memory)
+
+    u64 runtime = 0;
+    u8 has_runtime = 0;
+
+    for(u64 i = 0; i < array->len; i++)
+    {
+        if(THREAD_RUNTIME_ARRAY[i].state == THREAD_RUNTIME_UNINITIALIZED)
+        {
+            runtime = i;
+            has_runtime = 1;
+        }
+    }
+    // We maybe must allocate a new runtime
+    if(!has_runtime)
+    {
+        if((array->len + 1) * sizeof(ThreadRuntime) >
+            array->memory_alloc.page_count * PAGE_SIZE)
+        {
+            Kallocation new_alloc = kalloc_pages(array->memory_alloc.page_count + 1);
+            for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
+            {
+                *(((u64*)new_alloc.memory) + i) =
+                        *(((u64*)array->memory_alloc.memory) + i);
+            }
+            kfree_pages(array->memory_alloc);
+            array->memory_alloc = new_alloc;
+        }
+
+        runtime = array->len;
+        array->len += 1;
+    }
+
+    THREAD_RUNTIME_ARRAY[runtime] = item;
+}
+
+ThreadRuntimeArray thread_runtime_commons;
+Spinlock thread_runtime_commons_lock;
+ThreadRuntimeArray local_thread_runtimes[KERNEL_MAX_HART_COUNT];
 
 u32 process_thread_create(u64 pid)
 {
@@ -151,7 +196,6 @@ u32 process_thread_create(u64 pid)
         {
             KERNEL_PROCESS_ARRAY[pid]->threads[i].is_initialized = 1;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].is_running = 0;
-            KERNEL_PROCESS_ARRAY[pid]->threads[i].picked_up_by_hart = 0;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].process_pid = pid;
             tid = i;
@@ -181,47 +225,20 @@ u32 process_thread_create(u64 pid)
 
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_initialized = 1;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_running = 0;
-        KERNEL_PROCESS_ARRAY[pid]->threads[tid].picked_up_by_hart = 0;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].process_pid = pid;
     }
 
     // Now the thread has been created it has to be allocated a "runtime" so that it can be schedualed
-    u64 runtime = 0;
-    u8 has_runtime = 0;
-
-    for(u64 i = 0; i < KERNEL_THREAD_RUNTIME_ARRAY_LEN; i++)
-    {
-        if(KERNEL_THREAD_RUNTIME_ARRAY[i].state == THREAD_RUNTIME_UNINITIALIZED)
-        {
-            runtime = i;
-            has_runtime = 1;
-        }
-    }
-    // We maybe must allocate a new runtime
-    if(!has_runtime)
-    {
-        if((KERNEL_THREAD_RUNTIME_ARRAY_LEN + 1) * sizeof(ThreadRuntime) >
-            KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.page_count * PAGE_SIZE)
-        {
-            Kallocation new_alloc = kalloc_pages(KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.page_count + 1);
-            for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
-            {
-                *(((u64*)new_alloc.memory) + i) =
-                        *(((u64*)KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION.memory) + i);
-            }
-            kfree_pages(KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION);
-            KERNEL_THREAD_RUNTIME_ARRAY_ALLOCATION = new_alloc;
-        }
-
-        runtime = KERNEL_THREAD_RUNTIME_ARRAY_LEN;
-        KERNEL_THREAD_RUNTIME_ARRAY_LEN += 1;
-    }
-
-    KERNEL_THREAD_RUNTIME_ARRAY[runtime].pid = pid;
-    KERNEL_THREAD_RUNTIME_ARRAY[runtime].tid = tid;
-    KERNEL_THREAD_RUNTIME_ARRAY[runtime].runtime = 0;
-    KERNEL_THREAD_RUNTIME_ARRAY[runtime].state = THREAD_RUNTIME_INITIALIZED;
+    ThreadRuntime runtime;
+    runtime.pid = pid;
+    runtime.tid = tid;
+    runtime.runtime = 0;
+    runtime.time_in_runqueue = 0;
+    runtime.state = THREAD_RUNTIME_INITIALIZED;
+    spinlock_acquire(&thread_runtime_commons_lock);
+    thread_runtime_array_add(&thread_runtime_commons, runtime);
+    spinlock_release(&thread_runtime_commons_lock);
 
     return tid;
 }

@@ -51,7 +51,7 @@ void program_loader_program(u64 drive1_partitions_directory)
     }
     u64 slot_index = 0;
 
-    Window windows[320];
+    Window windows[300];
     u64 window_count = 0;
 
     f64 cursor_x = 0.0;
@@ -253,7 +253,7 @@ while(1) {
 
                 if(scancode == 35 && slot_index < slot_count)
                 {
-                    for(u64 i = 0; i + window_count < 320 && i < 200; i++)
+                    for(u64 i = 0; window_count + 1 < 300 && i < 2000; i++)
                     {
                     u64 pid = 0;
                     if(AOS_create_process_from_file(partitions[slot_index], &pid))
