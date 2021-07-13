@@ -74,16 +74,6 @@ void syscall_surface_acquire(volatile Thread** current_thread, u64 hart)
 
 void syscall_thread_awake_after_time(Thread** current_thread, u64 hart, u64 mtime)
 {
-    {
-        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
-        volatile u64* mtime = (u64*)0x0200bff8;
-        u64 start_wait = *mtime;
-        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-        u64 end_wait = *mtime;
-
-        wait_time_acc[hart] += end_wait - start_wait;
-        wait_time_times[hart] += 1;
-    }
     TrapFrame* frame = &(*current_thread)->frame;
     u64 sleep_time = frame->regs[11];
     Thread* t = *current_thread;
@@ -92,7 +82,6 @@ void syscall_thread_awake_after_time(Thread** current_thread, u64 hart, u64 mtim
     if(t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
     {
         frame->regs[10] = 0;
-        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
 
@@ -103,7 +92,6 @@ void syscall_thread_awake_after_time(Thread** current_thread, u64 hart, u64 mtim
     t->awakes[awake_index].awake_time = sleep_time + mtime;
 
     frame->regs[10] = 1;
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void syscall_awake_on_surface(Thread** current_thread, u64 hart, u64 mtime)
@@ -201,16 +189,6 @@ void syscall_thread_sleep(Thread** current_thread, u64 hart, u64 mtime)
 
 void syscall_thread_awake_on_keyboard(Thread** current_thread, u64 hart)
 {
-    {
-        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
-        volatile u64* mtime = (u64*)0x0200bff8;
-        u64 start_wait = *mtime;
-        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-        u64 end_wait = *mtime;
-
-        wait_time_acc[hart] += end_wait - start_wait;
-        wait_time_times[hart] += 1;
-    }
     Thread* t = *current_thread;
     TrapFrame* frame = &t->frame;
     t->program_counter += 4;
@@ -218,7 +196,6 @@ void syscall_thread_awake_on_keyboard(Thread** current_thread, u64 hart)
     if(t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
     {
         frame->regs[10] = 0;
-        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
 
@@ -228,21 +205,10 @@ void syscall_thread_awake_on_keyboard(Thread** current_thread, u64 hart)
     t->awakes[awake_index].awake_type = THREAD_AWAKE_KEYBOARD;
 
     frame->regs[10] = 1;
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void syscall_thread_awake_on_mouse(Thread** current_thread, u64 hart)
 {
-    {
-        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
-        volatile u64* mtime = (u64*)0x0200bff8;
-        u64 start_wait = *mtime;
-        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-        u64 end_wait = *mtime;
-
-        wait_time_acc[hart] += end_wait - start_wait;
-        wait_time_times[hart] += 1;
-    }
     Thread* t = *current_thread;
     TrapFrame* frame = &t->frame;
     t->program_counter += 4;
@@ -250,7 +216,6 @@ void syscall_thread_awake_on_mouse(Thread** current_thread, u64 hart)
     if(t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
     {
         frame->regs[10] = 0;
-        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
 
@@ -260,7 +225,6 @@ void syscall_thread_awake_on_mouse(Thread** current_thread, u64 hart)
     t->awakes[awake_index].awake_type = THREAD_AWAKE_MOUSE;
 
     frame->regs[10] = 1;
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void syscall_get_rawmouse_events(Thread** current_thread, u64 hart)
@@ -360,16 +324,8 @@ void syscall_get_keyboard_events(Thread** current_thread, u64 hart)
 
 void syscall_switch_vo(Thread** current_thread, u64 hart)
 {
-    {
-        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
-        volatile u64* mtime = (u64*)0x0200bff8;
-        u64 start_wait = *mtime;
-        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-        u64 end_wait = *mtime;
+    spinlock_acquire(&KERNEL_SPINLOCK);
 
-        wait_time_acc[hart] += end_wait - start_wait;
-        wait_time_times[hart] += 1;
-    }
     Thread* t = *current_thread;
     TrapFrame* frame = &t->frame;
 
@@ -391,7 +347,7 @@ void syscall_switch_vo(Thread** current_thread, u64 hart)
     }
     frame->regs[10] = ret;
     t->program_counter += 4;
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    spinlock_release(&KERNEL_SPINLOCK);
 }
 
 /*
@@ -403,16 +359,7 @@ void syscall_switch_vo(Thread** current_thread, u64 hart)
 */
 void syscall_get_vo_id(Thread** current_thread, u64 hart)
 {
-    {
-        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
-        volatile u64* mtime = (u64*)0x0200bff8;
-        u64 start_wait = *mtime;
-        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-        u64 end_wait = *mtime;
-
-        wait_time_acc[hart] += end_wait - start_wait;
-        wait_time_times[hart] += 1;
-    }
+    spinlock_acquire(&KERNEL_SPINLOCK);
     Thread* t = *current_thread;
     TrapFrame* frame = &t->frame;
 
@@ -437,7 +384,7 @@ void syscall_get_vo_id(Thread** current_thread, u64 hart)
     }
     frame->regs[10] = ret;
     t->program_counter += 4;
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    spinlock_release(&KERNEL_SPINLOCK);
 }
 
 void syscall_alloc_pages(Thread** current_thread, u64 hart)
