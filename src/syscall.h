@@ -176,7 +176,7 @@ void syscall_thread_sleep(Thread** current_thread, u64 hart, u64 mtime)
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
         volatile u64* mtime = (u64*)0x0200bff8;
         u64 start_wait = *mtime;
-        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         u64 end_wait = *mtime;
 
         wait_time_acc[hart] += end_wait - start_wait;
@@ -190,13 +190,13 @@ void syscall_thread_sleep(Thread** current_thread, u64 hart, u64 mtime)
     if(thread_runtime_is_live(t, mtime))
     {
         frame->regs[10] = 0;
-        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
     // go to sleep
     frame->regs[10] = 1;
     kernel_choose_new_thread(current_thread, mtime, hart);
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void syscall_thread_awake_on_keyboard(Thread** current_thread, u64 hart)
