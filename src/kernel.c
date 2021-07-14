@@ -95,6 +95,7 @@ u64 wait_time_print_time[KERNEL_MAX_HART_COUNT];
 
 #include "process_run.h"
 
+#include "../userland/aos_syscalls.h"
 #include "syscall.h"
 
 

@@ -1227,6 +1227,50 @@ void syscall_process_start(Thread** current_thread, u64 hart)
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_thread_new(Thread** current_thread, u64 hart)
+{
+    rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    u64 pid = t->process_pid;
+    u32 tid = (((u64)t) - ((u64)process->threads)) / sizeof(Thread);
+    TrapFrame* frame = &t->frame;
+    u64 user_program_counter = frame->regs[11];
+    u64 user_register_values = frame->regs[12];
+    t->program_counter += 4;
+
+    AOS_TrapFrame* register_values_ptr;
+    if(mmu_virt_to_phys(process->mmu_table, user_register_values + sizeof(AOS_TrapFrame),
+                        (u64*)&register_values_ptr) != 0 ||
+       mmu_virt_to_phys(process->mmu_table, user_register_values,
+                        (u64*)&register_values_ptr) != 0)
+    {
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        frame->regs[10] = 0;
+        return;
+    }
+
+    u32 tid2 = process_thread_create(pid);
+    process = KERNEL_PROCESS_ARRAY[pid];
+    *current_thread = &process->threads[tid];
+    t = *current_thread;
+
+    Thread* new_thread = &process->threads[tid2];
+    process->threads[tid2].program_counter = user_program_counter;
+
+    for(u64 i = 0; i < 32; i++)
+    {
+        new_thread->frame.regs[i] = register_values_ptr->regs[i];
+        new_thread->frame.fregs[i]= register_values_ptr->fregs[i];
+    }
+    new_thread->is_running = 1;
+
+    frame->regs[10] = 1;
+
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -1292,6 +1336,8 @@ void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
     { syscall_process_create_in_stream(current_thread, hart); }
     else if(call_num == 39)
     { syscall_process_start(current_thread, hart); }
+    else if(call_num == 40)
+    { syscall_thread_new(current_thread, hart); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

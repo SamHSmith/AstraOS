@@ -1,4 +1,3 @@
-#include "../userland/aos_syscalls.h"
 #include "../userland/aos_helper.h"
 
 #include "samorak.h"
@@ -32,10 +31,34 @@ f32 clamp_01(f32 f)
     return f;
 }
 
+Window windows[300];
+u64 window_count = 0;
+
+void render_thread_entry(u64 thread_number)
+{
+    AOS_H_printf("Hey there you, I am render thread%llu\n", thread_number);
+
+    while(1) { __asm__("nop"); }
+}
+
 void program_loader_program(u64 drive1_partitions_directory)
 {
     u8* print_text = "program loader program has started.\n";
     AOS_stream_put(0, print_text, strlen(print_text));
+
+    {
+        u64 base_stack_addr = U64_MAX & (~(0xffff << 50)) & (~0xfff);
+        for(u64 i = 0; i < 8; i++) // TODO: one day add feature to ask for the "width" of the system
+        {
+            AOS_TrapFrame frame;
+            frame.regs[10] = i;
+            frame.regs[8] = base_stack_addr;
+            frame.regs[2] = frame.regs[8] - 4 * sizeof(u64);
+            AOS_alloc_pages(base_stack_addr - 4096*8, 8);
+            base_stack_addr -= 4096*8;
+            AOS_thread_new(render_thread_entry, &frame);
+        }
+    }
 
     u64 slot_count = AOS_directory_get_files(drive1_partitions_directory, 0, 0);
     u64 partitions[slot_count];
@@ -50,9 +73,6 @@ void program_loader_program(u64 drive1_partitions_directory)
         AOS_H_printf("temporary program loader has found %s\n", partition_names[i]);
     }
     u64 slot_index = 0;
-
-    Window windows[300];
-    u64 window_count = 0;
 
     f64 cursor_x = 0.0;
     f64 cursor_y = 0.0;

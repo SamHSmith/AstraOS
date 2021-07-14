@@ -99,6 +99,14 @@ u64 AOS_process_create_in_stream(u64 process_handle, u64* owned_out_stream, u64*
 
 void AOS_process_start(u64 process_handle);
 
+typedef struct
+{
+    u64 regs[32];
+    u64 fregs[32];
+} AOS_TrapFrame;
+
+u64 AOS_thread_new(u64 program_counter, AOS_TrapFrame* register_values);
+
 // give file to proccess
 // give directory to proccess
  
