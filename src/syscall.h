@@ -227,6 +227,44 @@ void syscall_thread_awake_on_mouse(Thread** current_thread, u64 hart)
     frame->regs[10] = 1;
 }
 
+void syscall_thread_awake_on_semaphore(Thread** current_thread, u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_semaphore = frame->regs[11];
+    t->program_counter += 4;
+
+    ProcessSemaphore* semaphores = process->semaphore_alloc.memory;
+    if(user_semaphore >= process->semaphore_count ||
+       !semaphores[user_semaphore].is_initialized ||
+        t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
+    {
+        frame->regs[10] = 0;
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    u64 awake_index = t->awake_count;
+    t->awake_count++;
+
+    t->awakes[awake_index].awake_type = THREAD_AWAKE_SEMAPHORE;
+    t->awakes[awake_index].semaphore = user_semaphore;
+
+    frame->regs[10] = 1;
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void syscall_get_rawmouse_events(Thread** current_thread, u64 hart)
 {
     {
@@ -1257,7 +1295,7 @@ void syscall_thread_new(Thread** current_thread, u64 hart)
     t = *current_thread;
 
     Thread* new_thread = &process->threads[tid2];
-    process->threads[tid2].program_counter = user_program_counter;
+    new_thread->program_counter = user_program_counter;
 
     for(u64 i = 0; i < 32; i++)
     {
@@ -1268,6 +1306,106 @@ void syscall_thread_new(Thread** current_thread, u64 hart)
 
     frame->regs[10] = 1;
 
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_semaphore_create(Thread** current_thread, u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u32 user_initial_value = frame->regs[11];
+    u32 user_max_value = frame->regs[12];
+    t->program_counter += 4;
+
+    frame->regs[10] = process_create_semaphore(process, user_initial_value, user_max_value);
+
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_semaphore_release(Thread** current_thread, u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        // We need exclusive releasing access so that we don't overflow the semaphore
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u32 user_semaphore = frame->regs[11];
+    u32 user_release_count = frame->regs[12];
+    u64 user_previous_value_ptr = frame->regs[13];
+    t->program_counter += 4;
+
+    u32* previous_value_ptr = 0;
+    if(user_previous_value_ptr &&
+      (mmu_virt_to_phys(process->mmu_table, user_previous_value_ptr + sizeof(u64),
+                        (u64*)&previous_value_ptr) != 0 ||
+       mmu_virt_to_phys(process->mmu_table, user_previous_value_ptr,
+                        (u64*)&previous_value_ptr) != 0))
+    {
+        frame->regs[10] = 0;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    ProcessSemaphore* semaphores = process->semaphore_alloc.memory;
+    if( user_semaphore >= process->semaphore_count ||
+        !semaphores[user_semaphore].is_initialized)
+    {
+        frame->regs[10] = 0;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    s64 top_value = atomic_s64_read(&semaphores[user_semaphore].counter);
+    if(top_value < 0) { top_value = 0; }
+    if( user_release_count &&
+        user_release_count + (u32)top_value
+        > semaphores[user_semaphore].max_value)
+    {
+        if(previous_value_ptr)
+        {
+            *previous_value_ptr = (u32)atomic_s64_read(&semaphores[user_semaphore].counter);
+        }
+        frame->regs[10] = 0;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    s64 value;
+    if(user_release_count)
+    {
+        value = atomic_s64_add(&semaphores[user_semaphore].counter, user_release_count);
+    }
+    else
+    {
+        value = atomic_s64_read(&semaphores[user_semaphore].counter);
+    }
+    if(value < 0) { value = 0; }
+    if(previous_value_ptr)
+    {
+        *previous_value_ptr = value;
+    }
+
+    frame->regs[10] = 1;
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
@@ -1338,6 +1476,12 @@ void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
     { syscall_process_start(current_thread, hart); }
     else if(call_num == 40)
     { syscall_thread_new(current_thread, hart); }
+    else if(call_num == 41)
+    { syscall_semaphore_create(current_thread, hart); }
+    else if(call_num == 42)
+    { syscall_semaphore_release(current_thread, hart); }
+    else if(call_num == 43)
+    { syscall_thread_awake_on_semaphore(current_thread, hart); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

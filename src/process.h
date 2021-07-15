@@ -10,6 +10,7 @@ typedef struct
 #define THREAD_AWAKE_SURFACE 1
 #define THREAD_AWAKE_KEYBOARD 2
 #define THREAD_AWAKE_MOUSE 3
+#define THREAD_AWAKE_SEMAPHORE 4
 
 typedef struct
 {
@@ -18,6 +19,7 @@ typedef struct
     {
         u64 awake_time;
         u64 surface_slot;
+        u64 semaphore;
     };
 } ThreadAwakeCondition;
 
@@ -58,6 +60,9 @@ typedef struct
 
     Kallocation in_stream_alloc; // Stream* array
     u64 in_stream_count;
+
+    Kallocation semaphore_alloc; // ProcessSemaphore array
+    u64 semaphore_count;
 
     KeyboardEventQueue kbd_event_queue;
     RawMouseEventQueue mouse_event_queue;
@@ -196,6 +201,7 @@ u32 process_thread_create(u64 pid)
         {
             KERNEL_PROCESS_ARRAY[pid]->threads[i].is_initialized = 1;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].is_running = 0;
+            KERNEL_PROCESS_ARRAY[pid]->threads[i].awake_count = 0;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].process_pid = pid;
             tid = i;
@@ -225,6 +231,7 @@ u32 process_thread_create(u64 pid)
 
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_initialized = 1;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_running = 0;
+        KERNEL_PROCESS_ARRAY[pid]->threads[tid].awake_count = 0;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].process_pid = pid;
     }
@@ -433,7 +440,7 @@ u64 process_create_out_stream_slot(Process* process)
         Stream** out_streams = process->out_stream_alloc.memory;
         if(out_streams[i] == 0)
         {
-            out_streams[i] = 0;
+            out_streams[i] = 1;
             return i;
         }
     }
@@ -458,7 +465,7 @@ u64 process_create_out_stream_slot(Process* process)
     process->out_stream_count++;
 
     Stream** array = process->out_stream_alloc.memory;
-    array[index] = 0;
+    array[index] = 1;
     return index;
 }
 
@@ -469,7 +476,7 @@ u64 process_create_in_stream_slot(Process* process)
         Stream** in_streams = process->in_stream_alloc.memory;
         if(in_streams[i] == 0)
         {
-            in_streams[i] = 0;
+            in_streams[i] = 1;
             return i;
         }
     }
@@ -494,7 +501,7 @@ u64 process_create_in_stream_slot(Process* process)
     process->in_stream_count++;
  
     Stream** array = process->in_stream_alloc.memory;
-    array[index] = 0;
+    array[index] = 1;
     return index;
 }
 
@@ -507,4 +514,52 @@ void process_create_between_stream(Process* p1, Process* p2, u64* out_stream_ret
     ((Stream**) p2->in_stream_alloc.memory)[in_stream_index]   = stream;
     *out_stream_ret = out_stream_index;
     *in_stream_ret = in_stream_index;
+}
+
+typedef struct
+{
+    atomic_s64 counter;
+    u32 max_value;
+    u8 is_initialized;
+    u8 _padding[3];
+} ProcessSemaphore;
+
+u64 process_create_semaphore(Process* process, u32 initial_value, u32 max_value)
+{
+    for(u64 i = 0; i < process->semaphore_count; i++)
+    {
+        ProcessSemaphore* semaphores = process->semaphore_alloc.memory;
+        if(semaphores[i].is_initialized == 0)
+        {
+            semaphores[i].is_initialized = 1;
+            semaphores[i].max_value = max_value;
+            atomic_s64_set(&semaphores[i].counter, (s64)initial_value);
+            return i;
+        }
+    }
+
+    if((process->semaphore_count + 1) * sizeof(ProcessSemaphore) > process->semaphore_alloc.page_count * PAGE_SIZE)
+    {
+        Kallocation new_alloc = kalloc_pages(process->semaphore_alloc.page_count + 1);
+        ProcessSemaphore* new_array = new_alloc.memory;
+        ProcessSemaphore* old_array = process->semaphore_alloc.memory;
+        for(u64 i = 0; i < process->semaphore_count; i++)
+        {
+            new_array[i] = old_array[i];
+        }
+        if(process->semaphore_alloc.page_count)
+        {
+            kfree_pages(process->semaphore_alloc);
+        }
+        process->semaphore_alloc = new_alloc;
+    }
+
+    u64 index = process->semaphore_count;
+    process->semaphore_count++;
+
+    ProcessSemaphore* semaphores = process->semaphore_alloc.memory;
+    semaphores[index].is_initialized = 1;
+    semaphores[index].max_value = max_value;
+    atomic_s64_set(&semaphores[index].counter, (s64)initial_value);
+    return index;
 }

@@ -14,5 +14,6 @@ s64 atomic_s64_set(atomic_s64* a, s64 value);
 s64 atomic_s64_increment(atomic_s64* a);
 s64 atomic_s64_decrement(atomic_s64* a);
 s64 atomic_s64_read(atomic_s64* a);
+s64 atomic_s64_add(atomic_s64* a, s64 value);
 
 #endif

@@ -107,6 +107,16 @@ typedef struct
 
 u64 AOS_thread_new(u64 program_counter, AOS_TrapFrame* register_values);
 
+// returns a semaphore handle
+u64 AOS_semaphore_create(u32 initial_value, u32 max_value);
+// returns true if success
+// if you don't care about previous_value you can pass null.
+u64 AOS_semaphore_release(u64 semaphore, u32 release_count, u32* previous_value);
+// returns true if the awake was set on the thread successfully.
+// when the thread is awoken by the semaphore's value being > 0,
+// the semaphore's value is decremented by 1.
+u64 AOS_thread_awake_on_semaphore(u64 semaphore);
+
 // give file to proccess
 // give directory to proccess
  

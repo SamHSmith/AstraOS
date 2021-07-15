@@ -269,3 +269,27 @@ AOS_thread_new:
     addi a0, x0, 40
     ecall
     ret
+
+.global AOS_semaphore_create
+AOS_semaphore_create:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 41
+    ecall
+    ret
+
+.global AOS_semaphore_release
+AOS_semaphore_release:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 42
+    ecall
+    ret
+
+.global AOS_thread_awake_on_semaphore
+AOS_thread_awake_on_semaphore:
+    mv a1, a0
+    addi a0, x0, 43
+    ecall
+    ret

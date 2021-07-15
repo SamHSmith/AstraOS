@@ -34,11 +34,25 @@ f32 clamp_01(f32 f)
 Window windows[300];
 u64 window_count = 0;
 
+#define THREAD_COUNT 8
+
+volatile Spinlock tempuser_printout_lock;
+u64 render_work_semaphore;
 void render_thread_entry(u64 thread_number)
 {
+    spinlock_acquire(&tempuser_printout_lock);
     AOS_H_printf("Hey there you, I am render thread%llu\n", thread_number);
+    spinlock_release(&tempuser_printout_lock);
 
-    while(1) { __asm__("nop"); }
+    while(1)
+    {
+        __asm__("nop");
+        assert(AOS_thread_awake_on_semaphore(render_work_semaphore), "actually awaking the semaphore");
+        AOS_thread_sleep();
+        spinlock_acquire(&tempuser_printout_lock);
+        AOS_H_printf("I'm still here, from thread%llu\n", thread_number);
+        spinlock_release(&tempuser_printout_lock);
+    }
 }
 
 void program_loader_program(u64 drive1_partitions_directory)
@@ -46,19 +60,30 @@ void program_loader_program(u64 drive1_partitions_directory)
     u8* print_text = "program loader program has started.\n";
     AOS_stream_put(0, print_text, strlen(print_text));
 
+    spinlock_create(&tempuser_printout_lock);
+    render_work_semaphore = AOS_semaphore_create(1, THREAD_COUNT-1);
     {
-        u64 base_stack_addr = U64_MAX & (~(0xffff << 50)) & (~0xfff);
-        for(u64 i = 0; i < 8; i++) // TODO: one day add feature to ask for the "width" of the system
+        u64 base_stack_addr = (~(0x1ffffff << 39)) & (~0xfff);
+        AOS_alloc_pages(base_stack_addr - 4096*8*(THREAD_COUNT-1), 8*(THREAD_COUNT-1));
+
+        AOS_thread_awake_after_time(1000000); // TODO: investigate memory mapping not right bug
+        AOS_thread_sleep();
+
+        for(u64 i = 0; i < THREAD_COUNT-1; i++) // TODO: one day add feature to ask for the "width" of the system
         {
             AOS_TrapFrame frame;
             frame.regs[10] = i;
             frame.regs[8] = base_stack_addr;
             frame.regs[2] = frame.regs[8] - 4 * sizeof(u64);
-            AOS_alloc_pages(base_stack_addr - 4096*8, 8);
             base_stack_addr -= 4096*8;
             AOS_thread_new(render_thread_entry, &frame);
         }
     }
+
+    AOS_semaphore_release(render_work_semaphore, 4, 0);
+
+    AOS_thread_awake_after_time(1000000);
+    AOS_thread_sleep();
 
     u64 slot_count = AOS_directory_get_files(drive1_partitions_directory, 0, 0);
     u64 partitions[slot_count];

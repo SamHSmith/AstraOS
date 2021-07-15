@@ -38,6 +38,17 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
             if(process->mouse_event_queue.event_count)
             { wake_up = 1; }
         }
+        else if(t->awakes[i].awake_type == THREAD_AWAKE_SEMAPHORE)
+        {
+            ProcessSemaphore* semaphores = process->semaphore_alloc.memory;
+            if(atomic_s64_decrement(&semaphores[t->awakes[i].semaphore].counter) <= 0)
+            {
+                // no wake
+                atomic_s64_increment(&semaphores[t->awakes[i].semaphore].counter);
+            }
+            else
+            { wake_up = 1; }
+        }
         if(wake_up)
         {
             t->awake_count = 0;

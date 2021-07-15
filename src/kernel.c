@@ -431,7 +431,7 @@ u64 m_trap(
             volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
             volatile u64* mtime = (u64*)0x0200bff8;
 
-            if(*mtime >= wait_time_print_time[hart])
+            if(*mtime >= wait_time_print_time[hart] && 0)
             {
                 printf("average wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf μs\n", hart, ((f64)(wait_time_acc[hart]) / (f64)wait_time_times[hart]) / (f64)(MACHINE_TIMER_SECOND/1000000));
                 printf("total wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf ms\n", hart, (f64)wait_time_acc[hart] / (f64)(MACHINE_TIMER_SECOND/1000));

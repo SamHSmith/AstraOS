@@ -33,7 +33,15 @@ atomic_s64_read:
     lr.d a0, (a0)
     ret
 
-
+.global atomic_s64_add
+atomic_s64_add:
+    lr.d t0, (a0)
+    mv t1, t0
+    add t2, t0, a1
+    sc.d t0, t2, (a0)
+    bnez t0, atomic_s64_add
+    mv a0, t1
+    ret
 
 
 
