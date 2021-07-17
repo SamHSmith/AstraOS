@@ -31,7 +31,7 @@ f32 clamp_01(f32 f)
     return f;
 }
 
-Window windows[300];
+Window windows[84];
 u64 window_count;
 
 volatile u64 slot_count, slot_index;
@@ -67,7 +67,7 @@ typedef struct
 } RenderArea;
 void render_function(u64 threadid, u64 total_threads)
 {
-    RenderArea areas[window_count*4];
+    RenderArea areas[window_count*2];
     for(u64 y = threadid; y < render_buffer->height; y+=total_threads)
     {
         u64 area_count = 0;
@@ -165,8 +165,8 @@ void render_function(u64 threadid, u64 total_threads)
                 if(windows[i].width <= 2*BORDER_SIZE) { continue; }
                 s64 _end = windows[i].x + (s64)windows[i].width - BORDER_SIZE;
                 if(_end > render_buffer->width) { _end = render_buffer->width; }
+                if((u64)(_end - _start) >= windows[i].fb->width) { _end = _start + (s64)windows[i].fb->width - 1; }
                 if(_end <= _start) { continue; }
-                if((u64)(_end - _start) > windows[i].fb->width) { _end = _start + (s64)windows[i].fb->width; }
                 start = (u64)_start;
                 end = (u64)_end;
             }
@@ -579,7 +579,7 @@ while(1) {
 
                 if(scancode == 35 && slot_index < slot_count)
                 {
-                    for(u64 i = 0; window_count + 1 < 300 && i < 2000; i++)
+                    for(u64 i = 0; window_count + 1 < 84 && i < 2000; i++)
                     {
                     u64 pid = 0;
                     if(AOS_create_process_from_file(partitions[slot_index], &pid))
