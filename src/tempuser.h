@@ -45,6 +45,10 @@ u8 bottom_banner[256];
 u64 bottom_banner_len;
 u64 bottom_banner_y;
 
+
+u8 is_moving_window = 0;
+u8 is_resizing_window = 0;
+
 volatile AOS_Framebuffer* render_buffer;
 
 volatile Spinlock tempuser_printout_lock;
@@ -58,6 +62,7 @@ typedef struct
     u64 canvas_end;
     AOS_Framebuffer* buffer;
     u32 xoffset;
+    u32 y_index;
     f32 red; f32 green; f32 blue;
 } RenderArea;
 void render_function(u64 threadid, u64 total_threads)
@@ -66,10 +71,10 @@ void render_function(u64 threadid, u64 total_threads)
     for(u64 y = threadid; y < render_buffer->height; y+=total_threads)
     {
         u64 area_count = 0;
-        f32 blue = 0.6;
 
         for(u64 i = 0; i < window_count; i++)
         {
+            {
             if(!(windows[i].y <= (s64)y && windows[i].y + (s64)windows[i].height > (s64)y))
             { continue; }
             u64 start, end;
@@ -135,14 +140,103 @@ void render_function(u64 threadid, u64 total_threads)
                 { areas[i].canvas_end = start-1; }
             }
 
+            f32 red = 0.2;
+            f32 green = 0.2;
+            f32 blue = 70.0/255.0;
+            if(i + 1 == window_count && (is_moving_window || is_resizing_window))
+            { blue = 180.0/255.0; }
+            else if(i + 1 == window_count)
+            { blue = 140.0/255.0; }
+
             areas[insert_index].canvas_start = start;
             areas[insert_index].canvas_end = end;
             areas[insert_index].buffer = 0;
-            areas[insert_index].red = 0.3 + (f32)i * 0.3;
-            areas[insert_index].green = 0.2;
+            areas[insert_index].red = red;
+            areas[insert_index].green = green;
             areas[insert_index].blue = blue;
+            }
+            {
+            if(!windows[i].we_have_frame || !(windows[i].y + BORDER_SIZE <= (s64)y && windows[i].y + BORDER_SIZE + windows[i].fb->height > (s64)y))
+            { continue; }
+            u64 start, end;
+            {
+                s64 _start = windows[i].x + BORDER_SIZE;
+                if(_start < 0) { start = 0; }
+                if(windows[i].width <= 2*BORDER_SIZE) { continue; }
+                s64 _end = windows[i].x + (s64)windows[i].width - BORDER_SIZE;
+                if(_end > render_buffer->width) { _end = render_buffer->width; }
+                if(_end <= _start) { continue; }
+                if((u64)(_end - _start) > windows[i].fb->width) { _end = _start + (s64)windows[i].fb->width; }
+                start = (u64)_start;
+                end = (u64)_end;
+            }
+            u64 insert_index = area_count;
+            s64 push_count = 0;
+            for(u64 i = 0; i < area_count; i++)
+            {
+                if(areas[i].canvas_start >= start)
+                { insert_index = i; break; }
+            }
+
+            {
+                push_count = 1;
+                for(u64 j = insert_index; j < area_count; j++)
+                {
+                    if(areas[j].canvas_end >= end)
+                    { break; }
+                    push_count--;
+                }
+                if(insert_index)
+                {
+                    if(areas[insert_index-1].canvas_end > end)
+                    { push_count++; }
+                }
+                if(push_count > 0)
+                {
+                    for(s64 i = ((s64)area_count)-1; i >= (s64)insert_index; i--)
+                    { areas[i+push_count] = areas[i]; }
+                    area_count += push_count;
+                }
+                else if(push_count < 0)
+                {
+                    for(u64 i = insert_index + (u64)(-push_count); i < area_count; i++)
+                    {
+                        areas[i - (u64)(-push_count)] = areas[i];
+                    }
+                    area_count -= (u64)(-push_count);
+                }
+            }
+            if(insert_index)
+            {
+                u64 prev_index = insert_index - 1;
+
+                if(areas[prev_index].canvas_end > end)
+                {
+                    u64 new_start = end + 1;
+                    areas[insert_index + 1] = areas[prev_index];
+                    areas[insert_index + 1].xoffset += new_start - areas[prev_index].canvas_start;
+                    areas[insert_index + 1].canvas_start = new_start;
+                }
+            }
+            for(u64 i = 0; i < insert_index; i++)
+            {
+                if(areas[i].canvas_end >= start)
+                { areas[i].canvas_end = start-1; }
+            }
+
+            areas[insert_index].canvas_start = start;
+            areas[insert_index].canvas_end = end;
+            areas[insert_index].buffer = 0;
+            areas[insert_index].red = 0.0;
+            areas[insert_index].green = 0.0;
+            areas[insert_index].blue = 0.0;
+            areas[insert_index].buffer = windows[i].fb;
+            areas[insert_index].xoffset = 0;
+            areas[insert_index].y_index = ((s64)y - windows[i].y - BORDER_SIZE);
+            }
         }
 
+    u64 area_index = 0;
     for(u64 x = 0; x < render_buffer->width; x++)
     {
         u64 i = x + (y * render_buffer->width);
@@ -191,20 +285,28 @@ void render_function(u64 threadid, u64 total_threads)
             render_buffer->data[i*4 + 3] = 1.0;
         }
 
+        if(area_index < area_count && areas[area_index].canvas_end < x)
+        {
+            area_index++;
+        }
+
         RenderArea a;
         u8 has_area = 0;
-        for(u64 j = 0; j < area_count; j++)
+        if(area_index < area_count && areas[area_index].canvas_start <= x && areas[area_index].canvas_end >= x)
         {
-            if(areas[j].canvas_start <= x && areas[j].canvas_end >= x)
-            {
-                a = areas[j]; has_area = 1;
-                break;
-            }
+            a = areas[area_index];
+            has_area = 1;
         }
         if(has_area)
         {
             if(a.buffer)
             {
+                u64 local_x = (x - (u64)a.canvas_start) + a.xoffset;
+                u64 j = local_x + (a.y_index * a.buffer->width);
+                render_buffer->data[i*4 + 0] = a.buffer->data[j*4 + 0];
+                render_buffer->data[i*4 + 1] = a.buffer->data[j*4 + 1];
+                render_buffer->data[i*4 + 2] = a.buffer->data[j*4 + 2];
+                render_buffer->data[i*4 + 3] = 1.0;
             }
             else
             {
@@ -223,7 +325,7 @@ void render_function(u64 threadid, u64 total_threads)
 
 #define WORKER_THREAD_STACK_SIZE (8+((sizeof(RenderArea)*300*4)/4096))
 #define THREAD_COUNT 8
-#define JOBS_PER_THREAD 16
+#define JOBS_PER_THREAD 8
 
 u64 render_work_semaphore;
 void render_thread_entry(u64 thread_number)
@@ -285,11 +387,9 @@ void program_loader_program(u64 drive1_partitions_directory)
     f64 new_cursor_x = 0.0;
     f64 new_cursor_y = 0.0;
 
-    u8 is_moving_window = 0;
     f64 start_move_x = 0.0;
     f64 start_move_y = 0.0;
 
-    u8 is_resizing_window = 0;
     f64 start_resize_cursor_x = 0.0;
     f64 start_resize_cursor_y = 0.0;
     u8 resize_x_invert = 0;
@@ -572,6 +672,7 @@ while(1) {
         bottom_banner_y = 0;
         if(fb->height > 16) { bottom_banner_y = fb->height - 16; }
 
+        f64 time_render_start = AOS_time_get_seconds();
 #if 1
         render_buffer = fb;
         atomic_s64_set(&render_work_done, 0);
@@ -716,6 +817,8 @@ while(1) {
             }
         }
 #endif
+        f64 time_render_end = AOS_time_get_seconds();
+        //printf("it took %lf ms to render\n", (time_render_end - time_render_start)*1000.0);
 
         { // draw cursor
             if(cursor_x < 0.0) { cursor_x = 0.0; }
