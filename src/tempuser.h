@@ -67,7 +67,7 @@ typedef struct
 } RenderArea;
 void render_function(u64 threadid, u64 total_threads)
 {
-    RenderArea areas[window_count*2];
+    RenderArea areas[window_count*2*2];
     for(u64 y = threadid; y < render_buffer->height; y+=total_threads)
     {
         u64 area_count = 0;
@@ -80,9 +80,9 @@ void render_function(u64 threadid, u64 total_threads)
             u64 start, end;
             {
                 s64 _start = windows[i].x;
-                if(_start < 0) { start = 0; }
-                s64 _end = windows[i].x + (s64)windows[i].width;
-                if(_end > render_buffer->width) { _end = render_buffer->width; }
+                if(_start < 0) { _start = 0; }
+                s64 _end = windows[i].x + (s64)windows[i].width - 1;
+                if(_end > (s64)render_buffer->width - 1) { _end = (s64)render_buffer->width - 1; }
                 start = (u64)_start;
                 end = (u64)_end;
             }
@@ -161,11 +161,16 @@ void render_function(u64 threadid, u64 total_threads)
             u64 start, end;
             {
                 s64 _start = windows[i].x + BORDER_SIZE;
-                if(_start < 0) { start = 0; }
+                if(_start < 0) { _start = 0; }
                 if(windows[i].width <= 2*BORDER_SIZE) { continue; }
+                if(windows[i].height <= 2*BORDER_SIZE) { continue; }
+                if((s64)y >= windows[i].y + (s64)windows[i].height - BORDER_SIZE) { continue; }
                 s64 _end = windows[i].x + (s64)windows[i].width - BORDER_SIZE;
                 if(_end > render_buffer->width) { _end = render_buffer->width; }
-                if((u64)(_end - _start) >= windows[i].fb->width) { _end = _start + (s64)windows[i].fb->width - 1; }
+                if((u64)(_end - _start) >= windows[i].fb->width)
+                { _end = _start + (s64)windows[i].fb->width - 1; }
+                if(_end > windows[i].x + (s64)windows[i].width - 1 - BORDER_SIZE)
+                { _end = windows[i].x + (s64)windows[i].width - 1 - BORDER_SIZE; }
                 if(_end <= _start) { continue; }
                 start = (u64)_start;
                 end = (u64)_end;
@@ -575,7 +580,7 @@ while(1) {
 
                 if(scancode == 35 && slot_index < slot_count)
                 {
-                    for(u64 i = 0; window_count + 1 < 84 && i < 2000; i++)
+                    for(u64 i = 0; window_count + 1 < 84 && i < 1; i++)
                     {
                     u64 pid = 0;
                     if(AOS_create_process_from_file(partitions[slot_index], &pid))

@@ -174,7 +174,7 @@ while(1)
         }
         AOS_surface_commit(surface);
         f64 frame_end = AOS_time_get_seconds();
-//        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
+        //AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
     }
 }
 }
