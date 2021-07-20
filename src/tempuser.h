@@ -431,11 +431,16 @@ while(1) {
         for(u64 i = 0; i < window_count; i++)
         {
             u64 byte_count = 0;
+            AOS_stream_take(windows[i].owned_in_stream, 0, 0, &byte_count);
+            u8 scratch[512];
             do {
-                u8 b;
-                if(AOS_stream_take(windows[i].owned_in_stream, &b, 1, &byte_count))
+                u64 dummy_byte_count;
+                u64 read_count = byte_count;
+                if(read_count > 512) { read_count = 512; }
+                if(AOS_stream_take(windows[i].owned_in_stream, scratch, read_count, &dummy_byte_count))
                 {
-                    AOS_stream_put(AOS_STREAM_STDOUT, &b, 1);
+                    AOS_stream_put(AOS_STREAM_STDOUT, scratch, read_count);
+                    byte_count-=read_count;
                 }
             } while(byte_count);
         }

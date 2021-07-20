@@ -444,7 +444,7 @@ u64 m_trap(
 
             volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
             volatile u64* mtime = (u64*)0x0200bff8;
-
+#if 0
             if(*mtime >= wait_time_print_time[hart] && 1)
             {
                 spinlock_acquire(&KERNEL_SPINLOCK);
@@ -456,7 +456,7 @@ u64 m_trap(
                 wait_time_print_time[hart] = *mtime + (MACHINE_TIMER_SECOND*10);
                 spinlock_release(&KERNEL_SPINLOCK);
             }
-
+#endif
             kernel_choose_new_thread(
                 &kernel_current_threads[hart],
                 *mtime,

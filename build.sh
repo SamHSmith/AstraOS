@@ -18,6 +18,7 @@ KERNEL_SOURCES="src/*.s src/*.c src/cyclone_crypto/hash/sha512.c src/cyclone_cry
 
 SQUARE_SOURCES="square_src/elf.c userland/aos_syscalls.s"
 
+DAVE_TERMINAL_SOURCES="dave_terminal/dave.c userland/aos_syscalls.s"
 
 if [ "$1" = "clean" ]
 then
@@ -51,9 +52,11 @@ cp fsread/bin/* bin
 
 $CC $CFLAGS -T virt.lds -o bin/kernel.bin $KERNEL_SOURCES
 $CC $CFLAGS -o bin/square $SQUARE_SOURCES
+$CC $CFLAGS -o bin/dave_terminal $DAVE_TERMINAL_SOURCES
 
 mkdir -p disk_dir/partitions
 cp bin/square disk_dir/partitions/super_cool_square
+cp bin/dave_terminal disk_dir/partitions/dave_terminal
 rm -f drive1.dsk
 bin/fsmake drive1.dsk disk_dir/
 
