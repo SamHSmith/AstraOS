@@ -1,13 +1,15 @@
 #define SCHEDUALER_MIX_IN_WINDOW 50
+#define SCHEDUALER_SEND_BACK_FRACTION_NUMERATOR 1
 #define SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR 3
 
 
 u64 thread_runtime_is_live(Thread* t, u64 mtime)
 {
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    rwlock_acquire_read(&process->process_lock);
 
     if(t->is_running)
-    {  return 1;  }
+    {  rwlock_release_read(&process->process_lock); return 1;  }
 
     for(u64 i = 0; i < t->awake_count; i++)
     {
@@ -25,7 +27,7 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
                     && slot->is_initialized,
                     "thread_runtime_is_live: the surface slot contains a valid surface");
             if( !slot->is_defering_to_consumer_slot &&
-                !surface_slot_has_commited(process, t->awakes[i].surface_slot) &&
+                !surface_slot_has_commited(process, t->awakes[i].surface_slot, 0) &&
                 slot->has_been_fired) { wake_up = 1; }
         }
         else if(t->awakes[i].awake_type == THREAD_AWAKE_KEYBOARD)
@@ -53,9 +55,11 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
         {
             t->awake_count = 0;
             t->is_running = 1;
+            rwlock_release_read(&process->process_lock);
             return 1;
         }
     }
+    rwlock_release_read(&process->process_lock);
     return 0;
 }
 
@@ -95,12 +99,15 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
         }
         //printf("hart#%llu has %llu\n", hart, own_count);
 
+        u64 own_temporary_storage_index = 0;
+        ThreadRuntime own_temporary_storage[own_count];
+
         for(u64 i = 0; i < local_thread_runtimes[hart].len; i++)
         {
             if(own_arr[i].state == THREAD_RUNTIME_INITIALIZED && own_arr[i].time_in_runqueue > 0)
             {
                 u64 random_number = xoshiro256ss(&kernel_choose_new_thread_rando_state[hart]);
-                u64 bar = U64_MAX / SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR;
+                u64 bar = (U64_MAX / SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR) * SCHEDUALER_SEND_BACK_FRACTION_NUMERATOR;
                 u64 amount = (u64)own_arr[i].time_in_runqueue;
                 u64 total = total_in_queue_time/own_count;
                 if(amount > total) { amount = total; }
@@ -110,10 +117,13 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
                 if(!(random_number < bar))
                 { continue; }
                 own_arr[i].time_in_runqueue = 0;
-                thread_runtime_array_add(&thread_runtime_commons, own_arr[i]);
+                own_temporary_storage[own_temporary_storage_index] = own_arr[i];
+                own_temporary_storage_index++;
                 own_arr[i].state = THREAD_RUNTIME_UNINITIALIZED;
             }
         }
+        u64 own_temporary_storage_count = own_temporary_storage_index;
+        own_temporary_storage_index = 0;
 
         s64 count = 0;
         u64 total_out_of_queue_count = 0;
@@ -134,7 +144,7 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
             if(arr[i].state == THREAD_RUNTIME_INITIALIZED && arr[i].time_in_runqueue < 0)
             {
                 u64 random_number = xoshiro256ss(&kernel_choose_new_thread_rando_state[hart]);
-                u64 bar = (U64_MAX / SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR);
+                u64 bar = (U64_MAX / SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR) * SCHEDUALER_SEND_BACK_FRACTION_NUMERATOR;
                 u64 amount = (u64)(-arr[i].time_in_runqueue);
                 u64 total = total_out_of_queue_count/count;
                 if(amount > total) { amount = total; }
@@ -149,8 +159,14 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
             }
         }
 
-        //temp
+        // add those in temporary storage to commons
+        for(u64 i = 0; i < own_temporary_storage_count; i++)
         {
+            thread_runtime_array_add(&thread_runtime_commons, own_temporary_storage[i]);
+        }
+
+        //temp
+/*        {
             u64 own_count = 0;
         u64 total_in_queue_time = 0;
         ThreadRuntime* own_arr = local_thread_runtimes[hart].memory_alloc.memory;
@@ -164,7 +180,7 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
             }
         }
         //printf("hart#%llu has %llu\n", hart, own_count);
-        }
+        }*/
 
         spinlock_release(&thread_runtime_commons_lock);
     }

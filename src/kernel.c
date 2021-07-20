@@ -9,6 +9,8 @@
 #include "../common/rwlock.h"
 
 Spinlock KERNEL_SPINLOCK;
+Spinlock KERNEL_MEMORY_SPINLOCK;
+Spinlock KERNEL_VIEWER_SPINLOCK;
 
 #include "random.h"
 
@@ -118,9 +120,9 @@ u64 kinit()
     printf("Counting HARTS...");
     KERNEL_HART_COUNT.value = 0;
     atomic_s64_increment(&KERNEL_HART_COUNT);
-    for(u64 i = 0; i < 1000000; i++) { __asm__("nop"); } // wait
+    for(u64 i = 0; i < 2000000; i++) { __asm__("nop"); } // wait
     KERNEL_START_OTHER_HARTS = 0; // causes other harts to increment and get ready
-    for(u64 i = 0; i < 1000000; i++) { __asm__("nop"); } // wait
+    for(u64 i = 0; i < 2000000; i++) { __asm__("nop"); } // wait
     printf("    There are %lld HARTS.\n", KERNEL_HART_COUNT.value);
 
     KERNEL_MMU_TABLE = (u64)mem_init();
@@ -173,6 +175,9 @@ void kmain()
     uart_write_string("Hello there, welcome to the ROS operating system\nYou have no idea the pain I went through to make these characters you type appear on screen\n\n");
 
     // lock kernel
+    spinlock_create(&KERNEL_SPINLOCK);
+    spinlock_create(&KERNEL_MEMORY_SPINLOCK);
+    spinlock_create(&KERNEL_VIEWER_SPINLOCK);
     spinlock_acquire(&KERNEL_SPINLOCK);
     KERNEL_START_OTHER_HARTS = 0;
 
@@ -386,8 +391,9 @@ u64 m_trap(
                 wait_time_times[hart] += 1;
             }
 
-            if(spinlock_try_acquire(&KERNEL_SPINLOCK))
+            if(spinlock_try_acquire(&KERNEL_VIEWER_SPINLOCK))
             {
+                spinlock_acquire(&KERNEL_SPINLOCK);
                 // talk to viewer
                 volatile u8* viewer = 0x10000100;
                 volatile u8* viewer_should_read = 0x10000101;
@@ -395,21 +401,28 @@ u64 m_trap(
                 SurfaceSlot* surface = (SurfaceSlot*)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]
                                 ->surface_alloc.memory;
 
+
                 while(*viewer_should_read)
                 {
                     recieve_oak_packet();
                 }
-                if(frame_has_been_requested &&
-                    surface_slot_has_commited(KERNEL_PROCESS_ARRAY[vos[current_vo].pid], 0))
+                if(frame_has_been_requested)
                 {
-                    framebuffer = surface_slot_swap_present_buffer(
-                                    KERNEL_PROCESS_ARRAY[vos[current_vo].pid],
-                                    0,
-                                    framebuffer
-                    );
-                    oak_send_video(framebuffer);
+                    Process* process = KERNEL_PROCESS_ARRAY[vos[current_vo].pid];
+                    rwlock_acquire_write(&process->process_lock);
+                    surface_slot_fire(process, 0);
+                    if(surface_slot_has_commited(process, 0, 1))
+                    {
+                        framebuffer = surface_slot_swap_present_buffer(
+                                        process,
+                                        0,
+                                        framebuffer
+                        );
+                        oak_send_video(framebuffer);
 
-                    frame_has_been_requested = 0;
+                        frame_has_been_requested = 0;
+                    }
+                    rwlock_release_write(&process->process_lock);
                 }
 
                 // Output VO stream out to serial
@@ -426,19 +439,22 @@ u64 m_trap(
                     }
                 }
                 spinlock_release(&KERNEL_SPINLOCK);
+                spinlock_release(&KERNEL_VIEWER_SPINLOCK);
             }
 
             volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
             volatile u64* mtime = (u64*)0x0200bff8;
 
-            if(*mtime >= wait_time_print_time[hart] && 0)
+            if(*mtime >= wait_time_print_time[hart] && 1)
             {
+                spinlock_acquire(&KERNEL_SPINLOCK);
                 printf("average wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf μs\n", hart, ((f64)(wait_time_acc[hart]) / (f64)wait_time_times[hart]) / (f64)(MACHINE_TIMER_SECOND/1000000));
                 printf("total wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf ms\n", hart, (f64)wait_time_acc[hart] / (f64)(MACHINE_TIMER_SECOND/1000));
                 printf("percentage of time spent waiting on PROC_ARRAY_RWLOCK for hart%llu is %lf %%\n", hart, 100.0*((f64)wait_time_acc[hart] / (f64)(MACHINE_TIMER_SECOND*10)));
                 wait_time_acc[hart] = 0;
                 wait_time_times[hart] = 0;
                 wait_time_print_time[hart] = *mtime + (MACHINE_TIMER_SECOND*10);
+                spinlock_release(&KERNEL_SPINLOCK);
             }
 
             kernel_choose_new_thread(

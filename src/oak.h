@@ -107,7 +107,6 @@ void oak_recieve_video_out_request(OakPacketVideoOutRequest* packet)
         kfree_pages(framebuffer->alloc);
         framebuffer = framebuffer_create(packet->width, packet->height);
     }
-    surface_slot_fire(process, 0);
     frame_has_been_requested = 1;
 }
 

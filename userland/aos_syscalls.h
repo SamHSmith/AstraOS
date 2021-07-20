@@ -83,6 +83,7 @@ u64 AOS_surface_consumer_fire(u64 consumer_slot);
 u64 AOS_surface_forward_to_consumer(u64 surface_slot, u64 consumer_slot);
 u64 AOS_surface_stop_forwarding_to_consumer(u64 surface_slot);
 
+#define AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT 20
 u64 AOS_forward_keyboard_events(AOS_KeyboardEvent* buf, u64 len, u64 pid);
 
 u64 AOS_thread_sleep();

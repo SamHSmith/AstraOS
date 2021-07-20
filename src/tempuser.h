@@ -226,10 +226,6 @@ void render_function(u64 threadid, u64 total_threads)
 
             areas[insert_index].canvas_start = start;
             areas[insert_index].canvas_end = end;
-            areas[insert_index].buffer = 0;
-            areas[insert_index].red = 0.0;
-            areas[insert_index].green = 0.0;
-            areas[insert_index].blue = 0.0;
             areas[insert_index].buffer = windows[i].fb;
             areas[insert_index].xoffset = 0;
             areas[insert_index].y_index = ((s64)y - windows[i].y - BORDER_SIZE);
@@ -323,7 +319,7 @@ void render_function(u64 threadid, u64 total_threads)
     { AOS_semaphore_release(render_work_done_semaphore, 1, 0); }
 }
 
-#define WORKER_THREAD_STACK_SIZE (8+((sizeof(RenderArea)*300*4)/4096))
+#define WORKER_THREAD_STACK_SIZE (8+((sizeof(RenderArea)*300*2)/4096))
 #define THREAD_COUNT 8
 #define JOBS_PER_THREAD 8
 
@@ -629,6 +625,7 @@ while(1) {
     AOS_thread_awake_on_surface(&AOS_wait_surface, 1);
     AOS_thread_awake_on_mouse();
     AOS_thread_awake_on_keyboard();
+    AOS_thread_awake_after_time(100000);
     AOS_thread_sleep();
 //AOS_H_printf("temp slept for %lf seconds\n", AOS_time_get_seconds() - pre_sleep);
 
@@ -639,6 +636,7 @@ while(1) {
         double time_frame_start = AOS_time_get_seconds();
 
         // Fetch from consumers
+        if(!is_fullscreen_mode)
         {
             for(u64 i = 0; i < window_count; i++)
             {
@@ -892,13 +890,13 @@ while(1) {
                 fb->data[i*4 + 3] = 1.0;
             }
         }
-
         assert(AOS_surface_commit(0), "commited successfully");
 
         cursor_x = new_cursor_x;
         cursor_y = new_cursor_y;
 
         // Set up consumers
+        if(!is_fullscreen_mode)
         {
             for(u64 i = 0; i < window_count; i++)
             {

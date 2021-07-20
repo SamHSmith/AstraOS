@@ -68,6 +68,7 @@ typedef struct
     RawMouseEventQueue mouse_event_queue;
 
     u32 thread_count;
+    RWLock process_lock;
     u64 pid;
     Thread threads[];
 } Process;
@@ -84,6 +85,7 @@ u64 process_create()
     memset(process, 0, sizeof(Process));
     process->proc_alloc = _proc;
 
+    rwlock_create(&process->process_lock);
     process->mmu_table = create_mmu_table();
     for(u64 i = 0; i < 512; i++) { process->mmu_table[i] = 0; }
 
@@ -505,15 +507,11 @@ u64 process_create_in_stream_slot(Process* process)
     return index;
 }
 
-void process_create_between_stream(Process* p1, Process* p2, u64* out_stream_ret, u64* in_stream_ret)
+void process_create_between_stream(Process* p1, Process* p2, u64 out_stream_index, u64 in_stream_index)
 {
-    u64 out_stream_index = process_create_out_stream_slot(p1);
-    u64 in_stream_index  = process_create_in_stream_slot(p2);
     Stream* stream = stream_create();
     ((Stream**) p1->out_stream_alloc.memory)[out_stream_index] = stream;
     ((Stream**) p2->in_stream_alloc.memory)[in_stream_index]   = stream;
-    *out_stream_ret = out_stream_index;
-    *in_stream_ret = in_stream_index;
 }
 
 typedef struct

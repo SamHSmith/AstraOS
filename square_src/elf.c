@@ -19,8 +19,8 @@ void _start()
 
     f64 start_time = AOS_time_get_seconds();
 
-    f64 square_x = 0.0;
-    f64 square_y = 0.0;
+    f64 square_x_control = 0.0;
+    f64 square_y_control = 0.0;
     f64 last_frame_time = start_time;
     u8 input = 0;
 
@@ -91,15 +91,19 @@ while(1)
         }
 
         if(input & 1)
-        { square_x -= delta_time; }
+        { square_x_control -= delta_time; }
         if(input & 2)
-        { square_y += delta_time; }
+        { square_y_control += delta_time; }
         if(input & 4)
-        { square_y -= delta_time; }
+        { square_y_control -= delta_time; }
         if(input & 8)
-        { square_x += delta_time; }
+        { square_x_control += delta_time; }
 
         f32 time = frame_start - start_time;
+
+        f32 square_x = (f32)square_x_control + sineF32(3.0*time)/2.0;
+        f32 square_y = (f32)square_y_control + sineF32(3.0*time/M_PI)/2.0;
+
         f32 red = (sineF32((time*M_PI)/2.0) + 1.0) / 2.0;
         f32 green = (sineF32((time*M_PI)/3.0) + 1.0) / 2.0;
         f32 blue = (sineF32((time*M_PI)/5.0) + 1.0) / 2.0;

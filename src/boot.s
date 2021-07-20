@@ -148,7 +148,7 @@ kpost_init:
 continue:
 
     mv t6, x0
-.rept 50
+.rept 20
     addi t6, t6, 2000
 .endr
 loop:

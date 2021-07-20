@@ -97,6 +97,7 @@ typedef struct Kallocation
 
 Kallocation kalloc_pages(u64 page_count)
 {
+    spinlock_acquire(&KERNEL_MEMORY_SPINLOCK); // TODO maybe move this down so we don't lock local work?
     if(page_count == 0) { Kallocation al = {0}; return al; }
     s64 a_size = 0;
     for(u64 i = 0; i < 64; i++)
@@ -159,6 +160,7 @@ Kallocation kalloc_pages(u64 page_count)
     // HEAP_START isn't always 4096 aligned so the first page will be smaller in some cases.
     al.memory = (void*)((HEAP_START - (HEAP_START % PAGE_SIZE)) + (page_address * PAGE_SIZE));
     al.page_count = page_count;
+    spinlock_release(&KERNEL_MEMORY_SPINLOCK);
     return al;
 }
 
@@ -170,7 +172,9 @@ void kfree_pages(Kallocation a)
     if((addr % PAGE_SIZE) != 0) { return; } //TODO: some kind of error maybe
     addr /= PAGE_SIZE;
 
+    spinlock_acquire(&KERNEL_MEMORY_SPINLOCK);
     mem_table_set_taken(addr, a.page_count, 0);
+    spinlock_release(&KERNEL_MEMORY_SPINLOCK);
 }
 
 void* kalloc_single_page()
