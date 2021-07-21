@@ -293,3 +293,16 @@ AOS_thread_awake_on_semaphore:
     addi a0, x0, 43
     ecall
     ret
+
+.global AOS_process_exit
+AOS_process_exit:
+    addi a0, x0, 44
+    ecall
+    ret
+
+.global AOS_process_is_alive
+AOS_process_is_alive:
+    mv a1, a0
+    addi a0, x0, 45
+    ecall
+    ret

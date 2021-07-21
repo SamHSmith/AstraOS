@@ -48,7 +48,7 @@ typedef struct
 } ELF_ProgramHeader;
 
 // returns true on success
-u64 create_process_from_file(u64 file_id, u64* pid_ret)
+u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent_count)
 {
     if(!is_valid_file_id(file_id)) { return 0; }
 
@@ -83,7 +83,7 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret)
 
     if(phnum == 0) { kfree_pages(elf_alloc); return 0; }
 
-    u64 pid = process_create();
+    u64 pid = process_create(parents, parent_count);
 #define proc KERNEL_PROCESS_ARRAY[pid]
 
     for(u64 i = 0; i < phnum; i++)

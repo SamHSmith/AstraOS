@@ -269,7 +269,7 @@ void process_init()
     }
     rwlock_create(&KERNEL_PROCESS_ARRAY_RWLOCK);
 
-    u64 pid = process_create();
+    u64 pid = process_create(0, 0);
 
     u64 out_stream = process_create_out_stream_slot(KERNEL_PROCESS_ARRAY[pid]);
     ((Stream**)KERNEL_PROCESS_ARRAY[pid]->out_stream_alloc.memory)[out_stream] = stream_create();

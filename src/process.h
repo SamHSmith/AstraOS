@@ -39,6 +39,13 @@ typedef struct
 
 typedef struct
 {
+    u64 pid;
+    u8 is_alive;
+    u8 is_initialized;
+} OwnedProcess;
+
+typedef struct
+{
     Kallocation proc_alloc;
     u64* mmu_table; // does not change during the lifetime of the process
 
@@ -64,6 +71,12 @@ typedef struct
     Kallocation semaphore_alloc; // ProcessSemaphore array
     u64 semaphore_count;
 
+    Kallocation owned_process_alloc; // OwnedProcess array
+    u64 owned_process_count;
+
+    Kallocation parent_alloc; // u64/pid array
+    u64 parent_count;
+
     KeyboardEventQueue kbd_event_queue;
     RawMouseEventQueue mouse_event_queue;
 
@@ -78,12 +91,19 @@ Kallocation KERNEL_PROCESS_ARRAY_ALLOCATION = {0};
 u64 KERNEL_PROCESS_ARRAY_LEN = 0;
 RWLock KERNEL_PROCESS_ARRAY_RWLOCK;
 
-u64 process_create()
+u64 process_create(u64* parents, u64 parent_count)
 {
     Kallocation _proc = kalloc_pages((sizeof(Process)/PAGE_SIZE) + 1);
     Process* process = (Process*)_proc.memory;
     memset(process, 0, sizeof(Process));
     process->proc_alloc = _proc;
+
+    u64 parent_array_page_count = (parent_count*sizeof(u64) + PAGE_SIZE - 1) / PAGE_SIZE;
+    Kallocation parent_array_alloc = kalloc_pages(parent_array_page_count);
+    for(u64 i = 0; i < parent_count; i++)
+    { ((u64*)parent_array_alloc.memory)[i] = parents[i]; }
+    process->parent_alloc = parent_array_alloc;
+    process->parent_count = parent_count;
 
     rwlock_create(&process->process_lock);
     process->mmu_table = create_mmu_table();
@@ -138,6 +158,7 @@ typedef struct
 
 #define THREAD_RUNTIME_UNINITIALIZED 0
 #define THREAD_RUNTIME_INITIALIZED 1
+#define THREAD_RUNTIME_HAS_BEEN_REMOVED 2
 
 typedef struct
 {
@@ -560,4 +581,61 @@ u64 process_create_semaphore(Process* process, u32 initial_value, u32 max_value)
     semaphores[index].max_value = max_value;
     atomic_s64_set(&semaphores[index].counter, (s64)initial_value);
     return index;
+}
+
+// Assumes you have a write lock on process
+// Assumes that child_pid is alive
+u64 process_create_owned_process(Process* process, u64 child_pid)
+{
+    for(u64 i = 0; i < process->owned_process_count; i++)
+    {
+        OwnedProcess* ops = process->owned_process_alloc.memory;
+        if(!ops[i].is_initialized)
+        {
+            ops[i].is_initialized = 1;
+            ops[i].is_alive = 1;
+            ops[i].pid = child_pid;
+            return i;
+        }
+    }
+
+    if((process->owned_process_count + 1) * sizeof(OwnedProcess) > process->owned_process_alloc.page_count * PAGE_SIZE)
+    {
+        Kallocation new_alloc = kalloc_pages(process->owned_process_alloc.page_count + 1);
+        OwnedProcess* new_array = new_alloc.memory;
+        OwnedProcess* old_array = process->owned_process_alloc.memory;
+        for(u64 i = 0; i < process->owned_process_count; i++)
+        {
+            new_array[i] = old_array[i];
+        }
+        if(process->owned_process_alloc.page_count)
+        {
+            kfree_pages(process->owned_process_alloc);
+        }
+        process->owned_process_alloc = new_alloc;
+    }
+
+    u64 i = process->owned_process_count;
+    process->owned_process_count++;
+
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    ops[i].is_initialized = 1;
+    ops[i].is_alive = 1;
+    ops[i].pid = child_pid;
+    return i;
+}
+
+// you need read lock on process
+u64 process_child_pid_to_owned_process_index(Process* process, u64 child_pid, u64* owned_process_index)
+{
+    for(u64 i = 0; i < process->owned_process_count; i++)
+    {
+        OwnedProcess* ops = process->owned_process_alloc.memory;
+        if(ops[i].is_initialized && ops[i].pid == child_pid)
+        {
+            *owned_process_index = i;
+            return 1;
+        }
+    }
+    return 0;
 }

@@ -809,8 +809,29 @@ void syscall_create_process_from_file(Thread** current_thread, u64 hart)
         return;
     }
     // ret is true
-    ret = create_process_from_file(file_id, pid_ptr);
+    u64 parent_count = process->parent_count + 1;
+    u64 parents[parent_count];
+    for(u64 i = 0; i < process->parent_count; i++)
+    { parents[i] = ((u64*)process->parent_alloc.memory)[i]; }
+    parents[parent_count - 1] = process->pid;
+    u64 child_pid;
+    ret = create_process_from_file(file_id, &child_pid, parents, parent_count);
+    rwlock_release_read(&process->process_lock);
 
+    for(u64 i = 0; i < parent_count; i++)
+    {
+        u64 pid = parents[i];
+        Process* parent_process = KERNEL_PROCESS_ARRAY[pid];
+        rwlock_acquire_write(&parent_process->process_lock);
+        process_create_owned_process(parent_process, child_pid);
+        rwlock_release_write(&parent_process->process_lock);
+    }
+
+    rwlock_acquire_read(&process->process_lock);
+    u64 child_owned_process_index;
+    assert(process_child_pid_to_owned_process_index(process, child_pid, &child_owned_process_index), "we do actually own this child we just created");
+
+    *pid_ptr = child_owned_process_index;
     frame->regs[10] = ret;
     t->program_counter += 4;
     rwlock_release_read(&process->process_lock);
@@ -833,8 +854,21 @@ void syscall_surface_consumer_create(Thread** current_thread, u64 hart)
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
     rwlock_acquire_write(&process->process_lock);
     TrapFrame* frame = &t->frame;
-    u64 user_foreign_pid = frame->regs[11];
+    u64 user_foreign_proxy_pid = frame->regs[11];
     u64 user_consumer_ptr = frame->regs[12];
+
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    if(user_foreign_proxy_pid >= process->owned_process_count ||
+       !ops[user_foreign_proxy_pid].is_initialized ||
+       !ops[user_foreign_proxy_pid].is_alive)
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        rwlock_release_write(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+    u64 user_foreign_pid = ops[user_foreign_proxy_pid].pid;
 
     u64* consumer_ptr = 0;
     if(!(mmu_virt_to_phys(process->mmu_table, user_consumer_ptr + sizeof(u64), (u64*)&consumer_ptr) == 0) ||
@@ -966,7 +1000,20 @@ void syscall_forward_keyboard_events(Thread** current_thread, u64 hart)
     u64 user_buf = frame->regs[11];
     u64 user_len = frame->regs[12];
     if(user_len > AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT) { user_len = AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT; }
-    u64 user_pid = frame->regs[13];
+    u64 user_proxy_pid = frame->regs[13];
+
+    OwnedProcess* ops = process_orig->owned_process_alloc.memory;
+    if(user_proxy_pid >= process_orig->owned_process_count ||
+       !ops[user_proxy_pid].is_initialized ||
+       !ops[user_proxy_pid].is_alive)
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        rwlock_release_read(&process_orig->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+    u64 user_pid = ops[user_proxy_pid].pid;
 
     u64 page_count = (user_len * sizeof(KeyboardEvent) + PAGE_SIZE - 1) / PAGE_SIZE;
     u64 user_ptr = user_buf + page_count * PAGE_SIZE;
@@ -1170,10 +1217,23 @@ void syscall_process_create_out_stream(Thread** current_thread, u64 hart)
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
     rwlock_acquire_write(&process->process_lock);
     TrapFrame* frame = &t->frame;
-    u64 user_process_handle = frame->regs[11]; // as of now just the pid, very insecure
+    u64 user_proxy_process_handle = frame->regs[11]; // as of now just the pid, very insecure
     u64 user_foreign_out_stream_ptr = frame->regs[12];
     u64 user_owned_in_stream_ptr = frame->regs[13];
     t->program_counter += 4;
+
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    if(user_proxy_process_handle >= process->owned_process_count ||
+       !ops[user_proxy_process_handle].is_initialized ||
+       !ops[user_proxy_process_handle].is_alive)
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        rwlock_release_write(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+    u64 user_process_handle = ops[user_proxy_process_handle].pid;
  
     u64* foreign_out_stream_ptr = 0;
     if(user_foreign_out_stream_ptr &&
@@ -1243,10 +1303,23 @@ void syscall_process_create_in_stream(Thread** current_thread, u64 hart)
     Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
     rwlock_acquire_write(&process->process_lock);
     TrapFrame* frame = &t->frame;
-    u64 user_process_handle = frame->regs[11]; // as of now just the pid, very insecure
+    u64 user_proxy_process_handle = frame->regs[11]; // as of now just the pid, very insecure
     u64 user_owned_out_stream_ptr = frame->regs[12];
     u64 user_foreign_in_stream_ptr = frame->regs[13];
     t->program_counter += 4;
+
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    if(user_proxy_process_handle >= process->owned_process_count ||
+       !ops[user_proxy_process_handle].is_initialized ||
+       !ops[user_proxy_process_handle].is_alive)
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        rwlock_release_write(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+    u64 user_process_handle = ops[user_proxy_process_handle].pid;
  
     u64* owned_out_stream_ptr = 0;
     if(user_owned_out_stream_ptr &&
@@ -1307,33 +1380,51 @@ void syscall_process_start(Thread** current_thread, u64 hart)
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
         volatile u64* mtime = (u64*)0x0200bff8;
         u64 start_wait = *mtime;
-        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         u64 end_wait = *mtime;
 
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
     Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    rwlock_acquire_read(&process->process_lock);
     TrapFrame* frame = &t->frame;
     t->program_counter += 4;
-    u64 user_process_handle = frame->regs[11];
+    u64 user_proxy_process_handle = frame->regs[11];
+
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    if(user_proxy_process_handle >= process->owned_process_count ||
+       !ops[user_proxy_process_handle].is_initialized ||
+       !ops[user_proxy_process_handle].is_alive)
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        rwlock_release_read(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+    u64 user_process_handle = ops[user_proxy_process_handle].pid;
 
     if(user_process_handle >= KERNEL_PROCESS_ARRAY_LEN ||
         KERNEL_PROCESS_ARRAY[user_process_handle]->mmu_table == 0)
     {
-        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        rwlock_release_read(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
     Process* foreign = KERNEL_PROCESS_ARRAY[user_process_handle];
 
     if(foreign->thread_count == 0 || foreign->threads[0].is_initialized == 0)
     {
-        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        rwlock_release_read(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
 
     foreign->threads[0].is_running = 1;
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_release_read(&process->process_lock);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void syscall_thread_new(Thread** current_thread, u64 hart)
@@ -1490,6 +1581,88 @@ void syscall_semaphore_release(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_process_exit(Thread** current_thread, u64 hart, u64 mtime)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    u64 pid = t->process_pid;
+    Process* process = KERNEL_PROCESS_ARRAY[pid];
+
+    u64* parents = process->parent_alloc.memory;
+    for(u64 i = 0; i < process->parent_count; i++)
+    {
+        Process* pa = KERNEL_PROCESS_ARRAY[parents[i]];
+        u64 owned_index;
+        if(!process_child_pid_to_owned_process_index(pa, pid, &owned_index))
+        { continue; }
+        OwnedProcess* ops = pa->owned_process_alloc.memory;
+        ops[owned_index].is_alive = 0;
+    }
+
+    //TODO kill child procs
+
+    //TODO Currently assuming there is only the main thread and we are calling from it.
+
+    ThreadRuntime* runtimes = local_thread_runtimes[hart].memory_alloc.memory;
+    for(u64 i = 0; i < local_thread_runtimes[hart].len; i++)
+    {
+        if(runtimes[i].pid == pid)
+        { runtimes[i].state = THREAD_RUNTIME_HAS_BEEN_REMOVED; }
+    }
+
+    // TODO dealloc all allocations
+
+    mmu_unmap_table(process->mmu_table);
+    process->mmu_table = 0;
+
+    kernel_choose_new_thread(current_thread, mtime, hart);
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_process_is_alive(Thread** current_thread, u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    t->program_counter += 4;
+    TrapFrame* frame = &t->frame;
+    u64 user_proxy_pid = frame->regs[11];
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    rwlock_acquire_read(&process->process_lock);
+
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    if(user_proxy_pid >= process->owned_process_count ||
+       !ops[user_proxy_pid].is_initialized ||
+       !ops[user_proxy_pid].is_alive)
+    {
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        frame->regs[10] = 1;
+    }
+
+    rwlock_release_read(&process->process_lock);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -1563,6 +1736,10 @@ void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
     { syscall_semaphore_release(current_thread, hart); }
     else if(call_num == 43)
     { syscall_thread_awake_on_semaphore(current_thread, hart); }
+    else if(call_num == 44)
+    { syscall_process_exit(current_thread, hart, mtime); }
+    else if(call_num == 45)
+    { syscall_process_is_alive(current_thread, hart); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

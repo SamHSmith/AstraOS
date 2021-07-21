@@ -95,6 +95,7 @@ u64 AOS_thread_awake_on_mouse();
 u64 AOS_stream_put(u64 out_stream, u8* memory, u64 count);
 u64 AOS_stream_take(u64 in_stream, u8* buffer, u64 buffer_size, u64* byte_count_in_stream);
 
+// out and in refer to the *other* process. So create_out_stream creates a stream from you to the other process
 u64 AOS_process_create_out_stream(u64 process_handle, u64* foreign_out_stream, u64* owned_in_stream);
 u64 AOS_process_create_in_stream(u64 process_handle, u64* owned_out_stream, u64* foreign_in_stream);
 
@@ -117,6 +118,10 @@ u64 AOS_semaphore_release(u64 semaphore, u32 release_count, u32* previous_value)
 // when the thread is awoken by the semaphore's value being > 0,
 // the semaphore's value is decremented by 1.
 u64 AOS_thread_awake_on_semaphore(u64 semaphore);
+
+void AOS_process_exit();
+
+u64 AOS_process_is_alive(u64 pid);
 
 // give file to proccess
 // give directory to proccess
