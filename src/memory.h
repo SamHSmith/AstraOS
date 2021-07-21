@@ -98,7 +98,12 @@ typedef struct Kallocation
 Kallocation kalloc_pages(u64 page_count)
 {
     spinlock_acquire(&KERNEL_MEMORY_SPINLOCK); // TODO maybe move this down so we don't lock local work?
-    if(page_count == 0) { Kallocation al = {0}; return al; }
+    if(page_count == 0)
+    {
+        spinlock_release(&KERNEL_MEMORY_SPINLOCK);
+        Kallocation al = {0};
+        return al;
+    }
     s64 a_size = 0;
     for(u64 i = 0; i < 64; i++)
     {
@@ -111,7 +116,12 @@ Kallocation kalloc_pages(u64 page_count)
         }
     }
 
-    if(a_size < 0) { Kallocation al = {0}; return al; }
+    if(a_size < 0)
+    {
+        spinlock_release(&KERNEL_MEMORY_SPINLOCK);
+        Kallocation al = {0};
+        return al;
+    }
 
     u64 allocation_splits = 0;
     for(u64 i = 0; i < ALLOCATION_SPLIT_COUNT; i++)
