@@ -122,7 +122,7 @@ u64 kinit()
     atomic_s64_increment(&KERNEL_HART_COUNT);
     for(u64 i = 0; i < 2000000; i++) { __asm__("nop"); } // wait
     KERNEL_START_OTHER_HARTS = 0; // causes other harts to increment and get ready
-    for(u64 i = 0; i < 2000000; i++) { __asm__("nop"); } // wait
+    for(u64 i = 0; i < 4000000; i++) { __asm__("nop"); } // wait
     printf("    There are %lld HARTS.\n", KERNEL_HART_COUNT.value);
 
     KERNEL_MMU_TABLE = (u64)mem_init();

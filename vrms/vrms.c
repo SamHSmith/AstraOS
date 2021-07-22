@@ -30,6 +30,15 @@ void _start()
         counter++;
         if(counter == 1)
         { AOS_H_printf("Why are you staying there is so much freesoftware to enjoy!\n"); }
+        else if(counter == 2)
+        {
+            AOS_H_printf("You asked for it. You virtual Richard M. Stallman is going to hang!\nDon't worry though if you are running the excellent dave_terminal you can force stop vrms with CTRL+SHIFT+X on qwerty or CTRL+SHIFT+Q on dvorak.");
+            while(1)
+            {
+                AOS_thread_awake_after_time(1000000000);
+                AOS_thread_sleep();
+            }
+        }
     }
 
     AOS_process_exit();

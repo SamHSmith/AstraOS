@@ -306,3 +306,24 @@ AOS_process_is_alive:
     addi a0, x0, 45
     ecall
     ret
+
+.global AOS_process_kill
+AOS_process_kill:
+    mv a1, a0
+    addi a0, x0, 46
+    ecall
+    ret
+
+.global AOS_out_stream_destroy
+AOS_out_stream_destroy:
+    mv a1, a0
+    addi a0, x0, 47
+    ecall
+    ret
+
+.global AOS_in_stream_destroy
+AOS_in_stream_destroy:
+    mv a1, a0
+    addi a0, x0, 48
+    ecall
+    ret

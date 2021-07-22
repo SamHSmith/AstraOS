@@ -176,6 +176,8 @@ Kallocation kalloc_pages(u64 page_count)
 
 void kfree_pages(Kallocation a)
 {
+    if(!a.page_count)
+    { return; }
     u64 addr = ((u64)a.memory);
     if(addr <= HEAP_START) { return; }
     addr -= HEAP_START;

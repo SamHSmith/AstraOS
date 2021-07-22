@@ -84,7 +84,8 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
     if(phnum == 0) { kfree_pages(elf_alloc); return 0; }
 
     u64 pid = process_create(parents, parent_count);
-#define proc KERNEL_PROCESS_ARRAY[pid]
+    Process* process = KERNEL_PROCESS_ARRAY[pid];
+#define proc process
 
     for(u64 i = 0; i < phnum; i++)
     {
@@ -101,6 +102,25 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
         Kallocation section_alloc = kalloc_pages((ph->memsz + PAGE_SIZE) / PAGE_SIZE);
         memcpy(section_alloc.memory, ((u64)header) + ph->off, ph->memsz);
         mmu_map_kallocation(proc->mmu_table, section_alloc, ph->vaddr, bits);
+
+        if((process->allocations_count + 1) * sizeof(Kallocation) > process->allocations_alloc.page_count * PAGE_SIZE)
+        {
+            Kallocation new_alloc = kalloc_pages(process->allocations_alloc.page_count + 1);
+            Kallocation* new_array = new_alloc.memory;
+            Kallocation* old_array = process->allocations_alloc.memory;
+            for(u64 i = 0; process->allocations_count; i++)
+            {
+                new_array[i] = old_array[i];
+            }
+            if(process->allocations_alloc.page_count)
+            {
+                kfree_pages(process->allocations_alloc);
+            }
+            process->allocations_alloc = new_alloc;
+        }
+
+        ((Kallocation*)process->allocations_alloc.memory)[process->allocations_count] = section_alloc;
+        process->allocations_count++;
     }
 
     u32 thread1 = process_thread_create(pid);
@@ -127,5 +147,6 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
     proc->threads[thread1].program_counter = header->entry_addr;
 
     *pid_ret = pid;
+    kfree_pages(elf_alloc);
     return 1;
 }

@@ -32,7 +32,8 @@ typedef struct
     u64 process_pid;
     u8 is_initialized;
     u8 is_running;
-    u8 _padding[2];
+    u8 should_be_destroyed;
+    u8 _padding[1];
     u32 awake_count;
     ThreadAwakeCondition awakes[THREAD_MAX_AWAKE_COUNT];
 } Thread;
@@ -81,7 +82,9 @@ typedef struct
     RawMouseEventQueue mouse_event_queue;
 
     u32 thread_count;
+    u32 reference_count_for_threads;
     RWLock process_lock;
+    u32 reference_count_for_processes;
     u64 pid;
     Thread threads[];
 } Process;
@@ -105,13 +108,15 @@ u64 process_create(u64* parents, u64 parent_count)
     process->parent_alloc = parent_array_alloc;
     process->parent_count = parent_count;
 
+    process->reference_count_for_processes = 1;
+
     rwlock_create(&process->process_lock);
     process->mmu_table = create_mmu_table();
     for(u64 i = 0; i < 512; i++) { process->mmu_table[i] = 0; }
 
     for(u64 i = 0; i < KERNEL_PROCESS_ARRAY_LEN; i++)
     {
-        if(KERNEL_PROCESS_ARRAY[i]->mmu_table == 0)
+        if(KERNEL_PROCESS_ARRAY[i] == 0)
         {
             process->pid = i;
             KERNEL_PROCESS_ARRAY[process->pid] = process;
@@ -158,7 +163,6 @@ typedef struct
 
 #define THREAD_RUNTIME_UNINITIALIZED 0
 #define THREAD_RUNTIME_INITIALIZED 1
-#define THREAD_RUNTIME_HAS_BEEN_REMOVED 2
 
 typedef struct
 {
@@ -224,9 +228,11 @@ u32 process_thread_create(u64 pid)
         {
             KERNEL_PROCESS_ARRAY[pid]->threads[i].is_initialized = 1;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].is_running = 0;
+            KERNEL_PROCESS_ARRAY[pid]->threads[i].should_be_destroyed = 0;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].awake_count = 0;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].process_pid = pid;
+            KERNEL_PROCESS_ARRAY[pid]->reference_count_for_threads++;
             tid = i;
             has_been_allocated = 1;
         }
@@ -254,9 +260,11 @@ u32 process_thread_create(u64 pid)
 
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_initialized = 1;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_running = 0;
+        KERNEL_PROCESS_ARRAY[pid]->threads[tid].should_be_destroyed = 0;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].awake_count = 0;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].process_pid = pid;
+        KERNEL_PROCESS_ARRAY[pid]->reference_count_for_threads++;
     }
 
     // Now the thread has been created it has to be allocated a "runtime" so that it can be schedualed
@@ -273,6 +281,138 @@ u32 process_thread_create(u64 pid)
     return tid;
 }
 
+// you need read lock on process
+u64 process_child_pid_to_owned_process_index(Process* process, u64 child_pid, u64* owned_process_index)
+{
+    for(u64 i = 0; i < process->owned_process_count; i++)
+    {
+        OwnedProcess* ops = process->owned_process_alloc.memory;
+        if(ops[i].is_initialized && ops[i].is_alive && ops[i].pid == child_pid)
+        {
+            *owned_process_index = i;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// we assume write lock on process
+void process_flag_all_threads_for_destruction(Process* process)
+{
+    for(u64 i = 0; i < process->thread_count; i++)
+    {
+        process->threads[i].should_be_destroyed = 1;
+    }
+}
+
+// we still assume write lock on process
+void process_destroy(Process* process)
+{
+    assert(process->reference_count_for_processes, "reference_count_for_processes > 0");
+    process->reference_count_for_processes--;
+    if(process->reference_count_for_processes)
+    {
+        rwlock_release_write(&process->process_lock);
+        return;
+    }
+
+    u64* parents = process->parent_alloc.memory;
+    for(u64 i = 0; i < process->parent_count; i++)
+    {
+        Process* pa = KERNEL_PROCESS_ARRAY[parents[i]];
+        u64 owned_index;
+        if(!process_child_pid_to_owned_process_index(pa, process->pid, &owned_index))
+        { continue; }
+        OwnedProcess* ops = pa->owned_process_alloc.memory;
+        ops[owned_index].is_alive = 0;
+    }
+
+    mmu_unmap_table(process->mmu_table);
+    kfree_single_page(process->mmu_table);
+    KERNEL_PROCESS_ARRAY[process->pid] = 0;
+
+    for(u64 i = 0; i < process->allocations_count; i++)
+    {
+        kfree_pages(((Kallocation*)process->allocations_alloc.memory)[i]);
+    }
+    kfree_pages(process->allocations_alloc);
+
+    //Kallocation surface_alloc; // TODO
+    //u64 surface_count;
+
+    //Kallocation surface_consumer_alloc; // TODO
+    //u64 surface_consumer_count;
+
+    kfree_pages(process->file_access_redirects_alloc);
+    kfree_pages(process->file_access_permissions_alloc);
+
+    for(u64 i = 0; i < process->out_stream_count; i++)
+    {
+        Stream* stream = ((Stream**)process->out_stream_alloc.memory)[i];
+        if(!stream) { continue; }
+        stream_destroy(stream);
+    }
+    kfree_pages(process->out_stream_alloc);
+
+    for(u64 i = 0; i < process->in_stream_count; i++)
+    {
+        Stream* stream = ((Stream**)process->in_stream_alloc.memory)[i];
+        if(!stream) { continue; }
+        stream_destroy(stream);
+    }
+    kfree_pages(process->in_stream_alloc);
+
+    kfree_pages(process->semaphore_alloc);
+    kfree_pages(process->owned_process_alloc);
+    kfree_pages(process->parent_alloc);
+
+    kfree_pages(process->proc_alloc);
+}
+
+
+// we assume write lock on process
+void process_destroy_with_children(Process* process)
+{
+    u64 children[process->owned_process_count];
+    u64 child_count = 0;
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    for(u64 i = 0; i < process->owned_process_count; i++)
+    {
+        if(ops[i].is_initialized && ops[i].is_alive)
+        {
+            children[child_count] = ops[i].pid;
+            child_count++;
+        }
+    }
+    rwlock_release_write(&process->process_lock);
+    for(u64 i = 0; i < child_count; i++)
+    {
+        Process* p2 = KERNEL_PROCESS_ARRAY[children[i]];
+        rwlock_acquire_write(&p2->process_lock);
+        process_flag_all_threads_for_destruction(p2);
+        rwlock_release_write(&p2->process_lock);
+    }
+    rwlock_acquire_write(&process->process_lock);
+    process_destroy(process);
+}
+
+// we assume exclusive write lock to process
+void process_destroy_thread(Process* process, u32 tid)
+{
+    Thread* t = &process->threads[tid];
+    assert(process && process->mmu_table && process->reference_count_for_threads, "process is valid\n");
+    assert(t->is_initialized, "thread exists");
+    if(t->stack_alloc.page_count)
+    {
+        kfree_pages(t->stack_alloc);
+    }
+    t->is_initialized = 0;
+    process->reference_count_for_threads--;
+    if(!process->reference_count_for_threads)
+    {
+        process_destroy_with_children(process);
+    }
+}
 u64 process_alloc_pages(Process* process, u64 vaddr, Kallocation mem)
 {
     u64 ret = 0;
@@ -410,7 +550,7 @@ u64 process_new_file_access(u64 pid, u64 redirect, u8 permission) // todo optimi
         redirects = process->file_access_redirects_alloc.memory;
     }
 
-    if(permissions_page_count > process->file_access_permissions_alloc.memory)
+    if(permissions_page_count > process->file_access_permissions_alloc.page_count)
     {
         Kallocation new_alloc = kalloc_pages(permissions_page_count);
         u8* new_array = new_alloc.memory;
@@ -531,6 +671,7 @@ u64 process_create_in_stream_slot(Process* process)
 void process_create_between_stream(Process* p1, Process* p2, u64 out_stream_index, u64 in_stream_index)
 {
     Stream* stream = stream_create();
+    atomic_s64_increment(&stream->reference_counter);
     ((Stream**) p1->out_stream_alloc.memory)[out_stream_index] = stream;
     ((Stream**) p2->in_stream_alloc.memory)[in_stream_index]   = stream;
 }
@@ -595,6 +736,7 @@ u64 process_create_owned_process(Process* process, u64 child_pid)
             ops[i].is_initialized = 1;
             ops[i].is_alive = 1;
             ops[i].pid = child_pid;
+            process->reference_count_for_processes++;
             return i;
         }
     }
@@ -623,19 +765,4 @@ u64 process_create_owned_process(Process* process, u64 child_pid)
     ops[i].is_alive = 1;
     ops[i].pid = child_pid;
     return i;
-}
-
-// you need read lock on process
-u64 process_child_pid_to_owned_process_index(Process* process, u64 child_pid, u64* owned_process_index)
-{
-    for(u64 i = 0; i < process->owned_process_count; i++)
-    {
-        OwnedProcess* ops = process->owned_process_alloc.memory;
-        if(ops[i].is_initialized && ops[i].is_alive && ops[i].pid == child_pid)
-        {
-            *owned_process_index = i;
-            return 1;
-        }
-    }
-    return 0;
 }

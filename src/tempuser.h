@@ -233,6 +233,7 @@ void render_function(u64 threadid, u64 total_threads)
             areas[insert_index].canvas_end = end;
             areas[insert_index].buffer = windows[i].fb;
             areas[insert_index].xoffset = 0;
+            if(windows[i].x + BORDER_SIZE < 0) { areas[insert_index].xoffset = (u32)(-(windows[i].x + BORDER_SIZE)); }
             areas[insert_index].y_index = ((s64)y - windows[i].y - BORDER_SIZE);
             }
         }
@@ -407,6 +408,27 @@ void program_loader_program(u64 drive1_partitions_directory)
     f64 rolling_frame_time = 0.0;
 
 while(1) {
+
+    { // Check for program not alive's
+        for(u64 i = 0; i < window_count; i++)
+        {
+            if(AOS_process_is_alive(windows[i].pid))
+            { continue; }
+
+            //TODO cleanup
+            if(i + 1 == window_count && is_fullscreen_mode)
+            {
+                AOS_surface_stop_forwarding_to_consumer(0);
+                is_fullscreen_mode = 0;
+            }
+
+            for(u64 j = i; j + 1 < window_count; j++)
+            {
+                windows[j] = windows[j+1];
+            }
+            window_count--;
+        }
+    }
 
     { // Read from stdin
         while(1)

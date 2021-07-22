@@ -1,15 +1,17 @@
 
 #define STREAM_PAGE_COUNT 1
-#define STREAM_SIZE (PAGE_SIZE*STREAM_PAGE_COUNT - (sizeof(Kallocation) + sizeof(u32)*2 + sizeof(Spinlock)))
+#define STREAM_SIZE (PAGE_SIZE*STREAM_PAGE_COUNT - (sizeof(Kallocation) + sizeof(u32)*2 + sizeof(Spinlock) + sizeof(atomic_s64)))
 typedef struct
 {
     Kallocation alloc;
     u32 put_index;
     u32 get_index;
     Spinlock lock;
+    atomic_s64 reference_counter;
     u8 buffer[STREAM_SIZE];
 } Stream;
 
+// 1 owner in implied. If a second process has access to the stream increment the reference_counter
 Stream* stream_create()
 {
     Kallocation alloc = kalloc_pages(STREAM_PAGE_COUNT);
@@ -18,7 +20,17 @@ Stream* stream_create()
     stream->put_index = 0;
     stream->get_index = 0;
     spinlock_create(&stream->lock);
+    atomic_s64_set(&stream->reference_counter, 1);
     return stream;
+}
+
+void stream_destroy(Stream* stream)
+{
+    s64 prev_value = atomic_s64_decrement(&stream->reference_counter);
+    assert(prev_value > 0, "isn't trying to destroy a dead stream");
+    if(prev_value > 1)
+    { return; }
+    kfree_pages(stream->alloc);
 }
 
 // returns the amount of bytes that got pushed into the stream

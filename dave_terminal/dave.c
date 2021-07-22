@@ -36,9 +36,9 @@ void _start()
     for(u64 i = 0; i < partition_count; i++)
     {
         partition_names[i][0] = 0;
-        AOS_file_get_name(partitions[i], partition_names[i], 64);
-        partition_name_lens[i] = strlen(partition_names[i]);
-        AOS_H_printf("dave's terminal loader has found %s\n", partition_names[i]);
+        partition_name_lens[i] = AOS_file_get_name(partitions[i], partition_names[i], 64);
+        partition_name_lens[i]--;
+        AOS_H_printf("dave's terminal loader has found %.*s\n", partition_name_lens[i], partition_names[i]);
     }
 
     u64 process_is_running = 0;
@@ -67,13 +67,13 @@ void _start()
 
         if(process_is_running && !AOS_process_is_alive(process_pid))
         {
-            AOS_H_printf("process is not alive!\n");
+            AOS_out_stream_destroy(process_stdin);
+            AOS_in_stream_destroy(process_stdout);
             process_is_running = 0;
             text_buffer[text_len + 0] = ')';
             text_buffer[text_len + 1] = '>';
             text_buffer[text_len + 2] = ' ';
             text_len += 3;
-            // TODO stream cleanup
         }
 
         { // Keyboard events
@@ -93,6 +93,41 @@ void _start()
                         if(text_len > 0 && pre_send_to_stdin_len > 0) { text_len--; }
                         if(pre_send_to_stdin_len > 0) { pre_send_to_stdin_len--; }
                     }
+                    else if(scancode == 8 && (kbd_events[i].current_state.keys_down[0] & 0x2) == 0x2)
+                    {
+                        AOS_process_exit();
+                    }
+                    else if(scancode == 50 && (kbd_events[i].current_state.keys_down[0] & 0x22) == 0x22)
+                    {
+                        if(!AOS_process_kill(process_pid))
+                        {
+                            s32 written_count = AOS_H_sprintf(text_buffer + text_len, "KILL FAILED.\n");
+                            if(written_count < 0)
+                            {
+                                u64* nullptr = 0;
+                                *nullptr = 5;
+                            }
+                            text_len += written_count;
+                        }
+                        else
+                        {
+                            s32 written_count = AOS_H_sprintf(text_buffer + text_len, "KILLED PROCESS\n");
+                            if(written_count < 0)
+                            {
+                                u64* nullptr = 0;
+                                *nullptr = 5;
+                            }
+                            text_len += written_count;
+                            process_is_running = 0;
+                        }
+                        if(!process_is_running)
+                        {
+                            text_buffer[text_len + 0] = ')';
+                            text_buffer[text_len + 1] = '>';
+                            text_buffer[text_len + 2] = ' ';
+                            text_len += 3;
+                        }
+                    }
                     else if(scancode == 35)
                     {
                         text_buffer[text_len] = '\n';
@@ -105,6 +140,27 @@ void _start()
                         }
                         else
                         {
+                            {
+                                u64 should_exit_by_exit_command = 1;
+                                u8* exit_text = "exit";
+                                u64 exit_len = strlen(exit_text);
+                                if(exit_len == pre_send_to_stdin_len)
+                                {
+                                    u64 matched = 1;
+                                    for(u64 i = 0; i < exit_len; i++)
+                                    {
+                                        if(exit_text[i] != pre_send_to_stdin[i])
+                                        { should_exit_by_exit_command = 0; break; }
+                                    }
+                                }
+                                else
+                                { should_exit_by_exit_command = 0; }
+                                if(should_exit_by_exit_command)
+                                {
+                                    AOS_process_exit();
+                                }
+                            }
+
                             for(u64 i = 0; i < partition_count + 1; i++)
                             {
                                 if(i == partition_count)
@@ -194,7 +250,7 @@ void _start()
                     u64 scancode = kbd_events[i].scancode;
 
                 }
-                //AOS_H_printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+                AOS_H_printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
             }
         }
 

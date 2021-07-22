@@ -123,6 +123,11 @@ void AOS_process_exit();
 
 u64 AOS_process_is_alive(u64 pid);
 
+u64 AOS_process_kill(u64 pid);
+
+u64 AOS_out_stream_destroy(u64 out_stream);
+u64 AOS_in_stream_destroy(u64 in_stream);
+
 // give file to proccess
 // give directory to proccess
  

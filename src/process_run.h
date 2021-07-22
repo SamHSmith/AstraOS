@@ -207,6 +207,13 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
         }
         Thread* thread = &KERNEL_PROCESS_ARRAY[runtime_array[i].pid]
                             ->threads[runtime_array[i].tid];
+        if(thread->should_be_destroyed)
+        {
+            runtime_array[i].state = THREAD_RUNTIME_UNINITIALIZED;
+            rwlock_acquire_write(&KERNEL_PROCESS_ARRAY[runtime_array[i].pid]->process_lock);
+            process_destroy_thread(KERNEL_PROCESS_ARRAY[runtime_array[i].pid], runtime_array[i].tid);
+            continue;
+        }
         if(thread_runtime_is_live(thread, new_mtime))
         {
             total_runtime += runtime_array[i].runtime;

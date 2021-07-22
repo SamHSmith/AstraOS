@@ -107,9 +107,22 @@ u64 surface_create(Process* p)
     return p->surface_count - 1;
 }
 
-u64 surface_consumer_create(Process* process, Process* surface_process, u64* consumer)
+// assume write lock on process
+u64 surface_consumer_create(Process* process, u64 surface_pid_proxy, u64* consumer)
 {
-    if(process == surface_process) { return 0; }
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    if(surface_pid_proxy >= process->owned_process_count ||
+       !ops[surface_pid_proxy].is_initialized ||
+       !ops[surface_pid_proxy].is_alive)
+    {
+        return 0;
+    }
+    u64 surface_process_pid = ops[surface_pid_proxy].pid;
+    u64 process_pid = process->pid;
+
+    assert(process_pid != surface_process_pid, "process does not own itself");
+    assert(surface_process_pid < KERNEL_PROCESS_ARRAY_LEN, "surface_process_pid is valid");
+    Process* surface_process = KERNEL_PROCESS_ARRAY[surface_process_pid];
     u64 surface_slot = surface_create(surface_process);
 
     for(u64 i = 0; i < process->surface_consumer_count; i++)
@@ -117,17 +130,21 @@ u64 surface_consumer_create(Process* process, Process* surface_process, u64* con
         SurfaceConsumer* con = ((SurfaceConsumer*)process->surface_consumer_alloc.memory) + i;
         if(!con->is_initialized)
         {
-            con->surface_pid = surface_process->pid;
+            con->surface_pid = surface_pid_proxy;
             con->surface_slot = surface_slot;
             con->has_surface = 1;
             con->is_initialized = 1;
             con->has_fetched = 0;
             con->fb_fetched = framebuffer_create(0,0);
+            rwlock_release_write(&process->process_lock);
+            rwlock_acquire_write(&surface_process->process_lock);
             SurfaceSlot* surface = ((SurfaceSlot*)surface_process->surface_alloc.memory) + surface_slot;
-            surface->consumer_pid = process->pid;
+            surface->consumer_pid = process_pid;
             surface->consumer_slot = i;
             surface->has_consumer = 1;
             *consumer = i;
+            rwlock_release_write(&surface_process->process_lock);
+            rwlock_acquire_write(&process->process_lock);
             return 1;
         }
     }
@@ -150,17 +167,21 @@ u64 surface_consumer_create(Process* process, Process* surface_process, u64* con
     u64 cs = process->surface_consumer_count;
     process->surface_consumer_count += 1;
     SurfaceConsumer* con = ((SurfaceConsumer*)process->surface_consumer_alloc.memory) + cs;
-    con->surface_pid = surface_process->pid;
+    con->surface_pid = surface_pid_proxy;
     con->surface_slot = surface_slot;
     con->has_surface = 1;
     con->is_initialized = 1;
     con->has_fetched = 0;
     con->fb_fetched = framebuffer_create(0,0);
+    rwlock_release_write(&process->process_lock);
+    rwlock_acquire_write(&surface_process->process_lock);
     SurfaceSlot* surface = ((SurfaceSlot*)surface_process->surface_alloc.memory) + surface_slot;
-    surface->consumer_pid = process->pid;
+    surface->consumer_pid = process_pid;
     surface->consumer_slot = cs;
     surface->has_consumer = 1;
     *consumer = cs;
+    rwlock_release_write(&surface_process->process_lock);
+    rwlock_acquire_write(&process->process_lock);
     return 1;
 }
 
@@ -170,6 +191,7 @@ u64 surface_consumer_create(Process* process, Process* surface_process, u64* con
 u64 surface_slot_has_commited(Process* process, u64 surface_slot, u64 has_write_lock)
 {
     u64 process1_pid = process->pid;
+    OwnedProcess* ops = process->owned_process_alloc.memory;
     SurfaceSlot* surface_slot_array = (SurfaceSlot*)process->surface_alloc.memory;
     assert(surface_slot < process->surface_count && surface_slot_array[surface_slot].is_initialized,
         "this is a valid surface slot");
@@ -181,9 +203,13 @@ u64 surface_slot_has_commited(Process* process, u64 surface_slot, u64 has_write_
     if( slot->is_defering_to_consumer_slot && defer_slot < process->surface_consumer_count &&
         consumer_array[defer_slot].is_initialized &&
         consumer_array[defer_slot].has_surface &&
-        consumer_array[defer_slot].surface_pid < KERNEL_PROCESS_ARRAY_LEN)
+        consumer_array[defer_slot].surface_pid < process->owned_process_count &&
+        ops[consumer_array[defer_slot].surface_pid].is_initialized &&
+        ops[consumer_array[defer_slot].surface_pid].is_alive &&
+        ops[consumer_array[defer_slot].surface_pid].pid < KERNEL_PROCESS_ARRAY_LEN &&
+        KERNEL_PROCESS_ARRAY[ops[consumer_array[defer_slot].surface_pid].pid])
     {
-        u64 surface_pid2 = consumer_array[defer_slot].surface_pid;
+        u64 surface_pid2 = ops[consumer_array[defer_slot].surface_pid].pid;
         u64 surface_slot2 = consumer_array[defer_slot].surface_slot;
         Process* process2 = KERNEL_PROCESS_ARRAY[surface_pid2];
         if(has_write_lock)
@@ -287,6 +313,7 @@ u64 surface_commit(u64 surface_slot, Process* process)
 void surface_slot_fire(Process* process, u64 surface_slot)
 {
     u64 process1_pid = process->pid;
+    OwnedProcess* ops = process->owned_process_alloc.memory;
     SurfaceSlot* surface_slot_array = (SurfaceSlot*)process->surface_alloc.memory;
     assert(surface_slot < process->surface_count && surface_slot_array[surface_slot].is_initialized,
         "this is a valid surface slot");
@@ -298,14 +325,18 @@ void surface_slot_fire(Process* process, u64 surface_slot)
     if( slot->is_defering_to_consumer_slot && defer_slot < process->surface_consumer_count &&
         consumer_array[defer_slot].is_initialized &&
         consumer_array[defer_slot].has_surface &&
-        consumer_array[defer_slot].surface_pid < KERNEL_PROCESS_ARRAY_LEN)
+        consumer_array[defer_slot].surface_pid < process->owned_process_count &&
+        ops[consumer_array[defer_slot].surface_pid].is_initialized &&
+        ops[consumer_array[defer_slot].surface_pid].is_alive &&
+        ops[consumer_array[defer_slot].surface_pid].pid < KERNEL_PROCESS_ARRAY_LEN &&
+        KERNEL_PROCESS_ARRAY[ops[consumer_array[defer_slot].surface_pid].pid])
     {
-        u64 surface_pid2 = consumer_array[defer_slot].surface_pid;
+        u64 surface_pid2 = ops[consumer_array[defer_slot].surface_pid].pid;
         u64 surface_slot2 = consumer_array[defer_slot].surface_slot;
         Process* process2 = KERNEL_PROCESS_ARRAY[surface_pid2];
         rwlock_release_write(&process->process_lock);
         rwlock_acquire_write(&process2->process_lock);
-        if( process2->mmu_table &&
+        if( process2 && process2->mmu_table &&
             surface_slot2 < process2->surface_count)
         {
             SurfaceSlot* slot2 = ((SurfaceSlot*)process2->surface_alloc.memory) +
@@ -339,6 +370,7 @@ void surface_slot_fire(Process* process, u64 surface_slot)
 Framebuffer* surface_slot_swap_present_buffer(Process* process, u64 surface_slot, Framebuffer* replacement)
 {
     u64 process1_pid = process->pid;
+    OwnedProcess* ops = process->owned_process_alloc.memory;
     SurfaceSlot* surface_slot_array = (SurfaceSlot*)process->surface_alloc.memory;
     assert(surface_slot < process->surface_count && surface_slot_array[surface_slot].is_initialized,
         "this is a valid surface slot");
@@ -350,9 +382,13 @@ Framebuffer* surface_slot_swap_present_buffer(Process* process, u64 surface_slot
     if( slot->is_defering_to_consumer_slot && defer_consumer_slot < process->surface_consumer_count &&
         consumer_array[defer_consumer_slot].is_initialized &&
         consumer_array[defer_consumer_slot].has_surface &&
-        consumer_array[defer_consumer_slot].surface_pid < KERNEL_PROCESS_ARRAY_LEN)
+        consumer_array[defer_consumer_slot].surface_pid < process->owned_process_count &&
+        ops[consumer_array[defer_consumer_slot].surface_pid].is_initialized &&
+        ops[consumer_array[defer_consumer_slot].surface_pid].is_alive &&
+        ops[consumer_array[defer_consumer_slot].surface_pid].pid < KERNEL_PROCESS_ARRAY_LEN &&
+        KERNEL_PROCESS_ARRAY[ops[consumer_array[defer_consumer_slot].surface_pid].pid])
     {
-        u64 surface_pid2 = consumer_array[defer_consumer_slot].surface_pid;
+        u64 surface_pid2 = ops[consumer_array[defer_consumer_slot].surface_pid].pid;
         u64 surface_slot2 = consumer_array[defer_consumer_slot].surface_slot;
         Process* process2 = KERNEL_PROCESS_ARRAY[surface_pid2];
         rwlock_release_write(&process->process_lock);
@@ -389,6 +425,8 @@ Framebuffer* surface_slot_swap_present_buffer(Process* process, u64 surface_slot
     return replacement;
 }
 
+
+//TODO SERIOUS CLEANUP NEEDED. VERY UGLY AND THREAD UNSAFE
 u64 get_consumer_and_surface(u64 pid, u64 consumer_slot, SurfaceConsumer** c, SurfaceSlot** surface)
 {
     if(pid >= KERNEL_PROCESS_ARRAY_LEN ||
@@ -396,11 +434,14 @@ u64 get_consumer_and_surface(u64 pid, u64 consumer_slot, SurfaceConsumer** c, Su
     { return 0; }
     SurfaceConsumer* con = ((SurfaceConsumer*)KERNEL_PROCESS_ARRAY[pid]->surface_consumer_alloc.memory)
                             + consumer_slot;
+
+    OwnedProcess* ops = KERNEL_PROCESS_ARRAY[pid]->owned_process_alloc.memory;
     if(!con->is_initialized || !con->has_surface ||
-        con->surface_pid >= KERNEL_PROCESS_ARRAY_LEN ||
-        con->surface_slot >= KERNEL_PROCESS_ARRAY[con->surface_pid]->surface_count
-    ) { return 0; }
-    SurfaceSlot* s = ((SurfaceSlot*)KERNEL_PROCESS_ARRAY[con->surface_pid]->surface_alloc.memory)
+        con->surface_pid >= KERNEL_PROCESS_ARRAY[pid]->owned_process_count ||
+        !ops[con->surface_pid].is_initialized ||
+        !ops[con->surface_pid].is_alive)
+    { return 0; }
+    SurfaceSlot* s = ((SurfaceSlot*)KERNEL_PROCESS_ARRAY[ops[con->surface_pid].pid]->surface_alloc.memory)
                         + con->surface_slot;
     if(!s->is_initialized || !s->has_consumer || s->consumer_pid != pid || s->consumer_slot != consumer_slot)
     { return 0; }
@@ -416,7 +457,8 @@ u64 surface_consumer_has_commited(u64 pid, u64 consumer_slot)
     if(!get_consumer_and_surface(pid, consumer_slot, &con, &s))
     { return 0; }
 
-    Process* process = KERNEL_PROCESS_ARRAY[con->surface_pid];
+    OwnedProcess* ops = KERNEL_PROCESS_ARRAY[pid]->owned_process_alloc.memory;
+    Process* process = KERNEL_PROCESS_ARRAY[ops[con->surface_pid].pid];
     rwlock_acquire_read(&process->process_lock);
     u64 result = surface_slot_has_commited(process, con->surface_slot, 0);
     rwlock_release_read(&process->process_lock);
@@ -452,7 +494,8 @@ u64 surface_consumer_fire(u64 pid, u64 consumer_slot)
 
     s->width = con->not_yet_fired_width;
     s->height = con->not_yet_fired_height;
-    Process* process = KERNEL_PROCESS_ARRAY[con->surface_pid];
+    OwnedProcess* ops = KERNEL_PROCESS_ARRAY[pid]->owned_process_alloc.memory;
+    Process* process = KERNEL_PROCESS_ARRAY[ops[con->surface_pid].pid];
     rwlock_acquire_write(&process->process_lock);
     surface_slot_fire(process, con->surface_slot);
     rwlock_release_write(&process->process_lock);
@@ -494,7 +537,9 @@ u64 surface_consumer_fetch(u64 pid, u64 consumer_slot, Framebuffer* fb_location,
         con->has_fetched = 0;
         *con->fb_fetched = con->fb_fetched_control;
     }
-    Process* process2 = KERNEL_PROCESS_ARRAY[con->surface_pid];
+
+    OwnedProcess* ops = KERNEL_PROCESS_ARRAY[pid]->owned_process_alloc.memory;
+    Process* process2 = KERNEL_PROCESS_ARRAY[ops[con->surface_pid].pid];
     rwlock_release_write(&process->process_lock);
     rwlock_acquire_write(&process2->process_lock);
     con->fb_fetched = surface_slot_swap_present_buffer(
