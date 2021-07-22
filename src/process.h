@@ -631,7 +631,7 @@ u64 process_child_pid_to_owned_process_index(Process* process, u64 child_pid, u6
     for(u64 i = 0; i < process->owned_process_count; i++)
     {
         OwnedProcess* ops = process->owned_process_alloc.memory;
-        if(ops[i].is_initialized && ops[i].pid == child_pid)
+        if(ops[i].is_initialized && ops[i].is_alive && ops[i].pid == child_pid)
         {
             *owned_process_index = i;
             return 1;
