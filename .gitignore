@@ -3,3 +3,4 @@ bin/
 fsmake/bin/
 fsread/bin/
 disk_dir/partitions/
+kate.*
