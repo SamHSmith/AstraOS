@@ -1,13 +1,19 @@
 
 #define STREAM_PAGE_COUNT 1
-#define STREAM_SIZE (PAGE_SIZE*STREAM_PAGE_COUNT - (sizeof(Kallocation) + sizeof(u32)*2 + sizeof(Spinlock) + sizeof(atomic_s64)))
+
+#define STREAM_STRUCT_BODY struct\
+{\
+    Kallocation alloc;\
+    u32 put_index;\
+    u32 get_index;\
+    Spinlock lock;\
+    atomic_s64 reference_counter;\
+}
+
+#define STREAM_SIZE (PAGE_SIZE*STREAM_PAGE_COUNT - sizeof(STREAM_STRUCT_BODY))
 typedef struct
 {
-    Kallocation alloc;
-    u32 put_index;
-    u32 get_index;
-    Spinlock lock;
-    atomic_s64 reference_counter;
+    STREAM_STRUCT_BODY;
     u8 buffer[STREAM_SIZE];
 } Stream;
 
