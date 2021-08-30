@@ -1735,6 +1735,233 @@ void syscall_in_stream_destroy(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_IPFC_handler_create(Thread** current_thread, u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    rwlock_acquire_write(&process->process_lock);
+    TrapFrame* frame = &t->frame;
+    u64 user_handler_name_buffer = frame->regs[11];
+    u64 user_handler_name_buffer_len = frame->regs[12];
+    u64 user_handler_function_entry = frame->regs[13];
+    u64 user_stack_pages_start = frame->regs[14];
+    u64 user_pages_per_stack = frame->regs[15];
+    u64 user_stack_count = frame->regs[16];
+    u64 user_handler_id_ptr = frame->regs[17];
+    t->program_counter += 4;
+    
+    if((user_stack_pages_start % PAGE_SIZE) != 0)
+    {
+        frame->regs[10] = 0;
+        rwlock_release_write(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    u64 page_count = (user_handler_name_buffer_len+(user_handler_name_buffer % PAGE_SIZE) + PAGE_SIZE - 1)
+    					/ PAGE_SIZE;
+    					
+    u64* handler_id_ptr = 0;
+    if(user_handler_id_ptr &&
+      (mmu_virt_to_phys(process->mmu_table, user_handler_id_ptr + sizeof(u64),
+                        (u64*)&handler_id_ptr) != 0 ||
+       mmu_virt_to_phys(process->mmu_table, user_handler_id_ptr,
+                        (u64*)&handler_id_ptr) != 0))
+    {
+        frame->regs[10] = 0;
+        rwlock_release_write(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    u8* memory = 0;
+    if(page_count)
+    {
+    u64 i = page_count - 1;
+    while(1)
+    {
+        if(mmu_virt_to_phys(process->mmu_table, user_handler_name_buffer + (PAGE_SIZE * i),
+            (u64*)&memory) != 0)
+        {
+            frame->regs[10] = 0;
+            rwlock_release_write(&process->process_lock);
+            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+            return;
+        }
+        if(i == 0) { break; }
+        i--;
+    }
+    }
+
+    frame->regs[10] = process_ipfc_handler_create(
+                            process,
+    						memory,
+    						user_handler_name_buffer_len,
+    						user_handler_function_entry,
+    						user_stack_pages_start,
+    						user_pages_per_stack,
+    						user_stack_count,
+    						handler_id_ptr);
+    rwlock_release_write(&process->process_lock);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_IPFC_session_init(Thread** current_thread, u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+ 
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    rwlock_acquire_write(&process->process_lock);
+    TrapFrame* frame = &t->frame;
+    u64 user_handler_name_buffer = frame->regs[11];
+    u64 user_handler_name_buffer_len = frame->regs[12];
+    u64 user_session_id_ptr = frame->regs[13];
+    t->program_counter += 4;
+    
+    u64 page_count = (user_handler_name_buffer_len+(user_handler_name_buffer % PAGE_SIZE) + PAGE_SIZE - 1)
+                        / PAGE_SIZE;
+                        
+    u64* session_id_ptr = 0;
+    if(mmu_virt_to_phys(process->mmu_table, user_session_id_ptr + sizeof(u64),
+                        (u64*)&session_id_ptr) != 0 ||
+       mmu_virt_to_phys(process->mmu_table, user_session_id_ptr,
+                        (u64*)&session_id_ptr) != 0)
+    {
+        frame->regs[10] = 0;
+        rwlock_release_write(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+ 
+    u8* memory = 0;
+    if(page_count)
+    {
+    u64 i = page_count - 1;
+    while(1)
+    {
+        if(mmu_virt_to_phys(process->mmu_table, user_handler_name_buffer + (PAGE_SIZE * i),
+            (u64*)&memory) != 0)
+        {
+            frame->regs[10] = 0;
+            rwlock_release_write(&process->process_lock);
+            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+            return;
+        }
+        if(i == 0) { break; }
+        i--;
+    }
+    }
+ 
+    frame->regs[10] = process_ipfc_session_init(
+                            process,
+                            memory,
+                            user_handler_name_buffer_len,
+                            session_id_ptr);
+    rwlock_release_write(&process->process_lock);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_IPFC_session_close(Thread** current_thread, u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+ 
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    rwlock_acquire_write(&process->process_lock);
+    TrapFrame* frame = &t->frame;
+    u64 user_session_id = frame->regs[11];
+    t->program_counter += 4;
+
+    if(user_session_id < process->ipfc_session_count)
+    {
+        IPFCSession* sessions = process->ipfc_session_alloc.memory;
+        sessions[user_session_id].is_initialized = 0;
+    }
+
+    rwlock_release_write(&process->process_lock);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+ 
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    TrapFrame* frame = &t->frame;
+    u64 user_session_id = frame->regs[11];
+    u16 user_function_index = frame->regs[12];
+    t->program_counter += 4;
+ 
+    assert(
+        user_session_id < process->ipfc_session_count &&
+        ((IPFCSession*)process->ipfc_session_alloc.memory)[user_session_id].is_initialized,
+        "'Calling a valid IPFC session', we should probably crash the calling process instead of the whole system in the future.");
+
+    u16 parent_index = ((IPFCSession*)process->ipfc_session_alloc.memory)[user_session_id].parent_index;
+    u16 handler_index = ((IPFCSession*)process->ipfc_session_alloc.memory)[user_session_id].handler_index;
+
+    u64 parent_pid = ((u64*)process->parent_alloc.memory)[parent_index];
+    u64 process_pid = process->pid;
+    u64 thread_tid = t - process->threads;
+
+    Process* ipfc_process = KERNEL_PROCESS_ARRAY[parent_pid];
+
+    u32 ipfc_tid = process_thread_create(parent_pid); // This guy can move ipfc_process
+    ipfc_process =  KERNEL_PROCESS_ARRAY[parent_pid]; // be wary
+    Thread* ipfc_thread = &ipfc_process->threads[ipfc_tid];
+
+    ipfc_thread->IPFC_status = 2;
+    ipfc_thread->IPFC_other_tid = thread_tid;
+    ipfc_thread->IPFC_other_pid = process_pid;
+    ipfc_thread->IPFC_function_index = user_function_index;
+    ipfc_thread->IPFC_handler_index = handler_index;
+
+    t->IPFC_status = 1;
+    t->IPFC_other_pid = parent_pid;
+    t->IPFC_other_tid = ipfc_tid;
+    t->IPFC_handler_index = handler_index;
+    t->is_running = 0;
+
+    kernel_choose_new_thread(current_thread, mtime, hart);
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
 {
     u64 call_num = (*current_thread)->frame.regs[10];
@@ -1818,6 +2045,14 @@ void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
     { syscall_out_stream_destroy(current_thread, hart); }
     else if(call_num == 48)
     { syscall_in_stream_destroy(current_thread, hart); }
+    else if(call_num == 49)
+    { syscall_IPFC_handler_create(current_thread, hart); }
+    else if(call_num == 50)
+    { syscall_IPFC_session_init(current_thread, hart); }
+    else if(call_num == 51)
+    { syscall_IPFC_session_close(current_thread, hart); }
+    else if(call_num == 52)
+    { syscall_IPFC_call(current_thread, hart, mtime); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

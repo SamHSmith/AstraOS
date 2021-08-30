@@ -12,9 +12,9 @@ Spinlock KERNEL_SPINLOCK;
 Spinlock KERNEL_MEMORY_SPINLOCK;
 Spinlock KERNEL_VIEWER_SPINLOCK;
 
-#include "random.h"
+#include "random.c"
 
-#include "uart.h"
+#include "uart.c"
 #include "printf.h"
 void _putchar(char c)
 {
@@ -51,23 +51,23 @@ void assert(u64 stat, char* error)
     }
 }
 
-#include "libfuncs.h"
+#include "libfuncs.c"
 
-#include "memory.h"
-#include "libfuncs2.h"
+#include "memory.c"
+#include "libfuncs2.c"
 #include "cyclone_crypto/hash/sha512.h"
 
-#include "disk.h"
-#include "file.h"
+#include "disk.c"
+#include "file.c"
 
-#include "stream.h"
+#include "stream.c"
 
-#include "plic.h"
-#include "input.h"
-#include "process.h"
+#include "plic.c"
+#include "input.c"
+#include "process.c"
 
-#include "video.h"
-#include "elf.h"
+#include "video.c"
+#include "elf.c"
 
 
 extern u64 KERNEL_START_OTHER_HARTS;
@@ -95,17 +95,17 @@ u64 wait_time_times[KERNEL_MAX_HART_COUNT];
 u64 wait_time_print_time[KERNEL_MAX_HART_COUNT];
 
 
-#include "process_run.h"
+#include "process_run.c"
 
 #include "../userland/aos_syscalls.h"
-#include "syscall.h"
+#include "syscall.c"
 
 
 //for rendering
 Framebuffer* framebuffer = 0;
 u8 frame_has_been_requested = 0;
 
-#include "oak.h"
+#include "oak.c"
 
 void uart_write_string(char* str)
 {
@@ -631,4 +631,4 @@ u64 m_trap(
     return 0;
 }
 
-#include "tempuser.h"
+#include "tempuser.c"

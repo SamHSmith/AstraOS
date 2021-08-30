@@ -327,3 +327,40 @@ AOS_in_stream_destroy:
     addi a0, x0, 48
     ecall
     ret
+
+.global AOS_IPFC_handler_create
+AOS_IPFC_handler_create:
+    mv a7, a6
+    mv a6, a5
+    mv a5, a4
+    mv a4, a3
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 49
+    ecall
+    ret
+
+.global AOS_IPFC_init_session
+AOS_IPFC_init_session:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 50
+    ecall
+    ret
+
+.global AOS_IPFC_close_session
+AOS_IPFC_close_session:
+    mv a1, a0
+    addi a0, x0, 51
+    ecall
+    ret
+
+.global AOS_IPFC_call
+AOS_IPFC_call:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 52
+    ecall
+    ret

@@ -63,7 +63,7 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
     return 0;
 }
 
-
+void try_assign_ipfc_stack(Process* process, Thread* thread);
 
 Thread* kernel_current_threads[KERNEL_MAX_HART_COUNT];
 
@@ -214,6 +214,10 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
             process_destroy_thread(KERNEL_PROCESS_ARRAY[runtime_array[i].pid], runtime_array[i].tid);
             continue;
         }
+        if(thread->IPFC_status == 2) // thread is awaiting IPFC stack
+        {
+            try_assign_ipfc_stack(KERNEL_PROCESS_ARRAY[runtime_array[i].pid], thread);
+        }
         if(thread_runtime_is_live(thread, new_mtime))
         {
             total_runtime += runtime_array[i].runtime;
@@ -314,5 +318,50 @@ void process_init()
     tarr[thread1].frame.regs[10] = drive1_partition_directory;
 
     tarr[thread1].is_running = 1;
+}
+
+void try_assign_ipfc_stack(Process* process, Thread* thread)
+{
+    rwlock_acquire_write(&process->process_lock);
+
+    IPFCHandler* handler =
+        ((Kallocation*)process->ipfc_handler_alloc.memory)[thread->IPFC_handler_index].memory;
+    u64 found_index = 0;
+    u64 has_found = 0;
+    for(u64 i = 0; i < handler->stack_count; i++)
+    {
+        if(!handler->function_executions[i].is_initialized)
+        {
+            has_found = 1;
+            found_index = i;
+            break;
+        }
+    }
+printf("------------------------did I find?\n");
+    if(!has_found)
+    {
+printf("there was no space\n");
+        rwlock_release_write(&process->process_lock);
+        return;
+    }
+
+    handler->function_executions[found_index].is_initialized = 1;
+    thread->IPFC_stack_index = found_index;
+
+    thread->frame.regs[8] = (found_index + 1) * handler->pages_per_stack * PAGE_SIZE;
+    thread->frame.regs[8] += handler->stack_pages_start;
+    thread->frame.regs[8] -= 2 * sizeof(u64);
+    thread->frame.regs[2] = thread->frame.regs[8];
+    u64* frame;
+    assert(!mmu_virt_to_phys(process->mmu_table, thread->frame.regs[8], (u64*)&frame),
+            "IPFCHandler.stack_pages_start and friends point to something valid.\n");
+    *frame = 0;
+
+    thread->program_counter = handler->ipfc_entry_point;
+
+    thread->IPFC_status = 3;
+    thread->is_running = 1;
+
+    rwlock_release_write(&process->process_lock);
 }
 

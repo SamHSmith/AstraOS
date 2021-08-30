@@ -3,7 +3,7 @@
 
 #include "../common/maths.h"
 
-#if 0
+#if 1
 u64 strlen(char* str)
 {
     u64 i = 0;
@@ -16,6 +16,29 @@ void _start()
     AOS_H_printf(
         "Hi I'm square-dave and I live in an elf file on a partition on the RADICAL PARTITION SYSTEM\n"
     );
+
+// nocheckin, test code
+{
+u8* name = "dave_ipfc_v1";
+u64 name_len = strlen(name);
+u64 session_id;
+if(AOS_IPFC_init_session(name, name_len, &session_id))
+{
+    AOS_H_printf("Session has been inited!\n");
+
+    AOS_H_printf("Calling function 42...\n");
+    AOS_H_printf("Return value of function 42 was %llu\n", AOS_IPFC_call(session_id, 42));
+
+    AOS_H_printf("now we will close session#%llu\n", session_id);
+    AOS_IPFC_close_session(session_id);
+    AOS_H_printf("now it has been closed.\n");
+}
+else
+{
+    AOS_H_printf("failed to init session");
+}
+
+}
 
     f64 start_time = AOS_time_get_seconds();
 

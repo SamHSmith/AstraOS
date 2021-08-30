@@ -33,7 +33,18 @@ typedef struct
     u8 is_initialized;
     u8 is_running;
     u8 should_be_destroyed;
-    u8 _padding[1];
+
+    u8 IPFC_status;
+    // 0 is normal thread
+    // 1 is normal thread awaiting ipfc completion
+    // 2 is IPFC thread awaiting stack
+    // 3 is IPFC running
+    u64 IPFC_other_pid;
+    u32 IPFC_other_tid;
+    u16 IPFC_function_index;
+    u16 IPFC_handler_index;
+    u16 IPFC_stack_index;
+
     u32 awake_count;
     ThreadAwakeCondition awakes[THREAD_MAX_AWAKE_COUNT];
 } Thread;
@@ -44,6 +55,30 @@ typedef struct
     u8 is_alive;
     u8 is_initialized;
 } OwnedProcess;
+
+typedef struct
+{
+    u8 is_initialized;
+} IPFCFunctionExecution;
+
+typedef struct
+{
+    u64 name_len;
+    u8  name[64];
+    void* ipfc_entry_point;
+    void* stack_pages_start;
+    u64 pages_per_stack;
+    u64 stack_count;
+    IPFCFunctionExecution function_executions[]; // this is used to track and avoid collisions
+} IPFCHandler;
+
+typedef struct
+{
+    // parent_index refers to the parent array on Process
+    u16 parent_index; // saving on memory here. Seems *very* unlikely to not be enough range
+    u16 handler_index;
+    u8 is_initialized;
+} IPFCSession;
 
 typedef struct
 {
@@ -76,7 +111,14 @@ typedef struct
     u64 owned_process_count;
 
     Kallocation parent_alloc; // u64/pid array
-    u64 parent_count;
+    u64 parent_count; // goes from highest up parent at array[0] to iminent parent
+                      // at array[len-1]
+    
+    Kallocation ipfc_handler_alloc; // Kallocation that points to an IPFCHandler struct, array
+    u64 ipfc_handler_count;
+
+    Kallocation ipfc_session_alloc; // IPFCSession array
+    u64 ipfc_session_count;
 
     KeyboardEventQueue kbd_event_queue;
     RawMouseEventQueue mouse_event_queue;
@@ -226,8 +268,10 @@ u32 process_thread_create(u64 pid)
     {
         if(!KERNEL_PROCESS_ARRAY[pid]->threads[i].is_initialized)
         {
+            memset(&KERNEL_PROCESS_ARRAY[pid]->threads[i], 0, sizeof(Thread));
             KERNEL_PROCESS_ARRAY[pid]->threads[i].is_initialized = 1;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].is_running = 0;
+            KERNEL_PROCESS_ARRAY[pid]->threads[i].IPFC_status = 0;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].should_be_destroyed = 0;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].awake_count = 0;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
@@ -256,10 +300,12 @@ u32 process_thread_create(u64 pid)
             KERNEL_PROCESS_ARRAY[pid]->proc_alloc = new_alloc;
         }
         tid = KERNEL_PROCESS_ARRAY[pid]->thread_count;
+        memset(&KERNEL_PROCESS_ARRAY[pid]->threads[tid], 0, sizeof(Thread));
         KERNEL_PROCESS_ARRAY[pid]->thread_count += 1;
 
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_initialized = 1;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_running = 0;
+        KERNEL_PROCESS_ARRAY[pid]->threads[tid].IPFC_status = 0;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].should_be_destroyed = 0;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].awake_count = 0;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
@@ -510,7 +556,7 @@ Kallocation process_shrink_allocation(Process* process, u64 vaddr, u64 new_page_
 #define FILE_ACCESS_PERMISSION_READ_BIT 1
 #define FILE_ACCESS_PERMISSION_READ_WRITE_BIT 2
 
-u64 process_new_file_access(u64 pid, u64 redirect, u8 permission) // todo optimize beyond singular
+u64 process_new_file_access(u64 pid, u64 redirect, u8 permission) // TODO: optimize beyond singular
 {
     assert(permission != 0, "permission is not zero");
     assert(is_valid_file_id(redirect), "redirect is a valid file");
@@ -766,3 +812,168 @@ u64 process_create_owned_process(Process* process, u64 child_pid)
     ops[i].pid = child_pid;
     return i;
 }
+
+
+
+u64 process_ipfc_handler_create(
+        Process* process,
+		u8* name,
+		u64 name_len,
+		void* ipfc_entry_point,
+		void* stack_pages_start,
+		u64 pages_per_stack,
+		u64 stack_count,
+		u64* out_handler_id_ptr)
+{
+    for(u64 i = 0; i < process->ipfc_handler_count; i++)
+    {
+        Kallocation* array = process->ipfc_handler_alloc.memory;
+        if(!array[i].page_count)
+        { continue; }
+        IPFCHandler* handler = array[i].memory;
+        if(handler->name_len != name_len)
+        { continue; }
+        if(!memcmp(handler->name, name, name_len))
+        { continue; }
+        // Name already taken
+        return 0;
+    }
+    
+    u8 found_empty = 0;
+    u64 found_index;
+    for(u64 i = 0; i < process->ipfc_handler_count; i++)
+    {
+        Kallocation* array = process->ipfc_handler_alloc.memory;
+        if(!array[i].page_count)
+        {
+            found_empty = 1;
+            found_index = i;
+            break;
+        }
+    }
+    if(!found_empty)
+    {
+        if((process->ipfc_handler_count + 1) * sizeof(Kallocation) >
+            process->ipfc_handler_alloc.page_count * PAGE_SIZE)
+        {
+            Kallocation new_alloc = kalloc_pages(process->ipfc_handler_alloc.page_count + 1);
+            Kallocation* new_array = new_alloc.memory;
+            Kallocation* old_array = process->ipfc_handler_alloc.memory;
+            for(u64 i = 0; i < process->ipfc_handler_count; i++)
+            {
+                new_array[i] = old_array[i];
+            }
+            if(process->ipfc_handler_alloc.page_count)
+            {
+                kfree_pages(process->ipfc_handler_alloc);
+            }
+            process->ipfc_handler_alloc = new_alloc;
+        }
+        found_index = process->ipfc_handler_count;
+        process->ipfc_handler_count++;
+    }
+    
+    Kallocation alloc = kalloc_pages(
+        (sizeof(IPFCHandler) + sizeof(IPFCFunctionExecution) * stack_count + PAGE_SIZE - 1) / PAGE_SIZE
+    );
+    IPFCHandler* handler = alloc.memory;
+    handler->name_len = name_len;
+    for(u64 i = 0; i < name_len; i++)
+    { handler->name[i] = name[i]; }
+    handler->ipfc_entry_point = ipfc_entry_point;
+    handler->stack_pages_start = stack_pages_start;
+    handler->pages_per_stack = pages_per_stack;
+    handler->stack_count = stack_count;
+    for(u64 i = 0; i < handler->stack_count; i++)
+    { handler->function_executions[i].is_initialized = 0; }
+    
+    Kallocation* array = process->ipfc_handler_alloc.memory;
+    array[found_index] = alloc;
+    *out_handler_id_ptr = found_index;
+    return 1;
+}
+
+u64 process_ipfc_session_init(Process* process, u8* name, u64 name_len, u64* session_id_ptr)
+{
+    u64* parent_array = process->parent_alloc.memory;
+    for(s64 i = (s64)process->parent_count - 1; i >= 0; i--)
+    {
+        Process* parent = KERNEL_PROCESS_ARRAY[parent_array[i]];
+        for(u64 j = 0; j < parent->ipfc_handler_count; j++)
+        {
+            IPFCHandler* handler;
+            {
+                Kallocation* handler_allocs = parent->ipfc_handler_alloc.memory;
+                handler = handler_allocs[j].memory;
+            }
+            printf("handler_name=\"%.*s\"\n", handler->name_len, handler->name);
+            if(handler->name_len != name_len)
+            { continue; }
+
+            u64 unequal = 0;
+            for(u64 k = 0; k < name_len; k++)
+            {
+                if(name[k] != handler->name[k])
+                { unequal = 1; break; }
+            }
+            if(unequal)
+            { continue; }
+
+            // match
+            // now check for duplicate sessions
+            for(u64 k = 0; k < process->ipfc_session_count; k++)
+            {
+                IPFCSession* sessions = process->ipfc_session_alloc.memory;
+                if(sessions[k].parent_index == parent_array[i] && sessions[k].handler_index == j)
+                { return 0; }
+            }
+
+            u8 found_empty = 0;
+            u64 found_index;
+            for(u64 k = 0; k < process->ipfc_session_count; k++)
+            {
+                IPFCSession* array = process->ipfc_session_alloc.memory;
+                if(!array[k].is_initialized)
+                {
+                    found_empty = 1;
+                    found_index = k;
+                    break;
+                }
+            }
+            if(!found_empty)
+            {
+                if((process->ipfc_session_count + 1) * sizeof(IPFCSession) >
+                    process->ipfc_session_alloc.page_count * PAGE_SIZE)
+                {
+                    Kallocation new_alloc = kalloc_pages(process->ipfc_session_alloc.page_count + 1);
+                    IPFCSession* new_array = new_alloc.memory;
+                    IPFCSession* old_array = process->ipfc_session_alloc.memory;
+                    for(u64 i = 0; i < process->ipfc_session_count; i++)
+                    {
+                        new_array[i] = old_array[i];
+                    }
+                    if(process->ipfc_session_alloc.page_count)
+                    {
+                        kfree_pages(process->ipfc_session_alloc);
+                    }
+                    process->ipfc_session_alloc = new_alloc;
+                }
+                found_index = process->ipfc_session_count;
+                process->ipfc_session_count++;
+            }
+            IPFCSession* session = process->ipfc_session_alloc.memory;
+            session += found_index;
+            session->is_initialized = 1;
+            session->parent_index = parent_array[i];
+            session->handler_index = j;
+
+            *session_id_ptr = found_index;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+
+

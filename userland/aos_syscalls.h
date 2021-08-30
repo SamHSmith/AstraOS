@@ -128,6 +128,31 @@ u64 AOS_process_kill(u64 pid);
 u64 AOS_out_stream_destroy(u64 out_stream);
 u64 AOS_in_stream_destroy(u64 in_stream);
 
+// BEGIN IPFC's
+// BEGIN CALLEE
+// returns true on success
+// name_len can not be greater than 64
+// handler_id_ptr can be 0 if you don't want to know
+// the handler_id of the created IPFC handler.
+u64 AOS_IPFC_handler_create(
+        u8* name,
+        u64 name_len,
+        u64(*ipfc_entry_point)(u64 source_pid, u16 function_index),
+        void* stack_pages_start, // page aligned
+        u64 pages_per_stack,
+        u64 stack_count,
+        u64* handler_id_ptr);
+// END CALLEE
+
+// BEGIN CALLER
+u64 AOS_IPFC_init_session(u8* name, u64 name_len, u64* session_id);
+void AOS_IPFC_close_session(u64 session_id);
+
+u64 AOS_IPFC_call(u64 session_id, u16 function_index);
+// END CALLER
+// END IPFC's
+
+
 // give file to proccess
 // give directory to proccess
  

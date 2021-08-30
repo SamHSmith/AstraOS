@@ -1,9 +1,9 @@
 #include "../userland/aos_helper.h"
 
-#include "samorak.h"
+#include "samorak.c"
 //#include "qwerty.h"
 
-#include "font8_16.h"
+#include "font8_16.c"
 
 #define BORDER_SIZE 3
 
@@ -344,8 +344,42 @@ void render_thread_entry(u64 thread_number)
     }
 }
 
+u64 dave_ipfc_entry(u64 source_pid, u16 function_index)
+{
+    spinlock_acquire(&tempuser_printout_lock);
+    AOS_H_printf("~~~~DAVE IPFC FROM PID%llu, function_index=%llu~~~~\n", source_pid, function_index);
+    spinlock_release(&tempuser_printout_lock);
+    // return 5; this has to actually be a function
+    while(1) {}
+}
+
 void program_loader_program(u64 drive1_partitions_directory)
 {
+//// nocheckin,   testing code
+
+u8* handler_name = "dave_ipfc_v1";
+u64 handler_name_len = strlen(handler_name);
+u64* handler_stacks_start = 0x675432000;
+AOS_alloc_pages(handler_stacks_start, 2*2);
+u64 dave_IPFC_handler;
+if(AOS_IPFC_handler_create(
+        handler_name,
+        handler_name_len,
+        dave_ipfc_entry,
+        handler_stacks_start,
+        2, 2,
+        &dave_IPFC_handler))
+{
+AOS_H_printf("created success\n");
+}
+else
+{
+AOS_H_printf("dave failure\n");
+}
+
+AOS_H_printf("now we do not destroy the handler.\nBecause the handler lives for the lifetime of the proc");
+
+///////////////////////// nocheckin end test
     window_count = 0;
     u8* print_text = "program loader program has started.\n";
     AOS_stream_put(0, print_text, strlen(print_text));
