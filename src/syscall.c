@@ -1935,6 +1935,7 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
 
     u16 parent_index = ((IPFCSession*)process->ipfc_session_alloc.memory)[user_session_id].parent_index;
     u16 handler_index = ((IPFCSession*)process->ipfc_session_alloc.memory)[user_session_id].handler_index;
+    u16 owned_process_index = ((IPFCSession*)process->ipfc_session_alloc.memory)[user_session_id].owned_process_index;
 
     u64 parent_pid = ((u64*)process->parent_alloc.memory)[parent_index];
     u64 process_pid = process->pid;
@@ -1952,6 +1953,9 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
     ipfc_thread->IPFC_function_index = user_function_index;
     ipfc_thread->IPFC_handler_index = handler_index;
 
+    ipfc_thread->frame.regs[10] = owned_process_index;
+    ipfc_thread->frame.regs[11] = user_function_index;
+
     t->IPFC_status = 1;
     t->IPFC_other_pid = parent_pid;
     t->IPFC_other_tid = ipfc_tid;
@@ -1960,6 +1964,56 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
 
     kernel_choose_new_thread(current_thread, mtime, hart);
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_IPFC_return(Thread** current_thread, u64 hart, u64 mtime)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    rwlock_acquire_write(&process->process_lock);
+    TrapFrame* frame = &t->frame;
+    u64 user_return_value = frame->regs[11];
+    t->program_counter += 4;
+
+    if(t->IPFC_status == 3)
+    {
+        IPFCHandler* handler =
+            ((Kallocation*)process->ipfc_handler_alloc.memory)[t->IPFC_handler_index].memory;
+        handler->function_executions[t->IPFC_stack_index].is_initialized = 0;
+
+        t->should_be_destroyed = 1;
+		rwlock_release_write(&process->process_lock);
+
+        Process* other_process = KERNEL_PROCESS_ARRAY[t->IPFC_other_pid];
+        rwlock_acquire_write(&other_process->process_lock);
+        Thread* other_thread = other_process->threads + t->IPFC_other_tid;
+        if( t->IPFC_other_pid < KERNEL_PROCESS_ARRAY_LEN &&
+            t->IPFC_other_tid < other_process->thread_count &&
+            other_thread->is_initialized &&
+            other_thread->IPFC_status == 1 &&
+            other_thread->IPFC_other_pid == process->pid &&
+            other_thread->IPFC_other_tid == t - process->threads)
+        {
+            other_thread->IPFC_status = 0;
+            other_thread->is_running = 1;
+            other_thread->frame.regs[10] = user_return_value;
+        }
+        rwlock_release_write(&other_process->process_lock);
+    }
+    else
+    { rwlock_release_write(&process->process_lock); }
+    kernel_choose_new_thread(current_thread, mtime, hart);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
@@ -2053,6 +2107,8 @@ void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
     { syscall_IPFC_session_close(current_thread, hart); }
     else if(call_num == 52)
     { syscall_IPFC_call(current_thread, hart, mtime); }
+    else if(call_num == 53)
+    { syscall_IPFC_return(current_thread, hart, mtime); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

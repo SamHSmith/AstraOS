@@ -364,3 +364,11 @@ AOS_IPFC_call:
     addi a0, x0, 52
     ecall
     ret
+
+.global AOS_IPFC_return
+AOS_IPFC_return:
+    mv a1, a0
+    addi a0, x0, 53
+    ecall
+    ret
+

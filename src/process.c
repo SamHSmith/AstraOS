@@ -77,6 +77,7 @@ typedef struct
     // parent_index refers to the parent array on Process
     u16 parent_index; // saving on memory here. Seems *very* unlikely to not be enough range
     u16 handler_index;
+    u64 owned_process_index; // us from the parents perspective
     u8 is_initialized;
 } IPFCSession;
 
@@ -442,9 +443,10 @@ void process_destroy_with_children(Process* process)
     process_destroy(process);
 }
 
-// we assume exclusive write lock to process
+// we assume no exclusive write lock to process
 void process_destroy_thread(Process* process, u32 tid)
 {
+    rwlock_acquire_write(&process->process_lock);
     Thread* t = &process->threads[tid];
     assert(process && process->mmu_table && process->reference_count_for_threads, "process is valid\n");
     assert(t->is_initialized, "thread exists");
@@ -457,6 +459,10 @@ void process_destroy_thread(Process* process, u32 tid)
     if(!process->reference_count_for_threads)
     {
         process_destroy_with_children(process);
+    }
+    else
+    {
+        rwlock_release_write(&process->process_lock);
     }
 }
 u64 process_alloc_pages(Process* process, u64 vaddr, Kallocation mem)
@@ -906,7 +912,6 @@ u64 process_ipfc_session_init(Process* process, u8* name, u64 name_len, u64* ses
                 Kallocation* handler_allocs = parent->ipfc_handler_alloc.memory;
                 handler = handler_allocs[j].memory;
             }
-            printf("handler_name=\"%.*s\"\n", handler->name_len, handler->name);
             if(handler->name_len != name_len)
             { continue; }
 
@@ -927,6 +932,16 @@ u64 process_ipfc_session_init(Process* process, u8* name, u64 name_len, u64* ses
                 if(sessions[k].parent_index == parent_array[i] && sessions[k].handler_index == j)
                 { return 0; }
             }
+
+            u64 found_owned = 0;
+            u64 owned_index = 0;
+            for(u64 i = 0; i < parent->owned_process_count; i++)
+            {
+                OwnedProcess* owns = parent->owned_process_alloc.memory;
+                if(owns[i].is_initialized && owns[i].pid == process->pid)
+                { owned_index = i; found_owned = 1; }
+            }
+            assert(found_owned, "Parent owns child process when initing an ipfc session.");
 
             u8 found_empty = 0;
             u64 found_index;
@@ -966,6 +981,7 @@ u64 process_ipfc_session_init(Process* process, u8* name, u64 name_len, u64* ses
             session->is_initialized = 1;
             session->parent_index = parent_array[i];
             session->handler_index = j;
+            session->owned_process_index = owned_index;
 
             *session_id_ptr = found_index;
             return 1;

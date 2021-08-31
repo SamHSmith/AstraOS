@@ -210,7 +210,6 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
         if(thread->should_be_destroyed)
         {
             runtime_array[i].state = THREAD_RUNTIME_UNINITIALIZED;
-            rwlock_acquire_write(&KERNEL_PROCESS_ARRAY[runtime_array[i].pid]->process_lock);
             process_destroy_thread(KERNEL_PROCESS_ARRAY[runtime_array[i].pid], runtime_array[i].tid);
             continue;
         }
@@ -337,10 +336,9 @@ void try_assign_ipfc_stack(Process* process, Thread* thread)
             break;
         }
     }
-printf("------------------------did I find?\n");
+
     if(!has_found)
     {
-printf("there was no space\n");
         rwlock_release_write(&process->process_lock);
         return;
     }

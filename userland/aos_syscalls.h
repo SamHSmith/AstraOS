@@ -142,6 +142,8 @@ u64 AOS_IPFC_handler_create(
         u64 pages_per_stack,
         u64 stack_count,
         u64* handler_id_ptr);
+
+u64 AOS_IPFC_return(u64 return_value);
 // END CALLEE
 
 // BEGIN CALLER

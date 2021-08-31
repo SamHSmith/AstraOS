@@ -349,6 +349,7 @@ u64 dave_ipfc_entry(u64 source_pid, u16 function_index)
     spinlock_acquire(&tempuser_printout_lock);
     AOS_H_printf("~~~~DAVE IPFC FROM PID%llu, function_index=%llu~~~~\n", source_pid, function_index);
     spinlock_release(&tempuser_printout_lock);
+    AOS_IPFC_return(5);
     // return 5; this has to actually be a function
     while(1) {}
 }
