@@ -26,8 +26,15 @@ if(AOS_IPFC_init_session(name, name_len, &session_id))
 {
     AOS_H_printf("Session has been inited!\n");
 
+    u64 data[128];
+    data[1] = 3;
+    data[69] = 420;
     AOS_H_printf("Calling function 42...\n");
-    AOS_H_printf("Return value of function 42 was %llu\n", AOS_IPFC_call(session_id, 42));
+    AOS_H_printf("Return value of function 42 was %llu\n", AOS_IPFC_call(session_id, 42, data, data));
+
+    AOS_H_printf("Now printing static data returned by the ipfc\n");
+    for(u64 i = 0; i < 128; i++)
+    { AOS_H_printf("%llx\n", data[i]); }
 
     AOS_H_printf("now we will close session#%llu\n", session_id);
     AOS_IPFC_close_session(session_id);

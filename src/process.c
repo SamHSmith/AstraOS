@@ -45,6 +45,9 @@ typedef struct
     u16 IPFC_handler_index;
     u16 IPFC_stack_index;
 
+    u64* ipfc_static_data_virtual_addr;
+    u64 ipfc_static_data_1024_bytes[1024/sizeof(u64)];
+
     u32 awake_count;
     ThreadAwakeCondition awakes[THREAD_MAX_AWAKE_COUNT];
 } Thread;
@@ -90,7 +93,8 @@ typedef struct
     u64 allocations_count;
 
     Kallocation surface_alloc;
-    u64 surface_count;
+    u64 surface_count;  // should never be more than or equal to U16_MAX. This is so that
+                        // surfaces can be represented with a u16.
 
     Kallocation surface_consumer_alloc;
     u64 surface_consumer_count;
@@ -288,8 +292,7 @@ u32 process_thread_create(u64 pid)
             KERNEL_PROCESS_ARRAY[pid]->proc_alloc.page_count * PAGE_SIZE)
         {
             Kallocation new_alloc = kalloc_pages(
-            ((sizeof(Process) + (KERNEL_PROCESS_ARRAY[pid]->thread_count + 1) * sizeof(Thread))/PAGE_SIZE)
-            + 1
+((sizeof(Process) + (KERNEL_PROCESS_ARRAY[pid]->thread_count + 1) * sizeof(Thread) + PAGE_SIZE -1)/PAGE_SIZE)
             );
             for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
             {

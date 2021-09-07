@@ -348,6 +348,16 @@ void try_assign_ipfc_stack(Process* process, Thread* thread)
 
     thread->frame.regs[8] = (found_index + 1) * handler->pages_per_stack * PAGE_SIZE;
     thread->frame.regs[8] += handler->stack_pages_start;
+
+    thread->frame.regs[8] -= 1024;
+    thread->frame.regs[12] = thread->frame.regs[8];
+    thread->ipfc_static_data_virtual_addr = thread->frame.regs[8];
+    u64* static_data_array;
+    assert(!mmu_virt_to_phys(process->mmu_table, thread->frame.regs[8], (u64*)&static_data_array),
+            "IPFCHandler.stack_pages_start and friends point to something valid. But this assert is for the static data array.\n");
+    for(u64 i = 0; i < 128; i++)
+    { static_data_array[i] = thread->ipfc_static_data_1024_bytes[i]; }
+
     thread->frame.regs[8] -= 2 * sizeof(u64);
     thread->frame.regs[2] = thread->frame.regs[8];
     u64* frame;

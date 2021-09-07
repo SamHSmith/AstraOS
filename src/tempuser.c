@@ -344,14 +344,16 @@ void render_thread_entry(u64 thread_number)
     }
 }
 
-u64 dave_ipfc_entry(u64 source_pid, u16 function_index)
+u64 dave_ipfc_entry(u64 source_pid, u16 function_index, u64* ipfc_static_data)
 {
     spinlock_acquire(&tempuser_printout_lock);
     AOS_H_printf("~~~~DAVE IPFC FROM PID%llu, function_index=%llu~~~~\n", source_pid, function_index);
+    AOS_H_printf("Here comes the static data\n");
+    for(u64 i = 0; i < 128; i++)
+    { AOS_H_printf("%llx\n", ipfc_static_data[i]); ipfc_static_data[i] *= 2; }
     spinlock_release(&tempuser_printout_lock);
+
     AOS_IPFC_return(5);
-    // return 5; this has to actually be a function
-    while(1) {}
 }
 
 void program_loader_program(u64 drive1_partitions_directory)
@@ -377,6 +379,7 @@ else
 {
 AOS_H_printf("dave failure\n");
 }
+
 
 AOS_H_printf("now we do not destroy the handler.\nBecause the handler lives for the lifetime of the proc");
 
@@ -485,6 +488,7 @@ while(1) {
     }
 
     { // Read stdout of windows
+        spinlock_acquire(&tempuser_printout_lock);
         for(u64 i = 0; i < window_count; i++)
         {
             u64 byte_count = 0;
@@ -501,6 +505,7 @@ while(1) {
                 }
             } while(byte_count);
         }
+        spinlock_release(&tempuser_printout_lock);
     }
 
     { // Mouse events

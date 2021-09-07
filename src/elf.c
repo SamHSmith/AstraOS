@@ -124,6 +124,7 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
     }
 
     u32 thread1 = process_thread_create(pid);
+    process = KERNEL_PROCESS_ARRAY[pid];
     proc->threads[thread1].stack_alloc = kalloc_pages(8);
     proc->threads[thread1].frame.regs[8] = (~(0x1ffffff << 39)) & (~0xfff); // frame pointer
     proc->threads[thread1].frame.regs[2] = proc->threads[thread1].frame.regs[8] - 4 * sizeof(u64);

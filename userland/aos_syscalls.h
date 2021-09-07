@@ -137,7 +137,7 @@ u64 AOS_in_stream_destroy(u64 in_stream);
 u64 AOS_IPFC_handler_create(
         u8* name,
         u64 name_len,
-        u64(*ipfc_entry_point)(u64 source_pid, u16 function_index),
+        u64(*ipfc_entry_point)(u64 source_pid, u16 function_index, u64* ipfc_static_data_1024_bytes),
         void* stack_pages_start, // page aligned
         u64 pages_per_stack,
         u64 stack_count,
@@ -150,7 +150,10 @@ u64 AOS_IPFC_return(u64 return_value);
 u64 AOS_IPFC_init_session(u8* name, u64 name_len, u64* session_id);
 void AOS_IPFC_close_session(u64 session_id);
 
-u64 AOS_IPFC_call(u64 session_id, u16 function_index);
+u64 AOS_IPFC_call(  u64 session_id,
+                    u16 function_index,
+                    void* ipfc_static_data_1024_bytes_in,
+                    void* ipfc_static_data_1024_bytes_out);
 // END CALLER
 // END IPFC's
 

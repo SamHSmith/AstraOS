@@ -1926,7 +1926,33 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
     TrapFrame* frame = &t->frame;
     u64 user_session_id = frame->regs[11];
     u16 user_function_index = frame->regs[12];
+    void* user_ipfc_static_data_1024_bytes_in = frame->regs[13];
+    void* user_ipfc_static_data_1024_bytes_out = frame->regs[14];
     t->program_counter += 4;
+
+    u64 ipfc_static_data_1024_bytes_in[1024/sizeof(u64)];
+    if(user_ipfc_static_data_1024_bytes_in)
+    {
+        u64* pointer;
+        if(mmu_virt_to_phys(process->mmu_table, user_ipfc_static_data_1024_bytes_in + 1024,
+                            (u64*)&pointer) != 0 ||
+           mmu_virt_to_phys(process->mmu_table, user_ipfc_static_data_1024_bytes_in,
+                            (u64*)&pointer) != 0)
+        {
+            frame->regs[10] = 0;
+            rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+            return;
+        }
+        for(u64 i = 0; i < 128; i++)
+        { ipfc_static_data_1024_bytes_in[i] = pointer[i]; }
+    }
+    else
+    {
+        for(u64 i = 0; i < 128; i++)
+        { ipfc_static_data_1024_bytes_in[i] = 0; }
+    }
+
+    assert(t->IPFC_status == 0, "You are doing a ipfc call from a normal thread. Currently, ipfc threads can't themselves perform ipfc calls. This should be fixed and allowed for. Probably by using IPFC_status as a bitfield instead of an integer of state.");
  
     assert(
         user_session_id < process->ipfc_session_count &&
@@ -1955,6 +1981,9 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
 
     ipfc_thread->frame.regs[10] = owned_process_index;
     ipfc_thread->frame.regs[11] = user_function_index;
+
+    for(u64 i = 0; i < 128; i++)
+    { ipfc_thread->ipfc_static_data_1024_bytes[i] = ipfc_static_data_1024_bytes_in[i]; }
 
     t->IPFC_status = 1;
     t->IPFC_other_pid = parent_pid;
@@ -1985,6 +2014,20 @@ void syscall_IPFC_return(Thread** current_thread, u64 hart, u64 mtime)
     u64 user_return_value = frame->regs[11];
     t->program_counter += 4;
 
+    u64 ipfc_static_data_1024_bytes_out[1024/sizeof(u64)];
+    {
+        u64* pointer;
+        if(mmu_virt_to_phys(process->mmu_table, t->ipfc_static_data_virtual_addr + 1024,
+                            (u64*)&pointer) != 0 ||
+           mmu_virt_to_phys(process->mmu_table, t->ipfc_static_data_virtual_addr,
+                            (u64*)&pointer) != 0)
+        {
+            assert(0, "big bad.");
+        }
+        for(u64 i = 0; i < 128; i++)
+        { ipfc_static_data_1024_bytes_out[i] = pointer[i]; }
+    }
+
     if(t->IPFC_status == 3)
     {
         IPFCHandler* handler =
@@ -2007,6 +2050,22 @@ void syscall_IPFC_return(Thread** current_thread, u64 hart, u64 mtime)
             other_thread->IPFC_status = 0;
             other_thread->is_running = 1;
             other_thread->frame.regs[10] = user_return_value;
+
+            void* user_ipfc_static_data_1024_bytes_out = other_thread->frame.regs[14];
+
+            if(user_ipfc_static_data_1024_bytes_out)
+            {
+                u64* pointer;
+                if(mmu_virt_to_phys(other_process->mmu_table, user_ipfc_static_data_1024_bytes_out + 1024,
+                                    (u64*)&pointer) != 0 ||
+                   mmu_virt_to_phys(other_process->mmu_table, user_ipfc_static_data_1024_bytes_out,
+                                    (u64*)&pointer) != 0)
+                {
+                    assert(0, "second big bad in this function.");
+                }
+                for(u64 i = 0; i < 128; i++)
+                { pointer[i] = ipfc_static_data_1024_bytes_out[i]; }
+            }
         }
         rwlock_release_write(&other_process->process_lock);
     }

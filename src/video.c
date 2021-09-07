@@ -123,6 +123,10 @@ u64 surface_consumer_create(Process* process, u64 surface_pid_proxy, u64* consum
     assert(process_pid != surface_process_pid, "process does not own itself");
     assert(surface_process_pid < KERNEL_PROCESS_ARRAY_LEN, "surface_process_pid is valid");
     Process* surface_process = KERNEL_PROCESS_ARRAY[surface_process_pid];
+
+    if(surface_process->surface_count >= U16_MAX)
+    { return 0; }
+
     u64 surface_slot = surface_create(surface_process);
 
     for(u64 i = 0; i < process->surface_consumer_count; i++)
