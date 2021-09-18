@@ -1,6 +1,6 @@
 #define SCHEDUALER_MIX_IN_WINDOW 50
 #define SCHEDUALER_SEND_BACK_FRACTION_NUMERATOR 1
-#define SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR 3
+#define SCHEDUALER_SEND_BACK_FRACTION_DENOMINATOR 2
 
 
 u64 thread_runtime_is_live(Thread* t, u64 mtime)
@@ -74,6 +74,23 @@ u64 last_mtimes[KERNEL_MAX_HART_COUNT];
 struct xoshiro256ss_state kernel_choose_new_thread_rando_state[KERNEL_MAX_HART_COUNT];
 void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
 {
+    {
+    ThreadRuntime* runtime_array = local_thread_runtimes[hart].memory_alloc.memory;
+    u64 runtime_array_len = local_thread_runtimes[hart].len;
+    for(u64 i = 0; i < runtime_array_len; i++)
+    {
+        if(runtime_array[i].state != THREAD_RUNTIME_INITIALIZED)
+        { continue; }
+        Thread* thread = &KERNEL_PROCESS_ARRAY[runtime_array[i].pid]
+                            ->threads[runtime_array[i].tid];
+        if(thread->should_be_destroyed)
+        {
+            runtime_array[i].state = THREAD_RUNTIME_UNINITIALIZED;
+            process_destroy_thread(KERNEL_PROCESS_ARRAY[runtime_array[i].pid], runtime_array[i].tid);
+        }
+    }
+    }
+
     u64 apply_time = 1;
     if(!*out_thread)
     { apply_time = 0; }
@@ -208,11 +225,7 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
         Thread* thread = &KERNEL_PROCESS_ARRAY[runtime_array[i].pid]
                             ->threads[runtime_array[i].tid];
         if(thread->should_be_destroyed)
-        {
-            runtime_array[i].state = THREAD_RUNTIME_UNINITIALIZED;
-            process_destroy_thread(KERNEL_PROCESS_ARRAY[runtime_array[i].pid], runtime_array[i].tid);
-            continue;
-        }
+        { continue; }
         if(thread->IPFC_status == 2) // thread is awaiting IPFC stack
         {
             try_assign_ipfc_stack(KERNEL_PROCESS_ARRAY[runtime_array[i].pid], thread);

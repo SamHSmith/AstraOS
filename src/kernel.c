@@ -410,7 +410,6 @@ u64 m_trap(
                 {
                     Process* process = KERNEL_PROCESS_ARRAY[vos[current_vo].pid];
                     rwlock_acquire_write(&process->process_lock);
-                    surface_slot_fire(process, 0);
                     if(surface_slot_has_commited(process, 0, 1))
                     {
                         framebuffer = surface_slot_swap_present_buffer(
@@ -422,6 +421,7 @@ u64 m_trap(
 
                         frame_has_been_requested = 0;
                     }
+                    surface_slot_fire(process, 0, 0);
                     rwlock_release_write(&process->process_lock);
                 }
 

@@ -18,12 +18,12 @@ typedef struct
     union
     {
         u64 awake_time;
-        u64 surface_slot;
+        u16 surface_slot;
         u64 semaphore;
     };
 } ThreadAwakeCondition;
 
-#define THREAD_MAX_AWAKE_COUNT 64
+#define THREAD_MAX_AWAKE_COUNT 512
 typedef struct
 {
     TrapFrame frame;
@@ -45,7 +45,7 @@ typedef struct
     u16 IPFC_handler_index;
     u16 IPFC_stack_index;
 
-    u64* ipfc_static_data_virtual_addr;
+    void* ipfc_static_data_virtual_addr;
     u64 ipfc_static_data_1024_bytes[1024/sizeof(u64)];
 
     u32 awake_count;
@@ -982,7 +982,7 @@ u64 process_ipfc_session_init(Process* process, u8* name, u64 name_len, u64* ses
             IPFCSession* session = process->ipfc_session_alloc.memory;
             session += found_index;
             session->is_initialized = 1;
-            session->parent_index = parent_array[i];
+            session->parent_index = i;
             session->handler_index = j;
             session->owned_process_index = owned_index;
 
@@ -992,7 +992,4 @@ u64 process_ipfc_session_init(Process* process, u8* name, u64 name_len, u64* ses
     }
     return 0;
 }
-
-
-
 

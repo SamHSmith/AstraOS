@@ -3,19 +3,35 @@
 
 #include "../common/maths.h"
 
-#if 1
 u64 strlen(char* str)
 {
     u64 i = 0;
     while(str[i] != 0) { i++; }
     return i;
 }
-#endif
+
 void _start()
 {
+    // this enables the use of global variables
+    __asm__(".option norelax");
+    __asm__("la gp, __global_pointer$");
+    __asm__(".option relax");
+
     AOS_H_printf(
         "Hi I'm square-dave and I live in an elf file on a partition on the RADICAL PARTITION SYSTEM\n"
     );
+
+    u8 is_running_as_ega = 0;
+    u64 ega_session_id;
+    {
+        u8* name = "embedded_gui_application_ipfc_api_v1";
+        u64 name_len = strlen(name);
+        if(AOS_IPFC_init_session(name, name_len, &ega_session_id))
+        {
+            is_running_as_ega = 1;
+        }
+    }
+
 
 // nocheckin, test code
 {
@@ -56,8 +72,15 @@ else
 
 while(1)
 {
-    u64 surface = 0;
-    AOS_thread_awake_on_surface(&surface, 1);
+    u16 surfaces[512];
+                            surfaces[0] = 0;  // temp
+    u16 surface_count = 1;
+    if(is_running_as_ega)
+    {
+        surface_count = AOS_IPFC_call(ega_session_id, 0, 0, surfaces);
+    }
+
+    AOS_thread_awake_on_surface(&surfaces, surface_count);
     AOS_thread_sleep();
 
     { // read from stdin
@@ -76,8 +99,9 @@ while(1)
     }
 
     AOS_Framebuffer* fb = 0x424242000; // the three zeroes alignes it to the page boundry
-    u64 fb_page_count = AOS_surface_acquire(surface, 0, 0);
-    if(AOS_surface_acquire(surface, fb, fb_page_count))
+    u64 fb_page_count;
+    if(surface_count) { fb_page_count = AOS_surface_acquire(surfaces[0], 0, 0); }
+    if(surface_count && AOS_surface_acquire(surfaces[0], fb, fb_page_count))
     {
         f64 frame_start = AOS_time_get_seconds();
         f64 delta_time = frame_start - last_frame_time;
@@ -202,9 +226,9 @@ while(1)
         pfx = -1.0;
         pfy += dpfy;
         }
-        AOS_surface_commit(surface);
+        AOS_surface_commit(surfaces[0]);
         f64 frame_end = AOS_time_get_seconds();
-        //AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
+        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
     }
 }
 }

@@ -4,7 +4,7 @@
 #include "../common/maths.h"
 
 #include "font8_16.h"
-#include "ANSI_dvorak.h"
+#include "sv_qwerty.h"
 
 u64 strlen(char* str)
 {
@@ -24,9 +24,44 @@ u64 partitions[MAX_PARTITION_COUNT];
 u8 partition_names[MAX_PARTITION_COUNT][64];
 u64 partition_name_lens[MAX_PARTITION_COUNT];
 
+u16 process_surfaces[1024/sizeof(u16)];
+u64 process_surface_count = 0;
+
+const char* EGA_IPFC_API_NAME = "embedded_gui_application_ipfc_api_v1";
+// f1 is get surfaces
+void embedded_gui_application_ipfc_api_entry(u64 source_pid, u16 function_index, void* static_data_1024b)
+{
+    if(function_index == 0)
+    {
+        u16* copy_to = static_data_1024b;
+        for(u64 i = 0; i < 1024/sizeof(u16) && i < process_surface_count; i++)
+        { copy_to[i] = process_surfaces[i]; }
+        AOS_IPFC_return(process_surface_count);
+    }
+    AOS_IPFC_return(0);
+}
+
 void _start()
 {
+    // this enables the use of global variables
+    __asm__(".option norelax");
+    __asm__("la gp, __global_pointer$");
+    __asm__(".option relax");
+
     AOS_H_printf("Welcome to dave's terminal, not-emulator\n");
+
+    // setting up ega interface
+    {
+        u64 handler_name_len = strlen(EGA_IPFC_API_NAME);
+        u64 handler_stacks_start = 0x3241234000;
+        AOS_alloc_pages(handler_stacks_start, 1);
+        u64 ipfc_handler;
+        if(!
+        AOS_IPFC_handler_create(EGA_IPFC_API_NAME, handler_name_len, embedded_gui_application_ipfc_api_entry,
+                                handler_stacks_start, 1, 1, &ipfc_handler)
+        )
+        { AOS_H_printf("failed to init ega ipfc handler. Something is very wrong.\n"); }
+    }
 
     u64 drive1_partitions_directory = 0;
     u64 partition_count = AOS_directory_get_files(drive1_partitions_directory, 0, 0);
@@ -45,6 +80,10 @@ void _start()
     u64 process_pid;
     u64 process_stdin;
     u64 process_stdout;
+    u64 consumer_handle;
+    u8 has_consumer = 0;
+    u8 surface_visible = 1;
+    u8 show_console = 0;
 
     u8* text_buffer = 0x30405000;
     AOS_alloc_pages(text_buffer, 10);
@@ -63,6 +102,7 @@ void _start()
     {
         u64 surface_handle = 0;
         AOS_thread_awake_on_surface(&surface_handle, 1);
+        AOS_thread_awake_after_time(100000);
         AOS_thread_sleep();
 
         if(process_is_running && !AOS_process_is_alive(process_pid))
@@ -70,10 +110,31 @@ void _start()
             AOS_out_stream_destroy(process_stdin);
             AOS_in_stream_destroy(process_stdout);
             process_is_running = 0;
+            has_consumer = 0;
             text_buffer[text_len + 0] = ')';
             text_buffer[text_len + 1] = '>';
             text_buffer[text_len + 2] = ' ';
             text_len += 3;
+        }
+
+        if(!process_is_running)
+        {
+            show_console = 0;
+        }
+
+        {
+            if(!has_consumer)
+            { surface_visible = 1; }
+
+            if(show_console)
+            { AOS_surface_stop_forwarding_to_consumer(surface_handle); }
+            else
+            {
+                if(surface_visible)
+                { AOS_surface_forward_to_consumer(surface_handle, consumer_handle); }
+                else
+                { AOS_surface_stop_forwarding_to_consumer(surface_handle); }
+            }
         }
 
         { // Keyboard events
@@ -209,6 +270,14 @@ void _start()
                                             }
                                             text_len += (u64)written_count;
                                         }
+                                        u64 con, surface_slot;
+                                        if(AOS_surface_consumer_create(pid, &con, &surface_slot))
+                                        {
+                                            has_consumer = 1;
+                                            consumer_handle = con;
+                                            process_surfaces[0] = surface_slot;
+                                            process_surface_count = 1;
+                                        }
                                     }
                                     else
                                     {
@@ -233,6 +302,10 @@ void _start()
                             text_len += 3;
                         }
                     }
+                    else if(scancode == 22 && kbd_events[i].current_state.keys_down[0] == 0x20)
+                    {
+                        show_console = !show_console;
+                    }
                     else if(pre_send_to_stdin_len < 4096)
                     {
                         u8 character = scancode_to_u8(scancode, kbd_events[i].current_state);
@@ -245,7 +318,7 @@ void _start()
                         }
                     }
                 }
-                else
+                else // key released
                 {
                     u64 scancode = kbd_events[i].scancode;
 

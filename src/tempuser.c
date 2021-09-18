@@ -395,9 +395,6 @@ AOS_H_printf("now we do not destroy the handler.\nBecause the handler lives for 
         u64 base_stack_addr = (~(0x1ffffff << 39)) & (~0xfff);
         AOS_alloc_pages(base_stack_addr - (4096*WORKER_THREAD_STACK_SIZE*(THREAD_COUNT+1)), WORKER_THREAD_STACK_SIZE*(THREAD_COUNT+1));
 
-        AOS_thread_awake_after_time(100000); // TODO: investigate memory mapping not right bug
-        AOS_thread_sleep();
-
         for(u64 i = 0; i < THREAD_COUNT; i++) // TODO: one day add feature to ask for the "width" of the system
         {
             AOS_TrapFrame frame;
@@ -654,7 +651,8 @@ while(1) {
                     {
                         AOS_H_printf("PROCESS CREATED, PID=%llu\n", pid);
                         u64 con = 0;
-                        if(AOS_surface_consumer_create(pid, &con))
+                        u64 surface_slot;
+                        if(AOS_surface_consumer_create(pid, &con, &surface_slot))
                         {
                             windows[window_count].pid = pid;
                             windows[window_count].consumer = con;
@@ -708,7 +706,6 @@ while(1) {
         double time_frame_start = AOS_time_get_seconds();
 
         // Fetch from consumers
-        if(!is_fullscreen_mode)
         {
             for(u64 i = 0; i < window_count; i++)
             {
@@ -725,6 +722,8 @@ while(1) {
                         windows[i].we_have_frame = 1;
                     }
                 }
+                else
+                { /*AOS_H_printf("frame has been dropped\n");*/ }
             }
         }
 

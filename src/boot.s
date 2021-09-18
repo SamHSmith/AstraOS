@@ -32,6 +32,7 @@ _start:
 .option push
 .option norelax
 	la		gp, _global_pointer
+.option relax
 .option pop
 	# Set all bytes in the BSS section to zero.
 	la 		a0, _bss_start

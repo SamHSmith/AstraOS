@@ -126,14 +126,17 @@ void syscall_awake_on_surface(Thread** current_thread, u64 hart, u64 mtime)
         return;
     }
 
-    u64 surface_slot_array[THREAD_MAX_AWAKE_COUNT];
+    u16 surface_slot_array[THREAD_MAX_AWAKE_COUNT];
     u64 surface_slot_count = 0;
 
-    u64 page_count = (count+PAGE_SIZE-1)/PAGE_SIZE;
-    u64* surface_slots;
+    u64 page_count = ((count*sizeof(u16))+PAGE_SIZE-1)/PAGE_SIZE;
+    u16* surface_slots;
     for(s64 i = page_count; i >= 0; i--)
     {
-        if(mmu_virt_to_phys(process->mmu_table, user_surface_slots + i*PAGE_SIZE, (u64*)&surface_slots) != 0)
+        u64 convert_addr = user_surface_slots + i*PAGE_SIZE;
+        if(i == page_count)
+        { convert_addr -= i*PAGE_SIZE - count*sizeof(u16) + 1; }
+        if(mmu_virt_to_phys(process->mmu_table, convert_addr, (u64*)&surface_slots) != 0)
         {
             frame->regs[10] = 0;
             rwlock_release_read(&process->process_lock);
@@ -532,10 +535,13 @@ void syscall_surface_consumer_has_commited(Thread** current_thread, u64 hart)
         wait_time_times[hart] += 1;
     }
     Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    rwlock_acquire_read(&process->process_lock);
     TrapFrame* frame = &t->frame;
     u64 consumer_slot = frame->regs[11];
-    frame->regs[10] = surface_consumer_has_commited(t->process_pid, consumer_slot); // locks internally
+    frame->regs[10] = surface_consumer_has_commited(process, consumer_slot); // locks internally
     t->program_counter += 4;
+    rwlock_release_read(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
@@ -577,7 +583,7 @@ void syscall_surface_consumer_get_size(Thread** current_thread, u64 hart)
 
     if(ret)
     {
-        ret = surface_consumer_get_size(t->process_pid, consumer_slot, width, height);
+        ret = surface_consumer_get_size(process, consumer_slot, width, height);
     }
 
     frame->regs[10] = ret;
@@ -607,7 +613,7 @@ void syscall_surface_consumer_set_size(Thread** current_thread, u64 hart)
     u32 width = frame->regs[12];
     u32 height = frame->regs[13];
 
-    u64 ret = surface_consumer_set_size(process->pid, consumer_slot, width, height);
+    u64 ret = surface_consumer_set_size(process, consumer_slot, width, height);
 
     frame->regs[10] = ret;
     t->program_counter += 4;
@@ -637,7 +643,7 @@ void syscall_surface_consumer_fetch(Thread** current_thread, u64 hart)
     u64 page_count = frame->regs[13];
     u64 ret = 0;
 
-    ret = surface_consumer_fetch(t->process_pid, consumer_slot, fb, page_count);
+    ret = surface_consumer_fetch(process, consumer_slot, fb, page_count);
 
     frame->regs[10] = ret;
     t->program_counter += 4;
@@ -856,6 +862,7 @@ void syscall_surface_consumer_create(Thread** current_thread, u64 hart)
     TrapFrame* frame = &t->frame;
     u64 user_foreign_proxy_pid = frame->regs[11];
     u64 user_consumer_ptr = frame->regs[12];
+    u64 user_surface_ptr = frame->regs[13];
 
     u64* consumer_ptr = 0;
     if(!(mmu_virt_to_phys(process->mmu_table, user_consumer_ptr + sizeof(u64), (u64*)&consumer_ptr) == 0) ||
@@ -868,7 +875,18 @@ void syscall_surface_consumer_create(Thread** current_thread, u64 hart)
         return;
     }
 
-    frame->regs[10] = surface_consumer_create(process, user_foreign_proxy_pid, consumer_ptr);
+    u64* surface_ptr = 0;
+    if(!(mmu_virt_to_phys(process->mmu_table, user_surface_ptr + sizeof(u64), (u64*)&surface_ptr) == 0) ||
+       !(mmu_virt_to_phys(process->mmu_table, user_surface_ptr, (u64*)&surface_ptr) == 0))
+    {
+        frame->regs[10] = 0;
+        t->program_counter += 4;
+        rwlock_release_write(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    frame->regs[10] = surface_consumer_create(process, user_foreign_proxy_pid, consumer_ptr, surface_ptr);
     t->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
@@ -887,11 +905,14 @@ void syscall_surface_consumer_fire(Thread** current_thread, u64 hart)
         wait_time_times[hart] += 1;
     }
     Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    rwlock_acquire_read(&process->process_lock);
     TrapFrame* frame = &t->frame;
     u64 consumer_slot = frame->regs[11];
 
-    frame->regs[10] = surface_consumer_fire(t->process_pid, consumer_slot);
+    frame->regs[10] = surface_consumer_fire(process, consumer_slot);
     t->program_counter += 4;
+    rwlock_release_read(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
@@ -921,9 +942,11 @@ void syscall_surface_forward_to_consumer(Thread** current_thread, u64 hart)
     if(surface_slot < process->surface_count && slot->is_initialized &&
         consumer_slot < process->surface_consumer_count && con->is_initialized)
     {
+        u64 was_doing_this_already =
+            slot->is_defering_to_consumer_slot && slot->defer_consumer_slot == consumer_slot;
         slot->is_defering_to_consumer_slot = 1;
         slot->defer_consumer_slot = consumer_slot;
-        surface_slot_fire(process, surface_slot);
+        surface_slot_fire(process, surface_slot, !was_doing_this_already);
         ret = 1;
     }
     frame->regs[10] = ret;
@@ -1953,7 +1976,7 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
     }
 
     assert(t->IPFC_status == 0, "You are doing a ipfc call from a normal thread. Currently, ipfc threads can't themselves perform ipfc calls. This should be fixed and allowed for. Probably by using IPFC_status as a bitfield instead of an integer of state.");
- 
+
     assert(
         user_session_id < process->ipfc_session_count &&
         ((IPFCSession*)process->ipfc_session_alloc.memory)[user_session_id].is_initialized,
@@ -2017,7 +2040,7 @@ void syscall_IPFC_return(Thread** current_thread, u64 hart, u64 mtime)
     u64 ipfc_static_data_1024_bytes_out[1024/sizeof(u64)];
     {
         u64* pointer;
-        if(mmu_virt_to_phys(process->mmu_table, t->ipfc_static_data_virtual_addr + 1024,
+        if(mmu_virt_to_phys(process->mmu_table, t->ipfc_static_data_virtual_addr + 1024 - 1,
                             (u64*)&pointer) != 0 ||
            mmu_virt_to_phys(process->mmu_table, t->ipfc_static_data_virtual_addr,
                             (u64*)&pointer) != 0)
