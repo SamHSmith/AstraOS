@@ -62,6 +62,8 @@ void assert(u64 stat, char* error)
 
 #include "stream.c"
 
+atomic_s64 KERNEL_HART_COUNT;
+
 #include "plic.c"
 #include "input.c"
 #include "process.c"
@@ -71,8 +73,7 @@ void assert(u64 stat, char* error)
 
 
 extern u64 KERNEL_START_OTHER_HARTS;
-atomic_s64 KERNEL_HART_COUNT;
- 
+
 u64 KERNEL_MMU_TABLE;
 u64 KERNEL_SATP_VALUE;
 
@@ -127,9 +128,7 @@ u64 kinit()
 
     KERNEL_MMU_TABLE = (u64)mem_init();
 
-    thread_runtime_commons.memory_alloc.page_count = 0;
-    thread_runtime_commons.len = 0;
-    spinlock_create(&thread_runtime_commons_lock);
+    rwlock_create(&THREAD_RUNTIME_ARRAY_LOCK);
     for(s64 i = 0; i < KERNEL_HART_COUNT.value; i++)
     {
         Kallocation trap_stack = kalloc_pages(8);
@@ -146,10 +145,6 @@ u64 kinit()
             KERNEL_STACK_TOP[i] = stack.memory + (PAGE_SIZE * trap_stack.page_count);
             KERNEL_STACK_ALLOCS[i-1] = stack;
         }
-
-        // thread runtimes
-        local_thread_runtimes[i].memory_alloc.page_count = 0;
-        local_thread_runtimes[i].len = 0;
 
         //rando state
         kernel_choose_new_thread_rando_state[i].s[0] = xoshiro256ss(&KERNEL_GLOBAL_RANDO_STATE);

@@ -107,7 +107,10 @@ typedef struct
     u64 fregs[32];
 } AOS_TrapFrame;
 
-u64 AOS_thread_new(u64 program_counter, AOS_TrapFrame* register_values);
+// all ipfc threads use thread_group 0, the main thread is always 1.
+// If you want to go wide over all cores create as many threads as cores
+// in a unique thread group. That ensures they don't end up on the same core.
+u64 AOS_thread_new(u64 program_counter, AOS_TrapFrame* register_values, u32 thread_group);
 
 // returns a semaphore handle
 u64 AOS_semaphore_create(u32 initial_value, u32 max_value);

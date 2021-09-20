@@ -402,7 +402,7 @@ AOS_H_printf("now we do not destroy the handler.\nBecause the handler lives for 
             frame.regs[8] = base_stack_addr;
             frame.regs[2] = frame.regs[8] - 4 * sizeof(u64);
             base_stack_addr -= 4096*WORKER_THREAD_STACK_SIZE;
-            AOS_thread_new(render_thread_entry, &frame);
+            AOS_thread_new(render_thread_entry, &frame, 2);
         }
     }
 

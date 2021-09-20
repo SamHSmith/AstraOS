@@ -98,7 +98,7 @@ void syscall_thread_awake_after_time(Thread** current_thread, u64 hart, u64 mtim
     frame->regs[10] = 1;
 }
 
-void syscall_awake_on_surface(Thread** current_thread, u64 hart, u64 mtime)
+void syscall_thread_awake_on_surface(Thread** current_thread, u64 hart, u64 mtime)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1446,6 +1446,7 @@ void syscall_thread_new(Thread** current_thread, u64 hart)
     TrapFrame* frame = &t->frame;
     u64 user_program_counter = frame->regs[11];
     u64 user_register_values = frame->regs[12];
+    u32 user_thread_group = frame->regs[13];
     t->program_counter += 4;
 
     AOS_TrapFrame* register_values_ptr;
@@ -1460,7 +1461,7 @@ void syscall_thread_new(Thread** current_thread, u64 hart)
         return;
     }
 
-    u32 tid2 = process_thread_create(pid);
+    u32 tid2 = process_thread_create(pid, user_thread_group);
     process = KERNEL_PROCESS_ARRAY[pid];
     *current_thread = &process->threads[tid];
     t = *current_thread;
@@ -1992,7 +1993,7 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
 
     Process* ipfc_process = KERNEL_PROCESS_ARRAY[parent_pid];
 
-    u32 ipfc_tid = process_thread_create(parent_pid); // This guy can move ipfc_process
+    u32 ipfc_tid = process_thread_create(parent_pid, 0); // This guy can move ipfc_process
     ipfc_process =  KERNEL_PROCESS_ARRAY[parent_pid]; // be wary
     Thread* ipfc_thread = &ipfc_process->threads[ipfc_tid];
 
@@ -2108,7 +2109,7 @@ void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
     else if(call_num == 2)
     { syscall_thread_awake_after_time(current_thread, hart, mtime); }
     else if(call_num == 3)
-    { syscall_awake_on_surface(current_thread, hart, mtime); }
+    { syscall_thread_awake_on_surface(current_thread, hart, mtime); }
     else if(call_num == 4)
     { syscall_get_rawmouse_events(current_thread, hart); }
     else if(call_num == 5)

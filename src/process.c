@@ -202,64 +202,35 @@ typedef struct
 {
     u64 pid;
     u32 tid;
-    u32 state;
-    u64 runtime;
+    u32 thread_group; // these don't change during lifetime
 
-    s64 time_in_runqueue;
+    u8 is_initialized;
+    u8 is_being_run;
+    atomic_s64 owning_hart;
+    u16 allowed_width;
+    u32 thread_group_index;
+
+    u32 t_value;
+    Spinlock lock;
 } ThreadRuntime;
 
-#define THREAD_RUNTIME_UNINITIALIZED 0
-#define THREAD_RUNTIME_INITIALIZED 1
+Kallocation THREAD_RUNTIME_ARRAY_ALLOC;
+u64 THREAD_RUNTIME_ARRAY_LEN;
+RWLock THREAD_RUNTIME_ARRAY_LOCK;
 
 typedef struct
 {
-    Kallocation memory_alloc;
-    u64 len;
-} ThreadRuntimeArray;
+    u64 pid;
+    u32 thread_group;
+    atomic_s64 counts[KERNEL_MAX_HART_COUNT];
+} ThreadGroup;
 
-void thread_runtime_array_add(ThreadRuntimeArray* array, ThreadRuntime item)
-{
-#define THREAD_RUNTIME_ARRAY ((ThreadRuntime*)array->memory_alloc.memory)
+Kallocation THREAD_GROUP_ARRAY_ALLOC;
+u64 THREAD_GROUP_ARRAY_LEN;
+// uses the same lock as above
 
-    u64 runtime = 0;
-    u8 has_runtime = 0;
-
-    for(u64 i = 0; i < array->len; i++)
-    {
-        if(THREAD_RUNTIME_ARRAY[i].state == THREAD_RUNTIME_UNINITIALIZED)
-        {
-            runtime = i;
-            has_runtime = 1;
-        }
-    }
-    // We maybe must allocate a new runtime
-    if(!has_runtime)
-    {
-        if((array->len + 1) * sizeof(ThreadRuntime) >
-            array->memory_alloc.page_count * PAGE_SIZE)
-        {
-            Kallocation new_alloc = kalloc_pages(array->memory_alloc.page_count + 1);
-            for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
-            {
-                *(((u64*)new_alloc.memory) + i) =
-                        *(((u64*)array->memory_alloc.memory) + i);
-            }
-            kfree_pages(array->memory_alloc);
-            array->memory_alloc = new_alloc;
-        }
-
-        runtime = array->len;
-        array->len += 1;
-    }
-
-    THREAD_RUNTIME_ARRAY[runtime] = item;
-}
-
-ThreadRuntimeArray thread_runtime_commons;
-Spinlock thread_runtime_commons_lock;
-ThreadRuntimeArray local_thread_runtimes[KERNEL_MAX_HART_COUNT];
-
-u32 process_thread_create(u64 pid)
+// have thread group be zero if you don't have special intentions
+u32 process_thread_create(u64 pid, u32 thread_group)
 {
     assert(pid < KERNEL_PROCESS_ARRAY_LEN, "pid is within range");
     assert(KERNEL_PROCESS_ARRAY[pid]->mmu_table != 0, "pid refers to a valid process");
@@ -318,15 +289,109 @@ u32 process_thread_create(u64 pid)
     }
 
     // Now the thread has been created it has to be allocated a "runtime" so that it can be schedualed
-    ThreadRuntime runtime;
-    runtime.pid = pid;
-    runtime.tid = tid;
-    runtime.runtime = 0;
-    runtime.time_in_runqueue = 0;
-    runtime.state = THREAD_RUNTIME_INITIALIZED;
-    spinlock_acquire(&thread_runtime_commons_lock);
-    thread_runtime_array_add(&thread_runtime_commons, runtime);
-    spinlock_release(&thread_runtime_commons_lock);
+    rwlock_acquire_write(&THREAD_RUNTIME_ARRAY_LOCK);
+    u64 runtime = 0;
+    u8 has_runtime = 0;
+ 
+
+    for(u64 i = 0; i < THREAD_RUNTIME_ARRAY_LEN; i++)
+    {
+        ThreadRuntime* array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
+        if(!array[i].is_initialized)
+        {
+            runtime = i;
+            has_runtime = 1;
+        }
+    }
+    // We maybe must allocate a new runtime
+    if(!has_runtime)
+    {
+        if((THREAD_RUNTIME_ARRAY_LEN + 1) * sizeof(ThreadRuntime) >
+            THREAD_RUNTIME_ARRAY_ALLOC.page_count * PAGE_SIZE)
+        {
+            Kallocation new_alloc = kalloc_pages(THREAD_RUNTIME_ARRAY_ALLOC.page_count + 1);
+            for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
+            {
+                *(((u64*)new_alloc.memory) + i) =
+                        *(((u64*)THREAD_RUNTIME_ARRAY_ALLOC.memory) + i);
+            }
+            kfree_pages(THREAD_RUNTIME_ARRAY_ALLOC);
+            THREAD_RUNTIME_ARRAY_ALLOC = new_alloc;
+        }
+ 
+        runtime = THREAD_RUNTIME_ARRAY_LEN++;
+    }
+ 
+    ThreadRuntime* r = ((ThreadRuntime*)THREAD_RUNTIME_ARRAY_ALLOC.memory) + runtime;
+    spinlock_create(&r->lock);
+    r->pid = pid;
+    r->tid = tid;
+    r->thread_group = thread_group;
+    r->is_initialized = 1;
+    r->owning_hart.value = 0; // temp
+    r->allowed_width = KERNEL_HART_COUNT.value; // less temp
+
+    // now we must identify and log the thread group
+    {
+        u64 group_index;
+        u8 has_found_group = 0;
+        for(u64 i = 0; i < THREAD_GROUP_ARRAY_LEN; i++)
+        {
+            ThreadGroup* array = THREAD_GROUP_ARRAY_ALLOC.memory;
+            if(array[i].pid == r->pid && array[i].thread_group == r->thread_group)
+            {
+                group_index = i;
+                has_found_group = 1;
+            }
+        }
+
+        if(!has_found_group)
+        for(u64 i = 0; i < THREAD_GROUP_ARRAY_LEN; i++)
+        {
+            ThreadGroup* array = THREAD_GROUP_ARRAY_ALLOC.memory;
+            u64 is_counts = 0;
+            for(u64 j = 0; j < KERNEL_HART_COUNT.value; j++)
+            {
+                if(array[i].counts[j].value > 0)
+                { is_counts = 1; }
+            }
+            if(!is_counts)
+            {
+                group_index = i;
+                has_found_group = 1;
+            }
+        }
+
+        if(!has_found_group)
+        {
+            if((THREAD_GROUP_ARRAY_LEN+1)*sizeof(ThreadGroup) > THREAD_GROUP_ARRAY_ALLOC.page_count*PAGE_SIZE)
+            {
+                Kallocation new_alloc =
+                    kalloc_pages(((THREAD_GROUP_ARRAY_LEN+1)*sizeof(ThreadGroup)+PAGE_SIZE-1) / PAGE_SIZE);
+                ThreadGroup* new_array = new_alloc.memory;
+                ThreadGroup* old_array = THREAD_GROUP_ARRAY_ALLOC.memory;
+                for(u64 i = 0; i < THREAD_GROUP_ARRAY_LEN; i++)
+                { new_array[i] = old_array[i]; }
+                if(THREAD_GROUP_ARRAY_ALLOC.page_count)
+                { kfree_pages(THREAD_GROUP_ARRAY_ALLOC); }
+                THREAD_GROUP_ARRAY_ALLOC = new_alloc;
+            }
+            group_index = THREAD_GROUP_ARRAY_LEN++;
+            ThreadGroup* array = THREAD_GROUP_ARRAY_ALLOC.memory;
+            for(u64 j = 0; j < KERNEL_HART_COUNT.value; j++)
+            {
+                array[group_index].counts[j].value = 0;
+            }
+        }
+
+        ThreadGroup* array = THREAD_GROUP_ARRAY_ALLOC.memory;
+        array[group_index].pid = r->pid;
+        array[group_index].thread_group = r->thread_group;
+        atomic_s64_increment(&array[group_index].counts[r->owning_hart.value]);
+        r->thread_group_index = group_index;
+    }
+
+    rwlock_release_write(&THREAD_RUNTIME_ARRAY_LOCK);
 
     return tid;
 }
