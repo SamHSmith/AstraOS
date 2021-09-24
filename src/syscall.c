@@ -942,12 +942,13 @@ void syscall_surface_forward_to_consumer(Thread** current_thread, u64 hart)
     if(surface_slot < process->surface_count && slot->is_initialized &&
         consumer_slot < process->surface_consumer_count && con->is_initialized)
     {
-        u64 was_doing_this_already =
-            slot->is_defering_to_consumer_slot && slot->defer_consumer_slot == consumer_slot;
-        slot->is_defering_to_consumer_slot = 1;
-        slot->defer_consumer_slot = consumer_slot;
-        surface_slot_fire(process, surface_slot, !was_doing_this_already);
-        ret = 1;
+        if(!(slot->is_defering_to_consumer_slot && slot->defer_consumer_slot == consumer_slot))
+        {
+            slot->is_defering_to_consumer_slot = 1;
+            slot->defer_consumer_slot = consumer_slot;
+            surface_slot_fire(process, surface_slot, 1);
+            ret = 1;
+        }
     }
     frame->regs[10] = ret;
     t->program_counter += 4;
@@ -975,7 +976,7 @@ void syscall_surface_stop_forwarding_to_consumer(Thread** current_thread, u64 ha
  
     SurfaceSlot* slot = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot;
     u64 ret = 0;
-    if(surface_slot < process->surface_count && slot->is_initialized)
+    if(surface_slot < process->surface_count && slot->is_initialized && slot->is_defering_to_consumer_slot)
     {
         slot->is_defering_to_consumer_slot = 0;
         slot->has_commited = 0;
@@ -1461,7 +1462,7 @@ void syscall_thread_new(Thread** current_thread, u64 hart)
         return;
     }
 
-    u32 tid2 = process_thread_create(pid, user_thread_group);
+    u32 tid2 = process_thread_create(pid, user_thread_group, hart);
     process = KERNEL_PROCESS_ARRAY[pid];
     *current_thread = &process->threads[tid];
     t = *current_thread;
@@ -1993,7 +1994,7 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
 
     Process* ipfc_process = KERNEL_PROCESS_ARRAY[parent_pid];
 
-    u32 ipfc_tid = process_thread_create(parent_pid, 0); // This guy can move ipfc_process
+    u32 ipfc_tid = process_thread_create(parent_pid, 0, hart); // This guy can move ipfc_process
     ipfc_process =  KERNEL_PROCESS_ARRAY[parent_pid]; // be wary
     Thread* ipfc_thread = &ipfc_process->threads[ipfc_tid];
 

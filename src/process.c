@@ -230,7 +230,7 @@ u64 THREAD_GROUP_ARRAY_LEN;
 // uses the same lock as above
 
 // have thread group be zero if you don't have special intentions
-u32 process_thread_create(u64 pid, u32 thread_group)
+u32 process_thread_create(u64 pid, u32 thread_group, u64 hart)
 {
     assert(pid < KERNEL_PROCESS_ARRAY_LEN, "pid is within range");
     assert(KERNEL_PROCESS_ARRAY[pid]->mmu_table != 0, "pid refers to a valid process");
@@ -328,7 +328,7 @@ u32 process_thread_create(u64 pid, u32 thread_group)
     r->tid = tid;
     r->thread_group = thread_group;
     r->is_initialized = 1;
-    r->owning_hart.value = 0; // temp
+    r->owning_hart.value = hart;
     r->allowed_width = KERNEL_HART_COUNT.value; // less temp
 
     // now we must identify and log the thread group

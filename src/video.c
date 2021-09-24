@@ -10,8 +10,7 @@ typedef struct
 Framebuffer* framebuffer_create(u32 width, u32 height)
 {
     u64 byte_count = sizeof(Framebuffer) + (width*height*4*4);
-    byte_count += PAGE_SIZE - (byte_count % PAGE_SIZE);
-    Kallocation k = kalloc_pages(byte_count >> 12);
+    Kallocation k = kalloc_pages((byte_count + PAGE_SIZE - 1) / PAGE_SIZE);
     assert(k.memory != 0, "the allocation for the framebuffer was successful");
     Framebuffer* fb = (Framebuffer*)k.memory;
 
@@ -312,6 +311,7 @@ u64 surface_commit(u64 surface_slot, Process* process)
 
     s->fb_draw = temp;
     s->has_commited = 1;
+
     return 1;
 }
 // This function expects that you have a read lock on KERNEL_PROCESS_ARRAY_RWLOCK and
@@ -536,12 +536,12 @@ u64 surface_consumer_fire(Process* process, u64 consumer_slot)
     Process* process2 = KERNEL_PROCESS_ARRAY[ops[con->surface_pid].pid];
     rwlock_release_read(&process->process_lock);
     rwlock_acquire_write(&process2->process_lock);
-    SurfaceSlot* s = ((SurfaceSlot*)KERNEL_PROCESS_ARRAY[ops[con->surface_pid].pid]->surface_alloc.memory)
+    SurfaceSlot* s = ((SurfaceSlot*)process2->surface_alloc.memory)
                         + surface_slot;
 
     s->width = con->not_yet_fired_width;
     s->height = con->not_yet_fired_height;
-    surface_slot_fire(process2, con->surface_slot, 0);
+    surface_slot_fire(process2, surface_slot, 0);
 
     rwlock_release_write(&process2->process_lock);
     rwlock_acquire_read(&process->process_lock);

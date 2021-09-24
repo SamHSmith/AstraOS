@@ -87,7 +87,6 @@ Kallocation KERNEL_STACK_ALLOCS[KERNEL_MAX_HART_COUNT-1];
 Thread KERNEL_THREADS[KERNEL_MAX_HART_COUNT];
 
 
-
 /*
  * Debug
  */
@@ -416,7 +415,10 @@ u64 m_trap(
 
                         frame_has_been_requested = 0;
                     }
-                    surface_slot_fire(process, 0, 0);
+                    else
+                    {
+                        surface_slot_fire(process, 0, 0);
+                    }
                     rwlock_release_write(&process->process_lock);
                 }
 
@@ -457,18 +459,19 @@ u64 m_trap(
                 *mtime,
                 hart
             );
-            *mtimecmp = *mtime + (MACHINE_TIMER_SECOND / 1000);
 
             rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK); // todo change to read
 
             if(kernel_current_threads[hart] != 0)
             {
+                *mtimecmp = *mtime + (MACHINE_TIMER_SECOND / 200);
                 // Load thread
                 *frame = kernel_current_threads[hart]->frame;
                 return kernel_current_threads[hart]->program_counter;
             }
             else // Load kernel thread
             {
+                *mtimecmp = *mtime;
                 *frame = KERNEL_THREADS[hart].frame;
                 return KERNEL_THREADS[hart].program_counter;
             }

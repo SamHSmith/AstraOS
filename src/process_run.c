@@ -166,7 +166,7 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
         }
 
         {
-            u32 t = runtime_array[i].t_value++;
+            u32 t = ++runtime_array[i].t_value;
             if(thread_runtime_is_live(thread, new_mtime) && t > highest_t_value)
             {
                 highest_t_value = t;
@@ -245,7 +245,7 @@ void process_init()
 
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
 
-    u32 thread1 = process_thread_create(pid, 1);
+    u32 thread1 = process_thread_create(pid, 1, 0);
 
     Thread* tarr = KERNEL_PROCESS_ARRAY[pid]->threads;
 

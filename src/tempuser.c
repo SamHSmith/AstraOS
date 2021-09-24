@@ -11,6 +11,8 @@ typedef struct
 {
     s64 x;
     s64 y;
+    s64 new_x;
+    s64 new_y;
     u64 pid;
     u64 consumer;
     u64 width;
@@ -161,7 +163,6 @@ void render_function(u64 threadid, u64 total_threads)
             u64 start, end;
             {
                 s64 _start = windows[i].x + BORDER_SIZE;
-                if(_start < 0) { _start = 0; }
                 if(windows[i].width <= 2*BORDER_SIZE) { continue; }
                 if(windows[i].height <= 2*BORDER_SIZE) { continue; }
                 if((s64)y >= windows[i].y + (s64)windows[i].height - BORDER_SIZE) { continue; }
@@ -169,6 +170,7 @@ void render_function(u64 threadid, u64 total_threads)
                 if(_end > render_buffer->width) { _end = render_buffer->width; }
                 if((u64)(_end - _start) >= windows[i].fb->width)
                 { _end = _start + (s64)windows[i].fb->width - 1; }
+                if(_start < 0) { _start = 0; }
                 if(_end > windows[i].x + (s64)windows[i].width - 1 - BORDER_SIZE)
                 { _end = windows[i].x + (s64)windows[i].width - 1 - BORDER_SIZE; }
                 if(_end <= _start) { continue; }
@@ -572,8 +574,8 @@ while(1) {
                     is_resizing_window = 1;
                     start_resize_window_width = temp.width;
                     start_resize_window_height = temp.height;
-                    start_resize_window_x = temp.x;
-                    start_resize_window_y = temp.y;
+                    start_resize_window_x = temp.new_x;
+                    start_resize_window_y = temp.new_y;
                     start_resize_cursor_x = cursor_x;
                     start_resize_cursor_y = cursor_y;
                     resize_x_invert = temp.x + ((s64)temp.width / 2) > (s64)cursor_x;
@@ -659,6 +661,8 @@ while(1) {
                             windows[window_count].x = 20 + window_count*7;
                             windows[window_count].y = 49*window_count;
                             if(windows[window_count].y > 400) { windows[window_count].y = 400; }
+                            windows[window_count].new_x = windows[window_count].x;
+                            windows[window_count].new_y = windows[window_count].y;
                             windows[window_count].width = 0;
                             windows[window_count].height = 0;
                             windows[window_count].new_width = 64;
@@ -705,7 +709,7 @@ while(1) {
     {
         double time_frame_start = AOS_time_get_seconds();
 
-        // Fetch from consumers
+        // Fetch from consumers and setup
         {
             for(u64 i = 0; i < window_count; i++)
             {
@@ -722,8 +726,47 @@ while(1) {
                         windows[i].we_have_frame = 1;
                     }
                 }
-                else
-                { /*AOS_H_printf("frame has been dropped\n");*/ }
+                //else
+                //{ AOS_H_printf("frame has been dropped\n"); }
+
+                // do move, not related to consumers
+                if(is_moving_window && i + 1 == window_count)
+                {
+                    windows[i].new_x = (s64)(new_cursor_x - start_move_x);
+                    windows[i].new_y = (s64)(new_cursor_y - start_move_y);
+                }
+
+                // do resize, this is releated to consumers
+                if(is_resizing_window && i + 1 == window_count)
+                {
+                    s64 new_width = (s64)(new_cursor_x - start_resize_cursor_x);
+                    s64 new_height = (s64)(new_cursor_y - start_resize_cursor_y);
+                    if(resize_x_invert) {
+                        windows[i].new_x = start_resize_window_x + new_width;
+            if(windows[i].new_x > start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE)
+            { windows[i].new_x = start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE; }
+                        new_width *= -1;
+                    }
+                    if(resize_y_invert) {
+                        windows[i].new_y = start_resize_window_y + new_height;
+            if(windows[i].new_y > start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE)
+            { windows[i].new_y = start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE; }
+                        new_height *= -1;
+                    }
+                    new_width  += start_resize_window_width;
+                    new_height += start_resize_window_height;
+                    if(new_width < 2*BORDER_SIZE) { new_width = 2*BORDER_SIZE; }
+                    if(new_height < 2*BORDER_SIZE) { new_height = 2*BORDER_SIZE; }
+                    windows[i].new_width = (u64)new_width;
+                    windows[i].new_height = (u64)new_height;
+                }
+
+                AOS_surface_consumer_set_size(
+                    windows[i].consumer,
+                    windows[i].new_width  -2*BORDER_SIZE,
+                    windows[i].new_height -2*BORDER_SIZE
+                );
+                AOS_surface_consumer_fire(windows[i].consumer);
             }
         }
 
@@ -963,57 +1006,19 @@ while(1) {
         }
         assert(AOS_surface_commit(0), "commited successfully");
 
-        cursor_x = new_cursor_x;
-        cursor_y = new_cursor_y;
-
-        // Set up consumers
-        if(!is_fullscreen_mode)
+        // move windows and resize them
         {
             for(u64 i = 0; i < window_count; i++)
             {
-                // do move, not related to consumers
-                if(is_moving_window && i + 1 == window_count)
-                {
-                    windows[i].x = (s64)(cursor_x - start_move_x);
-                    windows[i].y = (s64)(cursor_y - start_move_y);
-                }
-
-                // do resize, this is releated to consumers
-                if(is_resizing_window && i + 1 == window_count)
-                {
-                    s64 new_width = (s64)(cursor_x - start_resize_cursor_x);
-                    s64 new_height = (s64)(cursor_y - start_resize_cursor_y);
-                    if(resize_x_invert) {
-                        windows[i].x = start_resize_window_x + new_width;
-            if(windows[i].x > start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE)
-            { windows[i].x = start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE; }
-                        new_width *= -1;
-                    }
-                    if(resize_y_invert) {
-                        windows[i].y = start_resize_window_y + new_height;
-            if(windows[i].y > start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE)
-            { windows[i].y = start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE; }
-                        new_height *= -1;
-                    }
-                    new_width  += start_resize_window_width;
-                    new_height += start_resize_window_height;
-                    if(new_width < 2*BORDER_SIZE) { new_width = 2*BORDER_SIZE; }
-                    if(new_height < 2*BORDER_SIZE) { new_height = 2*BORDER_SIZE; }
-                    windows[i].new_width = (u64)new_width;
-                    windows[i].new_height = (u64)new_height;
-                }
-
+                windows[i].x = windows[i].new_x;
+                windows[i].y = windows[i].new_y;
                 windows[i].width = windows[i].new_width;
                 windows[i].height = windows[i].new_height;
-
-                AOS_surface_consumer_set_size(
-                    windows[i].consumer,
-                    windows[i].width  -2*BORDER_SIZE,
-                    windows[i].height -2*BORDER_SIZE
-                );
-                AOS_surface_consumer_fire(windows[i].consumer);
             }
         }
+
+        cursor_x = new_cursor_x;
+        cursor_y = new_cursor_y;
     }
 }
 }
