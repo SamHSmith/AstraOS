@@ -17,36 +17,37 @@ PHDRS
 SECTIONS
 {
     .text : {
+    . = ALIGN(4096);
     PROVIDE(_text_start = .);
     *(.text.init) *(.text .text.*)
-    PROVIDE(_text_end = .);
-    BYTE(0xAA)
     } >ram AT>ram :text
+    . = ALIGN(4096);
+    PROVIDE(_text_end = .);
+
     PROVIDE(_global_pointer = .);
     .rodata : {
     . = ALIGN(4096);
     PROVIDE(_rodata_start = .);
     *(.rodata .rodata.*)
-    PROVIDE(_rodata_end = .);
-    BYTE(0xAA)
     } >ram AT>ram :text
+    . = ALIGN(4096);
+    PROVIDE(_rodata_end = .);
 
     .data : {
     . = ALIGN(4096);
     PROVIDE(_data_start = .);
     *(.sdata .sdata.*) *(.data .data.*)
-    PROVIDE(_data_end = .);
-    BYTE(0xAA)
     } >ram AT>ram :data
+    . = ALIGN(4096);
+    PROVIDE(_data_end = .);
 
     .bss :{
     . = ALIGN(4096);
     PROVIDE(_bss_start = .);
     *(.sbss .sbss.*) *(.bss .bss.*)
-    PROVIDE(_bss_end = .);
-    BYTE(0xAA)
     } >ram AT>ram :bss
     . = ALIGN(4096);
+    PROVIDE(_bss_end = .);
 
     PROVIDE(_memory_start = ORIGIN(ram));
     PROVIDE(_stack_start = .);
