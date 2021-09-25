@@ -42,7 +42,7 @@ else
 
 #do build
 
-if [ -z ${CC+x} ]; then CC=riscv64-unknown-elf-gcc; fi
+if [ -z ${RCC+x} ]; then RCC=riscv64-unknown-elf-gcc; fi
 
 mkdir -p bin
 
@@ -52,10 +52,10 @@ fsread/build.sh
 cp fsmake/bin/* bin
 cp fsread/bin/* bin
 
-$CC $CFLAGS -T virt.lds -o bin/kernel.bin $KERNEL_SOURCES
-$CC $CFLAGS -o bin/square $SQUARE_SOURCES
-$CC $CFLAGS -o bin/dave_terminal $DAVE_TERMINAL_SOURCES
-$CC $CFLAGS -o bin/vrms $VRMS_SOURCES
+$RCC $CFLAGS -T virt.lds -o bin/kernel.bin $KERNEL_SOURCES
+$RCC $CFLAGS -o bin/square $SQUARE_SOURCES
+$RCC $CFLAGS -o bin/dave_terminal $DAVE_TERMINAL_SOURCES
+$RCC $CFLAGS -o bin/vrms $VRMS_SOURCES
 
 mkdir -p disk_dir/partitions
 cp bin/square disk_dir/partitions/super_cool_square
