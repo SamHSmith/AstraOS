@@ -99,10 +99,14 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
         if((ph->flags & ELF_PROG_WRITE) != 0) { bits |= 4; }
         if((ph->flags & ELF_PROG_EXECUTE) !=0){ bits |= 8; }
 
-        Kallocation section_alloc = kalloc_pages((ph->memsz + PAGE_SIZE-1) / PAGE_SIZE);
-        memcpy(section_alloc.memory, ((u64)header) + ph->off, ph->filesz);
-        memset(section_alloc.memory + ph->filesz, 0, ph->memsz - ph->filesz);
-        mmu_map_kallocation(proc->mmu_table, section_alloc, ph->paddr, bits);
+        u64 virtual_start = ph->paddr & (~0xfff);
+        u64 virtual_paddr = ph->paddr - virtual_start;
+        u64 virtual_size =  ph->paddr + ph->memsz - virtual_start;
+
+        Kallocation section_alloc = kalloc_pages((virtual_size + PAGE_SIZE - 1) / PAGE_SIZE);
+        memset(section_alloc.memory, 0, section_alloc.page_count * PAGE_SIZE);
+        memcpy(section_alloc.memory + virtual_paddr, ((u64)header) + ph->off, ph->filesz);
+        mmu_map_kallocation(proc->mmu_table, section_alloc, virtual_start, bits);
 
         if((process->allocations_count + 1) * sizeof(Kallocation) > process->allocations_alloc.page_count * PAGE_SIZE)
         {
