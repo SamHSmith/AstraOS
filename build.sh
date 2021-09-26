@@ -14,11 +14,11 @@ CFLAGS="$CFLAGS -g -Isrc/cyclone_crypto -Isrc/cyclone_crypto/common"
 CFLAGS="$CFLAGS $(cat always_to_be_used_compiler_flags)"
 #echo $CFLAGS
 
-KERNEL_SOURCES="src/*.s src/kernel.c src/printf.c src/cyclone_crypto/hash/sha512.c src/cyclone_crypto/common/cpu_endian.c userland/aos_syscalls.s common/spinlock.s common/atomics.s"
+KERNEL_SOURCES="src/*.s src/kernel.c src/printf.c src/cyclone_crypto/hash/sha512.c src/cyclone_crypto/common/cpu_endian.c userland/aos_syscalls.s common/spinlock.s common/atomics.s common/stacktrace.s"
 
 SQUARE_SOURCES="square_src/elf.c userland/aos_syscalls.s"
 
-DAVE_TERMINAL_SOURCES="dave_terminal/dave.c userland/aos_syscalls.s"
+DAVE_TERMINAL_SOURCES="dave_terminal/dave.c userland/aos_syscalls.s common/spinlock.s"
 
 VRMS_SOURCES="vrms/vrms.c userland/aos_syscalls.s"
 

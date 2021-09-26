@@ -430,6 +430,11 @@ void process_destroy(Process* process)
         rwlock_release_write(&process->process_lock);
         return;
     }
+    // individually locking on processes was way to scary
+    // instead we lock globally and go about our business.
+    rwlock_release_write(&process->process_lock);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 
     u64* parents = process->parent_alloc.memory;
     for(u64 i = 0; i < process->parent_count; i++)
@@ -441,6 +446,10 @@ void process_destroy(Process* process)
         OwnedProcess* ops = pa->owned_process_alloc.memory;
         ops[owned_index].is_alive = 0;
     }
+
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_acquire_write(&process->process_lock);
 
     mmu_unmap_table(process->mmu_table);
     kfree_single_page(process->mmu_table);

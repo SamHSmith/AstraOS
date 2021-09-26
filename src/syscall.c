@@ -47,7 +47,8 @@ void syscall_surface_acquire(volatile Thread** current_thread, u64 hart)
         wait_time_times[hart] += 1;
     }
     TrapFrame* frame = &(*current_thread)->frame;
-    Process* process = KERNEL_PROCESS_ARRAY[(*current_thread)->process_pid];
+    Thread* t = *current_thread;
+    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
     rwlock_acquire_write(&process->process_lock);
 
     u64 surface_slot = frame->regs[11];
@@ -1596,7 +1597,7 @@ void syscall_process_exit(Thread** current_thread, u64 hart, u64 mtime)
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
         volatile u64* mtime = (u64*)0x0200bff8;
         u64 start_wait = *mtime;
-        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         u64 end_wait = *mtime;
 
         wait_time_acc[hart] += end_wait - start_wait;
@@ -1606,10 +1607,12 @@ void syscall_process_exit(Thread** current_thread, u64 hart, u64 mtime)
     u64 pid = t->process_pid;
     Process* process = KERNEL_PROCESS_ARRAY[pid];
 
+    rwlock_acquire_write(&process->process_lock);
     process_flag_all_threads_for_destruction(process);
+    rwlock_release_write(&process->process_lock);
 
     kernel_choose_new_thread(current_thread, mtime, hart);
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void syscall_process_is_alive(Thread** current_thread, u64 hart)

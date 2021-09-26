@@ -29,6 +29,7 @@ void _start()
         if(AOS_IPFC_init_session(name, name_len, &ega_session_id))
         {
             is_running_as_ega = 1;
+            AOS_IPFC_call(ega_session_id, 1, 0, 0); // show ega
         }
     }
 

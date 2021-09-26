@@ -321,7 +321,6 @@ void trap_hang_kernel(
     printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
     printf("Kernel has hung.\n");
     u64 ptr = frame->regs[8];
-    u64 r = mmu_virt_to_phys(frame->satp << 12, ptr, (u64*)&ptr);
     print_stacktrace(ptr, epc, frame->regs[1]);
     while(1) {}
 }

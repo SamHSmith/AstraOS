@@ -2,6 +2,7 @@
 #include "../userland/aos_helper.h"
 
 #include "../common/maths.h"
+#include "../common/spinlock.h"
 
 #include "font8_16.h"
 #include "sv_qwerty.h"
@@ -27,16 +28,47 @@ u64 partition_name_lens[MAX_PARTITION_COUNT];
 u16 process_surfaces[1024/sizeof(u16)];
 u64 process_surface_count = 0;
 
+u64 process_is_running = 0;
+u64 process_pid;
+u64 process_stdin;
+u64 process_stdout;
+u64 consumer_handle;
+u8 has_consumer = 0;
+u8 surface_visible = 0;
+Spinlock surface_visible_lock;
+u8 show_console = 0;
+
 const char* EGA_IPFC_API_NAME = "embedded_gui_application_ipfc_api_v1";
 // f1 is get surfaces
+// f2 is show
+// f3 is hide
 void embedded_gui_application_ipfc_api_entry(u64 source_pid, u16 function_index, void* static_data_1024b)
 {
+    // this enables the use of global variables
+    __asm__(".option norelax");
+    __asm__("la gp, __global_pointer$");
+    __asm__(".option relax");
+
     if(function_index == 0)
     {
         u16* copy_to = static_data_1024b;
         for(u64 i = 0; i < 1024/sizeof(u16) && i < process_surface_count; i++)
         { copy_to[i] = process_surfaces[i]; }
         AOS_IPFC_return(process_surface_count);
+    }
+    else if(function_index == 1)
+    {
+        spinlock_acquire(&surface_visible_lock);
+        surface_visible = 1;
+        spinlock_release(&surface_visible_lock);
+        AOS_IPFC_return(0);
+    }
+    else if(function_index == 2)
+    {
+        spinlock_acquire(&surface_visible_lock);
+        surface_visible = 0;
+        spinlock_release(&surface_visible_lock);
+        AOS_IPFC_return(0);
     }
     AOS_IPFC_return(0);
 }
@@ -50,6 +82,7 @@ void _start()
 
     AOS_H_printf("Welcome to dave's terminal, not-emulator\n");
 
+    spinlock_create(&surface_visible_lock);
     // setting up ega interface
     {
         u64 handler_name_len = strlen(EGA_IPFC_API_NAME);
@@ -76,15 +109,6 @@ void _start()
         AOS_H_printf("dave's terminal loader has found %.*s\n", partition_name_lens[i], partition_names[i]);
     }
 
-    u64 process_is_running = 0;
-    u64 process_pid;
-    u64 process_stdin;
-    u64 process_stdout;
-    u64 consumer_handle;
-    u8 has_consumer = 0;
-    u8 surface_visible = 1;
-    u8 show_console = 0;
-
     u8* text_buffer = 0x30405000;
     AOS_alloc_pages(text_buffer, 10);
     u64 text_len = 0;
@@ -98,12 +122,15 @@ void _start()
     AOS_alloc_pages(pre_send_to_stdin, 1);
     u64 pre_send_to_stdin_len = 0;
 
+    spinlock_acquire(&surface_visible_lock);
     while(1)
     {
+        spinlock_release(&surface_visible_lock);
         u64 surface_handle = 0;
         AOS_thread_awake_on_surface(&surface_handle, 1);
         AOS_thread_awake_after_time(100000);
         AOS_thread_sleep();
+        spinlock_acquire(&surface_visible_lock);
 
         if(process_is_running && !AOS_process_is_alive(process_pid))
         {
@@ -120,11 +147,12 @@ void _start()
         if(!process_is_running)
         {
             show_console = 0;
+            surface_visible = 0;
         }
 
         {
             if(!has_consumer)
-            { surface_visible = 1; }
+            { surface_visible = 0; }
 
             if(show_console)
             { AOS_surface_stop_forwarding_to_consumer(surface_handle); }
