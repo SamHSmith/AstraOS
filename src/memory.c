@@ -278,11 +278,11 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
 
 void mmu_kernel_map_range(u64* root, void* start, void* end, u64 bits)
 {
-    u64 memaddr = ((u64)start) & ~(PAGE_SIZE - 1);
-    u64 num_kb_pages = (u64)end;
-    num_kb_pages += PAGE_SIZE - (num_kb_pages % PAGE_SIZE);
-    num_kb_pages = (num_kb_pages - memaddr) / PAGE_SIZE;
+    assert((u64)start % PAGE_SIZE == 0, "map range start is page aligned");
+    assert((u64)end % PAGE_SIZE == 0, "map range end is page aligned");
+    u64 num_kb_pages = ((u64)end - (u64)start) / PAGE_SIZE;
  
+    u64 memaddr = start;
     for(u64 i = 0; i < num_kb_pages; i++)
     {
         mmu_map(root, memaddr, memaddr, bits, 0);
@@ -399,14 +399,14 @@ u64* mem_init()
     mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
 
     //Map the uart
-    mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
+    mmu_kernel_map_range(table, 0x10000000, 0x10001000, 2 + 4);
 
     //Map the clint
-    mmu_kernel_map_range(table, 0x02000000, 0x0200ffff, 2 + 4);
+    mmu_kernel_map_range(table, 0x2000000, 0x2010000, 2 + 4);
 
     //Map the plic
-    mmu_kernel_map_range(table, (u64*)0x0c000000, (u64*)0x0c002001, 2 + 4);
-    mmu_kernel_map_range(table, (u64*)0x0c200000, (u64*)0x0c208001, 2 + 4);
+    mmu_kernel_map_range(table, (u64*)0x0c000000, (u64*)0x0c003000, 2 + 4);
+    mmu_kernel_map_range(table, (u64*)0x0c200000, (u64*)0x0c209000, 2 + 4);
 
     return table;
 }
