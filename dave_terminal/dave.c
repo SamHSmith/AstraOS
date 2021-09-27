@@ -110,7 +110,7 @@ void _start()
     }
 
     u8* text_buffer = 0x30405000;
-    AOS_alloc_pages(text_buffer, 10);
+    AOS_alloc_pages(text_buffer, 12);
     u64 text_len = 0;
 
     text_buffer[text_len + 0] = ')';
@@ -479,6 +479,8 @@ void _start()
                 line_index--;
             }
 
+            new_zero -= 2*4096;
+            if(new_zero < 0) { new_zero = 0; }
             if(new_zero + 3 > text_len) { new_zero = text_len - 3; }
             for(u64 i = 0; i < text_len - new_zero; i++)
             {
