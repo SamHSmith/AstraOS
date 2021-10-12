@@ -386,14 +386,18 @@ void _start()
             u64 row_count = (fb->height / 16) + 1;
             u64 text_offset = 16 - (fb->height % 16);
 
+            u64 practical_column_count = 1;
+            if(column_count > practical_column_count) { practical_column_count = column_count; }
+
             f64 time_frame_start = AOS_time_get_seconds();
             f64 when_in_second_frame_start = modulo(time_frame_start, 1.0);
 
-            u8 draw_text_buffer[row_count * column_count];
-            s64 draw_text_buffer_index = (s64)(row_count * column_count);
+            u8 draw_text_buffer[row_count * practical_column_count];
+            s64 draw_text_buffer_index = (s64)(row_count * practical_column_count);
 
             TextLine lines[row_count];
             s64 line_index = (s64)row_count - 1;
+            u8 should_create_new_line = 0;
             s64 current_chunk_start = line_index;
             lines[line_index].start_index = draw_text_buffer_index;
             lines[line_index].end_index = draw_text_buffer_index - 1;
@@ -419,7 +423,7 @@ void _start()
                         if(current_chunk_start > line_index)
                         {
                             s64 line_length = lines[line_index].end_index + 1 - lines[line_index].start_index;
-                            s64 shift_amount = column_count - line_length;
+                            s64 shift_amount = practical_column_count - line_length;
                             lines[line_index].end_index += shift_amount;
                             for(s64 r = line_index+1; r < current_chunk_start; r++)
                             {
@@ -442,6 +446,14 @@ void _start()
                     continue;
                 }
 
+                if(should_create_new_line)
+                {
+                    line_index--;
+                    lines[line_index].start_index = draw_text_buffer_index;
+                    lines[line_index].end_index = draw_text_buffer_index - 1;
+                    should_create_new_line = 0;
+                }
+
                 draw_text_buffer_index--;
                 if(draw_text_buffer_index < 0)
                 {
@@ -451,13 +463,11 @@ void _start()
                 draw_text_buffer[draw_text_buffer_index] = text_buffer[i];
 
                 lines[line_index].start_index = draw_text_buffer_index;
-                if(lines[line_index].end_index + 1 - lines[line_index].start_index > column_count)
+                if(lines[line_index].end_index - lines[line_index].start_index + 1 >= practical_column_count)
                 {
                     if(line_index > 0)
                     {
-                        line_index--;
-                        lines[line_index].start_index = draw_text_buffer_index;
-                        lines[line_index].end_index = draw_text_buffer_index - 1;
+                        should_create_new_line = 1;
                     }
                     else
                     {
@@ -469,8 +479,8 @@ void _start()
             text_len--; // remove cursor
             if(current_chunk_start > line_index)
             {
-                s64 line_length = lines[line_index].end_index + 1 - lines[line_index].start_index;
-                s64 shift_amount = column_count - line_length;
+                s64 line_length = lines[line_index].end_index - lines[line_index].start_index + 1;
+                s64 shift_amount = practical_column_count - line_length;
                 lines[line_index].end_index += shift_amount;
                 for(s64 r = line_index+1; r < current_chunk_start; r++)
                 {
@@ -509,7 +519,7 @@ void _start()
                     u64 column = x/8;
                     u64 row = (y + text_offset)/16;
                     s64 line_length = lines[row].end_index + 1 - lines[row].start_index;
-                    if(column >= column_count || row >= row_count ||
+                    if(column >= practical_column_count || row >= row_count ||
                         (s64)column >= line_length)
                     { continue; }
                     {
