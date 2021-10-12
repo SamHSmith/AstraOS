@@ -513,8 +513,8 @@ while(1) {
         mouse_event_count = AOS_get_rawmouse_events(mouse_events, mouse_event_count);
         for(u64 i = 0; i < mouse_event_count; i++)
         {
-            new_cursor_x += mouse_events[i].delta_x;
-            new_cursor_y += mouse_events[i].delta_y;
+            new_cursor_x += mouse_events[i].delta_x / 2.0;
+            new_cursor_y += mouse_events[i].delta_y / 2.0;
 
             if(mouse_events[i].pressed && mouse_events[i].button == 0 && !is_resizing_window)
             {
