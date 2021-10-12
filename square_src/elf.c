@@ -113,6 +113,18 @@ while(1)
 
         delta_time = 1.0 / 60.0;
 
+        // unsquishing the square
+        f64 x_scale = 1.0;
+        f64 y_scale = 1.0;
+        if(fb->height > fb->width)
+        {
+            y_scale = (f64)fb->height / (f64)fb->width;
+        }
+        else
+        {
+            x_scale = (f64)fb->width / (f64)fb->height;
+        }
+
         { // Keyboard events
             u64 kbd_event_count = AOS_get_keyboard_events(0, 0);
             AOS_KeyboardEvent kbd_events[kbd_event_count];
@@ -191,8 +203,8 @@ while(1)
             {
                 u64 i = x + y * fb->width;
 
-                f32 e1 = (pfx-square_x) * d1y - (pfy+square_y) * d1x;
-                f32 e2 = (pfx-square_x) * d2y - (pfy+square_y) * d2x;
+                f32 e1 = (pfx-square_x) * d1y * x_scale - (pfy+square_y) * d1x * y_scale;
+                f32 e2 = (pfx-square_x) * d2y * x_scale - (pfy+square_y) * d2x * y_scale;
 
                 if(
                 e1 <  0.125 &&
