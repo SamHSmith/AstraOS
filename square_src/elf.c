@@ -78,7 +78,10 @@ while(1)
     u16 surface_count = 1;
     if(is_running_as_ega)
     {
+        f64 sec_before_call = AOS_time_get_seconds();
         surface_count = AOS_IPFC_call(ega_session_id, 0, 0, surfaces);
+        f64 sec_after_call = AOS_time_get_seconds();
+        AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
     }
 
     AOS_thread_awake_on_surface(&surfaces, surface_count);
@@ -107,6 +110,8 @@ while(1)
         f64 frame_start = AOS_time_get_seconds();
         f64 delta_time = frame_start - last_frame_time;
         last_frame_time = frame_start;
+
+        delta_time = 1.0 / 60.0;
 
         { // Keyboard events
             u64 kbd_event_count = AOS_get_keyboard_events(0, 0);
@@ -229,7 +234,7 @@ while(1)
         }
         AOS_surface_commit(surfaces[0]);
         f64 frame_end = AOS_time_get_seconds();
-        //AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
+        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
     }
 }
 }

@@ -1,4 +1,4 @@
-#define SCHEDUALER_SHUFFLE_CHANCE_INVERSE 8
+#define SCHEDUALER_SHUFFLE_CHANCE_INVERSE 32
 
 
 u64 thread_runtime_is_live(Thread* t, u64 mtime)
@@ -104,9 +104,14 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
         if(thread->IPFC_status == 2) // thread is awaiting IPFC stack
         {
             try_assign_ipfc_stack(KERNEL_PROCESS_ARRAY[runtime_array[i].pid], thread);
+        }
+        if(thread->IPFC_status == 2) // thread is *still* awaiting IPFC stack
+        {
             spinlock_release(&runtime_array[i].lock);
             continue;
         }
+
+        u8 thread_live = thread_runtime_is_live(thread, new_mtime);
 
         // try punt thread to other hart
         {
@@ -141,7 +146,7 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
 
             // should I try shuffle?
             u64 random_number = xoshiro256ss(&kernel_choose_new_thread_rando_state[hart]);
-            if(random_number < U64_MAX / SCHEDUALER_SHUFFLE_CHANCE_INVERSE)
+            if((!thread_live || !runtime_array[i].t_value) && random_number < U64_MAX / SCHEDUALER_SHUFFLE_CHANCE_INVERSE)
             {
                 u64 send_hart = random_number % (u64)KERNEL_HART_COUNT.value;
                 u64 me_count = atomic_s64_read(&group->counts[hart]);
@@ -167,7 +172,7 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
 
         {
             u32 t = ++runtime_array[i].t_value;
-            if(thread_runtime_is_live(thread, new_mtime) && t > highest_t_value)
+            if(thread_live && t > highest_t_value)
             {
                 highest_t_value = t;
 
@@ -245,7 +250,7 @@ void process_init()
 
     mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
 
-    u32 thread1 = process_thread_create(pid, 1, 0);
+    u32 thread1 = process_thread_create(pid, 1, 0, 0);
 
     Thread* tarr = KERNEL_PROCESS_ARRAY[pid]->threads;
 

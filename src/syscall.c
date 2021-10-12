@@ -1463,7 +1463,7 @@ void syscall_thread_new(Thread** current_thread, u64 hart)
         return;
     }
 
-    u32 tid2 = process_thread_create(pid, user_thread_group, hart);
+    u32 tid2 = process_thread_create(pid, user_thread_group, hart, 0);
     process = KERNEL_PROCESS_ARRAY[pid];
     *current_thread = &process->threads[tid];
     t = *current_thread;
@@ -1997,8 +1997,10 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
 
     Process* ipfc_process = KERNEL_PROCESS_ARRAY[parent_pid];
 
-    u32 ipfc_tid = process_thread_create(parent_pid, 0, hart); // This guy can move ipfc_process
-    ipfc_process =  KERNEL_PROCESS_ARRAY[parent_pid]; // be wary
+    // In order to jump directly into the ipfc thread if there is space for it
+    // we must put it at the front of the round robin.
+    u32 ipfc_tid = process_thread_create(parent_pid, 0, hart, S32_MAX); // This guy can move ipfc_process
+    ipfc_process =  KERNEL_PROCESS_ARRAY[parent_pid];                   //  be wary.
     Thread* ipfc_thread = &ipfc_process->threads[ipfc_tid];
 
     ipfc_thread->IPFC_status = 2;

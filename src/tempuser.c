@@ -615,17 +615,6 @@ while(1) {
                         /*ctrl*/ kbd_events[i].current_state.keys_down[0] & (1 << 5) &&
                         window_count)
                     {
-                        if(AOS_surface_stop_forwarding_to_consumer(0))
-                        { is_fullscreen_mode = 0; }
-                    }
-                    else if(scancode == 100 && slot_index > 0)
-                    { slot_index--; }
-                    else if(scancode == 101 && slot_index + 1 < slot_count)
-                    { slot_index++; }
-                    else if(scancode == 39 &&
-                        /*ctrl*/ kbd_events[i].current_state.keys_down[0] & (1 << 5) &&
-                        window_count)
-                    {
                         if(!is_fullscreen_mode)
                         {
                             if(AOS_surface_forward_to_consumer(0, windows[window_count-1].consumer))
@@ -635,7 +624,13 @@ while(1) {
                                 is_resizing_window = 0;
                             }
                         }
+                        else if(AOS_surface_stop_forwarding_to_consumer(0))
+                        { is_fullscreen_mode = 0; }
                     }
+                    else if(scancode == 100 && slot_index > 0)
+                    { slot_index--; }
+                    else if(scancode == 101 && slot_index + 1 < slot_count)
+                    { slot_index++; }
                     else if(scancode == 35 && slot_index < slot_count)
                     {
                         for(u64 i = 0; window_count + 1 < 84 && i < 1; i++)
@@ -724,8 +719,8 @@ while(1) {
                         windows[i].we_have_frame = 1;
                     }
                 }
-                //else
-                //{ AOS_H_printf("frame has been dropped\n"); }
+                else
+                { AOS_H_printf("frame has been dropped\n"); }
 
                 // do move, not related to consumers
                 if(is_moving_window && i + 1 == window_count)
