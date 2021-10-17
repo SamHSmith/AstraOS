@@ -1,5 +1,5 @@
 
-void syscall_surface_commit(Thread** current_thread, u64 hart)
+void syscall_surface_commit(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -11,8 +11,10 @@ void syscall_surface_commit(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    TrapFrame* frame = &(*current_thread)->frame;
-    Process* process = KERNEL_PROCESS_ARRAY[(*current_thread)->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
 
     u64 surface_slot = frame->regs[11];
@@ -22,7 +24,7 @@ void syscall_surface_commit(Thread** current_thread, u64 hart)
         "surface_commit: the surface slot contains to a valid surface");
 
     frame->regs[10] = surface_commit(surface_slot, process);
-    (*current_thread)->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
@@ -34,7 +36,7 @@ void syscall_surface_commit(Thread** current_thread, u64 hart)
     fb must be a 4096 byte aligned pointer, page_count must be
     the page_count required for this acquire.
 */
-void syscall_surface_acquire(volatile Thread** current_thread, u64 hart)
+void syscall_surface_acquire(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -46,9 +48,10 @@ void syscall_surface_acquire(volatile Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    TrapFrame* frame = &(*current_thread)->frame;
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
 
     u64 surface_slot = frame->regs[11];
@@ -72,34 +75,35 @@ void syscall_surface_acquire(volatile Thread** current_thread, u64 hart)
         }
     }
     frame->regs[10] = ret;
-    (*current_thread)->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_thread_awake_after_time(Thread** current_thread, u64 hart, u64 mtime)
+void syscall_thread_awake_after_time(u64 hart, u64 mtime)
 {
-    TrapFrame* frame = &(*current_thread)->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
     u64 sleep_time = frame->regs[11];
-    Thread* t = *current_thread;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
-    if(t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
+    if(current_thread->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
     {
         frame->regs[10] = 0;
         return;
     }
 
-    u64 awake_index = t->awake_count;
-    t->awake_count++;
+    u64 awake_index = current_thread->awake_count;
+    current_thread->awake_count++;
 
-    t->awakes[awake_index].awake_type = THREAD_AWAKE_TIME;
-    t->awakes[awake_index].awake_time = sleep_time + mtime;
+    current_thread->awakes[awake_index].awake_type = THREAD_AWAKE_TIME;
+    current_thread->awakes[awake_index].awake_time = sleep_time + mtime;
 
     frame->regs[10] = 1;
 }
 
-void syscall_thread_awake_on_surface(Thread** current_thread, u64 hart, u64 mtime)
+void syscall_thread_awake_on_surface(u64 hart, u64 mtime)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -111,15 +115,17 @@ void syscall_thread_awake_on_surface(Thread** current_thread, u64 hart, u64 mtim
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_read(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_surface_slots = frame->regs[11];
     u64 count = frame->regs[12];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
-    if(count == 0 || t->awake_count + count > THREAD_MAX_AWAKE_COUNT)
+    if(count == 0 || current_thread->awake_count + count > THREAD_MAX_AWAKE_COUNT)
     {
         frame->regs[10] = 0;
         rwlock_release_read(&process->process_lock);
@@ -168,19 +174,19 @@ void syscall_thread_awake_on_surface(Thread** current_thread, u64 hart, u64 mtim
         return;
     }
 
-    u64 awake_index = t->awake_count;
-    t->awake_count += surface_slot_count;
+    u64 awake_index = current_thread->awake_count;
+    current_thread->awake_count += surface_slot_count;
     for(u64 i = 0; i < surface_slot_count; i++)
     {
-        t->awakes[awake_index + i].awake_type = THREAD_AWAKE_SURFACE;
-        t->awakes[awake_index + i].surface_slot = surface_slot_array[i];
+        current_thread->awakes[awake_index + i].awake_type = THREAD_AWAKE_SURFACE;
+        current_thread->awakes[awake_index + i].surface_slot = surface_slot_array[i];
     }
     frame->regs[10] = 1;
     rwlock_release_read(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_thread_sleep(Thread** current_thread, u64 hart, u64 mtime)
+void syscall_thread_sleep(u64 hart, u64 mtime)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -192,12 +198,13 @@ void syscall_thread_sleep(Thread** current_thread, u64 hart, u64 mtime)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    TrapFrame* frame = &t->frame;
-    t->program_counter += 4;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+    current_thread->program_counter += 4;
 
-    t->is_running = t->awake_count == 0;
-    if(thread_runtime_is_live(t, mtime))
+    current_thread->is_running = current_thread->awake_count == 0;
+    if(thread_runtime_is_live(current_thread, mtime))
     {
         frame->regs[10] = 0;
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
@@ -205,51 +212,53 @@ void syscall_thread_sleep(Thread** current_thread, u64 hart, u64 mtime)
     }
     // go to sleep
     frame->regs[10] = 1;
-    kernel_choose_new_thread(current_thread, mtime, hart);
+    kernel_choose_new_thread(mtime, hart);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_thread_awake_on_keyboard(Thread** current_thread, u64 hart)
+void syscall_thread_awake_on_keyboard(u64 hart)
 {
-    Thread* t = *current_thread;
-    TrapFrame* frame = &t->frame;
-    t->program_counter += 4;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+    current_thread->program_counter += 4;
 
-    if(t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
+    if(current_thread->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
     {
         frame->regs[10] = 0;
         return;
     }
 
-    u64 awake_index = t->awake_count;
-    t->awake_count++;
+    u64 awake_index = current_thread->awake_count;
+    current_thread->awake_count++;
 
-    t->awakes[awake_index].awake_type = THREAD_AWAKE_KEYBOARD;
+    current_thread->awakes[awake_index].awake_type = THREAD_AWAKE_KEYBOARD;
 
     frame->regs[10] = 1;
 }
 
-void syscall_thread_awake_on_mouse(Thread** current_thread, u64 hart)
+void syscall_thread_awake_on_mouse(u64 hart)
 {
-    Thread* t = *current_thread;
-    TrapFrame* frame = &t->frame;
-    t->program_counter += 4;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+    current_thread->program_counter += 4;
 
-    if(t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
+    if(current_thread->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
     {
         frame->regs[10] = 0;
         return;
     }
 
-    u64 awake_index = t->awake_count;
-    t->awake_count++;
+    u64 awake_index = current_thread->awake_count;
+    current_thread->awake_count++;
 
-    t->awakes[awake_index].awake_type = THREAD_AWAKE_MOUSE;
+    current_thread->awakes[awake_index].awake_type = THREAD_AWAKE_MOUSE;
 
     frame->regs[10] = 1;
 }
 
-void syscall_thread_awake_on_semaphore(Thread** current_thread, u64 hart)
+void syscall_thread_awake_on_semaphore(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -261,33 +270,33 @@ void syscall_thread_awake_on_semaphore(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
     u64 user_semaphore = frame->regs[11];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     ProcessSemaphore* semaphores = process->semaphore_alloc.memory;
     if(user_semaphore >= process->semaphore_count ||
        !semaphores[user_semaphore].is_initialized ||
-        t->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
+        current_thread->awake_count + 1 > THREAD_MAX_AWAKE_COUNT)
     {
         frame->regs[10] = 0;
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
 
-    u64 awake_index = t->awake_count;
-    t->awake_count++;
+    u64 awake_index = current_thread->awake_count;
+    current_thread->awake_count++;
 
-    t->awakes[awake_index].awake_type = THREAD_AWAKE_SEMAPHORE;
-    t->awakes[awake_index].semaphore = user_semaphore;
+    current_thread->awakes[awake_index].awake_type = THREAD_AWAKE_SEMAPHORE;
+    current_thread->awakes[awake_index].semaphore = user_semaphore;
 
     frame->regs[10] = 1;
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_get_rawmouse_events(Thread** current_thread, u64 hart)
+void syscall_get_rawmouse_events(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -299,9 +308,9 @@ void syscall_get_rawmouse_events(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    TrapFrame* frame = &t->frame;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
     rwlock_acquire_write(&process->process_lock);
 
     u64 user_buf = frame->regs[11];
@@ -315,7 +324,7 @@ void syscall_get_rawmouse_events(Thread** current_thread, u64 hart)
         if(mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf))
         {
             frame->regs[10] = 0;
-            t->program_counter += 4;
+            current_thread->program_counter += 4;
             rwlock_release_write(&process->process_lock);
             rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
             return;
@@ -339,12 +348,12 @@ void syscall_get_rawmouse_events(Thread** current_thread, u64 hart)
         frame->regs[10] = process->mouse_event_queue.event_count;
     }
 
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_get_keyboard_events(Thread** current_thread, u64 hart)
+void syscall_get_keyboard_events(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -356,9 +365,9 @@ void syscall_get_keyboard_events(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    TrapFrame* frame = &t->frame;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
     rwlock_acquire_write(&process->process_lock);
 
     u64 user_buf = frame->regs[11];
@@ -382,22 +391,33 @@ void syscall_get_keyboard_events(Thread** current_thread, u64 hart)
         len = process->kbd_event_queue.count;
     }
     frame->regs[10] = len;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_switch_vo(Thread** current_thread, u64 hart)
+void syscall_switch_vo(u64 hart)
 {
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
     spinlock_acquire(&KERNEL_SPINLOCK);
 
-    Thread* t = *current_thread;
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
 
     u64 new_vo = frame->regs[11];
     u64 ret = 0;
 
-    if(vos[current_vo].pid != t->process_pid)
+    if(vos[current_vo].pid != current_thread->process_pid)
     {
         ret = 1; // failed, not authorized
     }
@@ -411,8 +431,10 @@ void syscall_switch_vo(Thread** current_thread, u64 hart)
         current_vo = new_vo;
     }
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
+
     spinlock_release(&KERNEL_SPINLOCK);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 /*
@@ -422,37 +444,7 @@ void syscall_switch_vo(Thread** current_thread, u64 hart)
     if not
         the function will return false
 */
-void syscall_get_vo_id(Thread** current_thread, u64 hart)
-{
-    spinlock_acquire(&KERNEL_SPINLOCK);
-    Thread* t = *current_thread;
-    TrapFrame* frame = &t->frame;
-
-    u64 ret = 0;
-    u64 vo_id = 0;
-    for(u64 i = 0; i < VO_COUNT; i++)
-    {
-        if(vos[i].is_active && vos[i].pid == t->process_pid)
-        { ret = 1; vo_id = i; }
-    }
-
-    u64 user_vo_id_ptr = frame->regs[11];
-    if(ret && user_vo_id_ptr != 0)
-    {
-        Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
-        u64* ptr;
-        assert(
-            mmu_virt_to_phys(process->mmu_table, user_vo_id_ptr, (u64*)&ptr) == 0,
-            "you didn't do a memory bad"
-        );
-        *ptr = vo_id;
-    }
-    frame->regs[10] = ret;
-    t->program_counter += 4;
-    spinlock_release(&KERNEL_SPINLOCK);
-}
-
-void syscall_alloc_pages(Thread** current_thread, u64 hart)
+void syscall_get_vo_id(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -464,10 +456,51 @@ void syscall_alloc_pages(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    spinlock_acquire(&KERNEL_SPINLOCK);
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 ret = 0;
+    u64 vo_id = 0;
+    for(u64 i = 0; i < VO_COUNT; i++)
+    {
+        if(vos[i].is_active && vos[i].pid == current_thread->process_pid)
+        { ret = 1; vo_id = i; }
+    }
+
+    u64 user_vo_id_ptr = frame->regs[11];
+    if(ret && user_vo_id_ptr != 0)
+    {
+        u64* ptr;
+        assert(
+            mmu_virt_to_phys(process->mmu_table, user_vo_id_ptr, (u64*)&ptr) == 0,
+            "you didn't do a memory bad"
+        );
+        *ptr = vo_id;
+    }
+    frame->regs[10] = ret;
+    current_thread->program_counter += 4;
+    spinlock_release(&KERNEL_SPINLOCK);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_alloc_pages(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
 
     u64 vaddr = frame->regs[11];
     u64 page_count = frame->regs[12];
@@ -484,12 +517,12 @@ void syscall_alloc_pages(Thread** current_thread, u64 hart)
     }
 
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_shrink_allocation(Thread** current_thread, u64 hart)
+void syscall_shrink_allocation(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -501,10 +534,10 @@ void syscall_shrink_allocation(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
 
     u64 vaddr = frame->regs[11];
     u64 new_page_count = frame->regs[12];
@@ -518,12 +551,12 @@ void syscall_shrink_allocation(Thread** current_thread, u64 hart)
     }
 
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_surface_consumer_has_commited(Thread** current_thread, u64 hart)
+void syscall_surface_consumer_has_commited(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -535,18 +568,19 @@ void syscall_surface_consumer_has_commited(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_read(&process->process_lock);
-    TrapFrame* frame = &t->frame;
     u64 consumer_slot = frame->regs[11];
     frame->regs[10] = surface_consumer_has_commited(process, consumer_slot); // locks internally
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_read(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_surface_consumer_get_size(Thread** current_thread, u64 hart)
+void syscall_surface_consumer_get_size(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -558,10 +592,11 @@ void syscall_surface_consumer_get_size(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_read(&process->process_lock);
-    TrapFrame* frame = &t->frame;
 
     u64 consumer_slot = frame->regs[11];
     u64 user_width = frame->regs[12];
@@ -588,12 +623,12 @@ void syscall_surface_consumer_get_size(Thread** current_thread, u64 hart)
     }
 
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_read(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_surface_consumer_set_size(Thread** current_thread, u64 hart)
+void syscall_surface_consumer_set_size(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -605,10 +640,11 @@ void syscall_surface_consumer_set_size(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
  
     u64 consumer_slot = frame->regs[11];
     u32 width = frame->regs[12];
@@ -617,12 +653,12 @@ void syscall_surface_consumer_set_size(Thread** current_thread, u64 hart)
     u64 ret = surface_consumer_set_size(process, consumer_slot, width, height);
 
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_surface_consumer_fetch(Thread** current_thread, u64 hart)
+void syscall_surface_consumer_fetch(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -634,9 +670,10 @@ void syscall_surface_consumer_fetch(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    TrapFrame* frame = &t->frame;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
 
     u64 consumer_slot = frame->regs[11];
@@ -647,20 +684,22 @@ void syscall_surface_consumer_fetch(Thread** current_thread, u64 hart)
     ret = surface_consumer_fetch(process, consumer_slot, fb, page_count);
 
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_time_get_seconds(Thread** current_thread, u64 hart, u64 mtime)
+void syscall_time_get_seconds(u64 hart, u64 mtime)
 {
-    Thread* t = *current_thread;
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     *((f64*)&frame->regs[10]) = ((f64)mtime) / 10000000.0;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 }
 
-void syscall_file_get_name(Thread** current_thread, u64 hart)
+void syscall_file_get_name(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -672,9 +711,10 @@ void syscall_file_get_name(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     u64 user_file_id = frame->regs[11];
     u64 user_buf = frame->regs[12];
     u64 buf_size = frame->regs[13];
@@ -683,7 +723,7 @@ void syscall_file_get_name(Thread** current_thread, u64 hart)
     if(!process_get_read_access(process, user_file_id, &file_id))
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
@@ -694,7 +734,7 @@ void syscall_file_get_name(Thread** current_thread, u64 hart)
         if(!(mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf) == 0))
         {
             frame->regs[10] = 0;
-            t->program_counter += 4;
+            current_thread->program_counter += 4;
             rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
             return;
         }
@@ -708,7 +748,7 @@ void syscall_file_get_name(Thread** current_thread, u64 hart)
                 if(!(mmu_virt_to_phys(process->mmu_table, ptr, (u64*)&temp) == 0))
                 {
                     frame->regs[10] = 0;
-                    t->program_counter += 4;
+                    current_thread->program_counter += 4;
                     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
                     return;
                 }
@@ -718,11 +758,11 @@ void syscall_file_get_name(Thread** current_thread, u64 hart)
     }
  
     frame->regs[10] = kernel_file_get_name(file_id, buf, buf_size);
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_directory_get_files(Thread** current_thread, u64 hart)
+void syscall_directory_get_files(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -734,9 +774,10 @@ void syscall_directory_get_files(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     u64 dir_id = frame->regs[11];
     u64 user_buf = frame->regs[12];
     u64 buf_size = frame->regs[13];
@@ -747,7 +788,7 @@ void syscall_directory_get_files(Thread** current_thread, u64 hart)
         if(!(mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf) == 0))
         {
             frame->regs[10] = 0;
-            t->program_counter += 4;
+            current_thread->program_counter += 4;
             rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
             return;
         }
@@ -761,7 +802,7 @@ void syscall_directory_get_files(Thread** current_thread, u64 hart)
                 if(!(mmu_virt_to_phys(process->mmu_table, ptr, (u64*)&temp) == 0))
                 {
                     frame->regs[10] = 0;
-                    t->program_counter += 4;
+                    current_thread->program_counter += 4;
                     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
                     return;
                 }
@@ -776,14 +817,14 @@ void syscall_directory_get_files(Thread** current_thread, u64 hart)
     if(buf_size < count) { count = buf_size; }
     u64* array = buf;
     for(u64 i = 0; i < count; i++)
-  { array[i] = process_new_file_access(t->process_pid, temp_buf[i], FILE_ACCESS_PERMISSION_READ_WRITE_BIT); }
+  { array[i] = process_new_file_access(kernel_current_threads[hart].process_pid, temp_buf[i], FILE_ACCESS_PERMISSION_READ_WRITE_BIT); }
 
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_create_process_from_file(Thread** current_thread, u64 hart)
+void syscall_create_process_from_file(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -795,10 +836,12 @@ void syscall_create_process_from_file(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_read(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_file_id = frame->regs[11];
     u64 user_pid_ptr = frame->regs[12];
 
@@ -810,7 +853,7 @@ void syscall_create_process_from_file(Thread** current_thread, u64 hart)
                !(mmu_virt_to_phys(process->mmu_table, user_pid_ptr, (u64*)&pid_ptr) == 0))
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_read(&process->process_lock);
         rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
@@ -840,12 +883,12 @@ void syscall_create_process_from_file(Thread** current_thread, u64 hart)
 
     *pid_ptr = child_owned_process_index;
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_read(&process->process_lock);
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_surface_consumer_create(Thread** current_thread, u64 hart)
+void syscall_surface_consumer_create(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -857,10 +900,12 @@ void syscall_surface_consumer_create(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_foreign_proxy_pid = frame->regs[11];
     u64 user_consumer_ptr = frame->regs[12];
     u64 user_surface_ptr = frame->regs[13];
@@ -870,7 +915,7 @@ void syscall_surface_consumer_create(Thread** current_thread, u64 hart)
        !(mmu_virt_to_phys(process->mmu_table, user_consumer_ptr, (u64*)&consumer_ptr) == 0))
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_write(&process->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
@@ -881,19 +926,19 @@ void syscall_surface_consumer_create(Thread** current_thread, u64 hart)
        !(mmu_virt_to_phys(process->mmu_table, user_surface_ptr, (u64*)&surface_ptr) == 0))
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_write(&process->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
 
     frame->regs[10] = surface_consumer_create(process, user_foreign_proxy_pid, consumer_ptr, surface_ptr);
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_surface_consumer_fire(Thread** current_thread, u64 hart)
+void syscall_surface_consumer_fire(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -905,19 +950,21 @@ void syscall_surface_consumer_fire(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_read(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 consumer_slot = frame->regs[11];
 
     frame->regs[10] = surface_consumer_fire(process, consumer_slot);
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_read(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_surface_forward_to_consumer(Thread** current_thread, u64 hart)
+void syscall_surface_forward_to_consumer(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -929,10 +976,12 @@ void syscall_surface_forward_to_consumer(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 surface_slot =  frame->regs[11];
     u64 consumer_slot = frame->regs[12];
 
@@ -952,12 +1001,12 @@ void syscall_surface_forward_to_consumer(Thread** current_thread, u64 hart)
         }
     }
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_surface_stop_forwarding_to_consumer(Thread** current_thread, u64 hart)
+void syscall_surface_stop_forwarding_to_consumer(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -969,10 +1018,12 @@ void syscall_surface_stop_forwarding_to_consumer(Thread** current_thread, u64 ha
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 surface_slot =  frame->regs[11];
  
     SurfaceSlot* slot = ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot;
@@ -985,12 +1036,12 @@ void syscall_surface_stop_forwarding_to_consumer(Thread** current_thread, u64 ha
         ret = 1;
     }
     frame->regs[10] = ret;
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_forward_keyboard_events(Thread** current_thread, u64 hart)
+void syscall_forward_keyboard_events(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1002,10 +1053,12 @@ void syscall_forward_keyboard_events(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process_orig = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process_orig = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process_orig->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_read(&process_orig->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_buf = frame->regs[11];
     u64 user_len = frame->regs[12];
     if(user_len > AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT) { user_len = AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT; }
@@ -1017,7 +1070,7 @@ void syscall_forward_keyboard_events(Thread** current_thread, u64 hart)
        !ops[user_proxy_pid].is_alive)
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_read(&process_orig->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
@@ -1034,7 +1087,7 @@ void syscall_forward_keyboard_events(Thread** current_thread, u64 hart)
         if(mmu_virt_to_phys(process_orig->mmu_table, user_ptr, (u64*)&ptr) != 0)
         {
             frame->regs[10] = 0;
-            t->program_counter += 4;
+            current_thread->program_counter += 4;
             rwlock_release_read(&process_orig->process_lock);
             rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
             return;
@@ -1051,7 +1104,7 @@ void syscall_forward_keyboard_events(Thread** current_thread, u64 hart)
     if(user_pid >= KERNEL_PROCESS_ARRAY_LEN || !process_other->mmu_table)
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_write(&process_other->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
@@ -1063,7 +1116,7 @@ void syscall_forward_keyboard_events(Thread** current_thread, u64 hart)
     if(!user_len)
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_write(&process_other->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
@@ -1078,12 +1131,12 @@ void syscall_forward_keyboard_events(Thread** current_thread, u64 hart)
     }
     frame->regs[10] = user_len;
 
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     rwlock_release_write(&process_other->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_stream_put(Thread** current_thread, u64 hart)
+void syscall_stream_put(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1095,14 +1148,16 @@ void syscall_stream_put(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_read(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_out_stream = frame->regs[11];
     u64 user_memory = frame->regs[12];
     u64 user_count = frame->regs[13];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     Stream** out_stream_array = process->out_stream_alloc.memory;
     if(user_out_stream >= process->out_stream_count || out_stream_array[user_out_stream] == 0)
@@ -1140,7 +1195,7 @@ void syscall_stream_put(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_stream_take(Thread** current_thread, u64 hart)
+void syscall_stream_take(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1152,15 +1207,17 @@ void syscall_stream_take(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_read(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_in_stream = frame->regs[11];
     u64 user_buffer = frame->regs[12];
     u64 user_buffer_size = frame->regs[13];
     u64 user_byte_count_in_stream = frame->regs[14];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     u64* byte_count_in_stream_ptr;
     if(mmu_virt_to_phys(process->mmu_table, user_byte_count_in_stream + sizeof(u64),
@@ -1210,7 +1267,7 @@ void syscall_stream_take(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_process_create_out_stream(Thread** current_thread, u64 hart)
+void syscall_process_create_out_stream(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1222,14 +1279,16 @@ void syscall_process_create_out_stream(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_proxy_process_handle = frame->regs[11]; // as of now just the pid, very insecure
     u64 user_foreign_out_stream_ptr = frame->regs[12];
     u64 user_owned_in_stream_ptr = frame->regs[13];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     OwnedProcess* ops = process->owned_process_alloc.memory;
     if(user_proxy_process_handle >= process->owned_process_count ||
@@ -1237,7 +1296,7 @@ void syscall_process_create_out_stream(Thread** current_thread, u64 hart)
        !ops[user_proxy_process_handle].is_alive)
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_write(&process->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
@@ -1296,7 +1355,7 @@ void syscall_process_create_out_stream(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_process_create_in_stream(Thread** current_thread, u64 hart)
+void syscall_process_create_in_stream(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1308,14 +1367,16 @@ void syscall_process_create_in_stream(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_proxy_process_handle = frame->regs[11]; // as of now just the pid, very insecure
     u64 user_owned_out_stream_ptr = frame->regs[12];
     u64 user_foreign_in_stream_ptr = frame->regs[13];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     OwnedProcess* ops = process->owned_process_alloc.memory;
     if(user_proxy_process_handle >= process->owned_process_count ||
@@ -1323,7 +1384,7 @@ void syscall_process_create_in_stream(Thread** current_thread, u64 hart)
        !ops[user_proxy_process_handle].is_alive)
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_write(&process->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
@@ -1383,7 +1444,7 @@ void syscall_process_create_in_stream(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_process_start(Thread** current_thread, u64 hart)
+void syscall_process_start(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1395,11 +1456,13 @@ void syscall_process_start(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_read(&process->process_lock);
-    TrapFrame* frame = &t->frame;
-    t->program_counter += 4;
+
+    current_thread->program_counter += 4;
     u64 user_proxy_process_handle = frame->regs[11];
 
     OwnedProcess* ops = process->owned_process_alloc.memory;
@@ -1408,7 +1471,7 @@ void syscall_process_start(Thread** current_thread, u64 hart)
        !ops[user_proxy_process_handle].is_alive)
     {
         frame->regs[10] = 0;
-        t->program_counter += 4;
+        current_thread->program_counter += 4;
         rwlock_release_read(&process->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
@@ -1436,20 +1499,23 @@ void syscall_process_start(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_thread_new(Thread** current_thread, u64 hart)
+void syscall_thread_new(u64 hart)
 {
     rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    u64 pid = t->process_pid;
-    u32 tid = (((u64)t) - ((u64)process->threads)) / sizeof(Thread);
-    TrapFrame* frame = &t->frame;
+
+    u64 pid = current_thread->process_pid;
+    u32 tid = kernel_current_thread_tid[hart];
+
     u64 user_program_counter = frame->regs[11];
     u64 user_register_values = frame->regs[12];
     u32 user_thread_group = frame->regs[13];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     AOS_TrapFrame* register_values_ptr;
     if(mmu_virt_to_phys(process->mmu_table, user_register_values + sizeof(AOS_TrapFrame),
@@ -1465,8 +1531,7 @@ void syscall_thread_new(Thread** current_thread, u64 hart)
 
     u32 tid2 = process_thread_create(pid, user_thread_group, hart, 0);
     process = KERNEL_PROCESS_ARRAY[pid];
-    *current_thread = &process->threads[tid];
-    t = *current_thread;
+    current_thread = &process->threads[kernel_current_thread_tid[hart]];
 
     Thread* new_thread = &process->threads[tid2];
     new_thread->program_counter = user_program_counter;
@@ -1484,7 +1549,7 @@ void syscall_thread_new(Thread** current_thread, u64 hart)
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_semaphore_create(Thread** current_thread, u64 hart)
+void syscall_semaphore_create(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1496,12 +1561,13 @@ void syscall_semaphore_create(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     u32 user_initial_value = frame->regs[11];
     u32 user_max_value = frame->regs[12];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     rwlock_acquire_write(&process->process_lock);
     frame->regs[10] = process_create_semaphore(process, user_initial_value, user_max_value);
@@ -1510,7 +1576,7 @@ void syscall_semaphore_create(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_semaphore_release(Thread** current_thread, u64 hart)
+void syscall_semaphore_release(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1522,15 +1588,17 @@ void syscall_semaphore_release(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
             // We need exclusive releasing access so that we don't overflow the semaphore
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u32 user_semaphore = frame->regs[11];
     u32 user_release_count = frame->regs[12];
     u64 user_previous_value_ptr = frame->regs[13];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     u32* previous_value_ptr = 0;
     if(user_previous_value_ptr &&
@@ -1591,7 +1659,7 @@ void syscall_semaphore_release(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_process_exit(Thread** current_thread, u64 hart, u64 mtime)
+void syscall_process_exit(u64 hart, u64 mtime)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1603,19 +1671,18 @@ void syscall_process_exit(Thread** current_thread, u64 hart, u64 mtime)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    u64 pid = t->process_pid;
-    Process* process = KERNEL_PROCESS_ARRAY[pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
 
     rwlock_acquire_write(&process->process_lock);
     process_flag_all_threads_for_destruction(process);
     rwlock_release_write(&process->process_lock);
 
-    kernel_choose_new_thread(current_thread, mtime, hart);
+    kernel_choose_new_thread(mtime, hart);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_process_is_alive(Thread** current_thread, u64 hart)
+void syscall_process_is_alive(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1627,12 +1694,14 @@ void syscall_process_is_alive(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    t->program_counter += 4;
-    TrapFrame* frame = &t->frame;
-    u64 user_proxy_pid = frame->regs[11];
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+    current_thread->program_counter += 4;
+
     rwlock_acquire_read(&process->process_lock);
+
+    u64 user_proxy_pid = frame->regs[11];
 
     OwnedProcess* ops = process->owned_process_alloc.memory;
     if(user_proxy_pid >= process->owned_process_count ||
@@ -1650,7 +1719,7 @@ void syscall_process_is_alive(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_process_kill(Thread** current_thread, u64 hart)
+void syscall_process_kill(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1662,11 +1731,13 @@ void syscall_process_kill(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    t->program_counter += 4;
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    current_thread->program_counter += 4;
     u64 user_proxy_pid = frame->regs[11];
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+
     rwlock_acquire_read(&process->process_lock);
 
     OwnedProcess* ops = process->owned_process_alloc.memory;
@@ -1689,7 +1760,7 @@ void syscall_process_kill(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_out_stream_destroy(Thread** current_thread, u64 hart)
+void syscall_out_stream_destroy(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1701,11 +1772,13 @@ void syscall_out_stream_destroy(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    t->program_counter += 4;
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    current_thread->program_counter += 4;
     u64 user_out_stream = frame->regs[11];
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+
     rwlock_acquire_read(&process->process_lock);
 
     Stream** streams = process->out_stream_alloc.memory;
@@ -1726,7 +1799,7 @@ void syscall_out_stream_destroy(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_in_stream_destroy(Thread** current_thread, u64 hart)
+void syscall_in_stream_destroy(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1738,11 +1811,13 @@ void syscall_in_stream_destroy(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    t->program_counter += 4;
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    current_thread->program_counter += 4;
     u64 user_in_stream = frame->regs[11];
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+
     rwlock_acquire_read(&process->process_lock);
 
     Stream** streams = process->in_stream_alloc.memory;
@@ -1763,7 +1838,7 @@ void syscall_in_stream_destroy(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_IPFC_handler_create(Thread** current_thread, u64 hart)
+void syscall_IPFC_handler_create(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1775,10 +1850,12 @@ void syscall_IPFC_handler_create(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_handler_name_buffer = frame->regs[11];
     u64 user_handler_name_buffer_len = frame->regs[12];
     u64 user_handler_function_entry = frame->regs[13];
@@ -1786,7 +1863,7 @@ void syscall_IPFC_handler_create(Thread** current_thread, u64 hart)
     u64 user_pages_per_stack = frame->regs[15];
     u64 user_stack_count = frame->regs[16];
     u64 user_handler_id_ptr = frame->regs[17];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     
     if((user_stack_pages_start % PAGE_SIZE) != 0)
     {
@@ -1844,7 +1921,7 @@ void syscall_IPFC_handler_create(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_IPFC_session_init(Thread** current_thread, u64 hart)
+void syscall_IPFC_session_init(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1856,14 +1933,16 @@ void syscall_IPFC_session_init(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_handler_name_buffer = frame->regs[11];
     u64 user_handler_name_buffer_len = frame->regs[12];
     u64 user_session_id_ptr = frame->regs[13];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
     
     u64 page_count = (user_handler_name_buffer_len+(user_handler_name_buffer % PAGE_SIZE) + PAGE_SIZE - 1)
                         / PAGE_SIZE;
@@ -1908,7 +1987,7 @@ void syscall_IPFC_session_init(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_IPFC_session_close(Thread** current_thread, u64 hart)
+void syscall_IPFC_session_close(u64 hart)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1920,12 +1999,14 @@ void syscall_IPFC_session_close(Thread** current_thread, u64 hart)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_session_id = frame->regs[11];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     if(user_session_id < process->ipfc_session_count)
     {
@@ -1937,7 +2018,7 @@ void syscall_IPFC_session_close(Thread** current_thread, u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
+void syscall_IPFC_call(u64 hart, u64 mtime)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -1949,14 +2030,15 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
-    TrapFrame* frame = &t->frame;
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     u64 user_session_id = frame->regs[11];
     u16 user_function_index = frame->regs[12];
     void* user_ipfc_static_data_1024_bytes_in = frame->regs[13];
     void* user_ipfc_static_data_1024_bytes_out = frame->regs[14];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     u64 ipfc_static_data_1024_bytes_in[1024/sizeof(u64)];
     if(user_ipfc_static_data_1024_bytes_in)
@@ -1980,7 +2062,7 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
         { ipfc_static_data_1024_bytes_in[i] = 0; }
     }
 
-    assert(t->IPFC_status == 0, "You are doing a ipfc call from a normal thread. Currently, ipfc threads can't themselves perform ipfc calls. This should be fixed and allowed for. Probably by using IPFC_status as a bitfield instead of an integer of state.");
+    assert(current_thread->IPFC_status == 0, "You are doing a ipfc call from a normal thread. Currently, ipfc threads can't themselves perform ipfc calls. This should be fixed and allowed for. Probably by using IPFC_status as a bitfield instead of an integer of state.");
 
     assert(
         user_session_id < process->ipfc_session_count &&
@@ -1993,7 +2075,7 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
 
     u64 parent_pid = ((u64*)process->parent_alloc.memory)[parent_index];
     u64 process_pid = process->pid;
-    u64 thread_tid = t - process->threads;
+    u64 thread_tid = current_thread - process->threads;
 
     Process* ipfc_process = KERNEL_PROCESS_ARRAY[parent_pid];
 
@@ -2015,17 +2097,17 @@ void syscall_IPFC_call(Thread** current_thread, u64 hart, u64 mtime)
     for(u64 i = 0; i < 128; i++)
     { ipfc_thread->ipfc_static_data_1024_bytes[i] = ipfc_static_data_1024_bytes_in[i]; }
 
-    t->IPFC_status = 1;
-    t->IPFC_other_pid = parent_pid;
-    t->IPFC_other_tid = ipfc_tid;
-    t->IPFC_handler_index = handler_index;
-    t->is_running = 0;
+    current_thread->IPFC_status = 1;
+    current_thread->IPFC_other_pid = parent_pid;
+    current_thread->IPFC_other_tid = ipfc_tid;
+    current_thread->IPFC_handler_index = handler_index;
+    current_thread->is_running = 0;
 
-    kernel_choose_new_thread(current_thread, mtime, hart);
+    kernel_choose_new_thread(mtime, hart);
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_IPFC_return(Thread** current_thread, u64 hart, u64 mtime)
+void syscall_IPFC_return(u64 hart, u64 mtime)
 {
     {
         volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -2037,19 +2119,21 @@ void syscall_IPFC_return(Thread** current_thread, u64 hart, u64 mtime)
         wait_time_acc[hart] += end_wait - start_wait;
         wait_time_times[hart] += 1;
     }
-    Thread* t = *current_thread;
-    Process* process = KERNEL_PROCESS_ARRAY[t->process_pid];
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
     rwlock_acquire_write(&process->process_lock);
-    TrapFrame* frame = &t->frame;
+
     u64 user_return_value = frame->regs[11];
-    t->program_counter += 4;
+    current_thread->program_counter += 4;
 
     u64 ipfc_static_data_1024_bytes_out[1024/sizeof(u64)];
     {
         u64* pointer;
-        if(mmu_virt_to_phys(process->mmu_table, t->ipfc_static_data_virtual_addr + 1024 - 1,
+        if(mmu_virt_to_phys(process->mmu_table, current_thread->ipfc_static_data_virtual_addr + 1024 - 1,
                             (u64*)&pointer) != 0 ||
-           mmu_virt_to_phys(process->mmu_table, t->ipfc_static_data_virtual_addr,
+           mmu_virt_to_phys(process->mmu_table, current_thread->ipfc_static_data_virtual_addr,
                             (u64*)&pointer) != 0)
         {
             assert(0, "big bad.");
@@ -2058,24 +2142,24 @@ void syscall_IPFC_return(Thread** current_thread, u64 hart, u64 mtime)
         { ipfc_static_data_1024_bytes_out[i] = pointer[i]; }
     }
 
-    if(t->IPFC_status == 3)
+    if(current_thread->IPFC_status == 3)
     {
         IPFCHandler* handler =
-            ((Kallocation*)process->ipfc_handler_alloc.memory)[t->IPFC_handler_index].memory;
-        handler->function_executions[t->IPFC_stack_index].is_initialized = 0;
+            ((Kallocation*)process->ipfc_handler_alloc.memory)[current_thread->IPFC_handler_index].memory;
+        handler->function_executions[current_thread->IPFC_stack_index].is_initialized = 0;
 
-        t->should_be_destroyed = 1;
+        current_thread->should_be_destroyed = 1;
 		rwlock_release_write(&process->process_lock);
 
-        Process* other_process = KERNEL_PROCESS_ARRAY[t->IPFC_other_pid];
+        Process* other_process = KERNEL_PROCESS_ARRAY[current_thread->IPFC_other_pid];
         rwlock_acquire_write(&other_process->process_lock);
-        Thread* other_thread = other_process->threads + t->IPFC_other_tid;
-        if( t->IPFC_other_pid < KERNEL_PROCESS_ARRAY_LEN &&
-            t->IPFC_other_tid < other_process->thread_count &&
+        Thread* other_thread = other_process->threads + current_thread->IPFC_other_tid;
+        if( current_thread->IPFC_other_pid < KERNEL_PROCESS_ARRAY_LEN &&
+            current_thread->IPFC_other_tid < other_process->thread_count &&
             other_thread->is_initialized &&
             other_thread->IPFC_status == 1 &&
             other_thread->IPFC_other_pid == process->pid &&
-            other_thread->IPFC_other_tid == t - process->threads)
+            other_thread->IPFC_other_tid == current_thread - process->threads)
         {
             other_thread->IPFC_status = 0;
             other_thread->is_running = 1;
@@ -2101,103 +2185,103 @@ void syscall_IPFC_return(Thread** current_thread, u64 hart, u64 mtime)
     }
     else
     { rwlock_release_write(&process->process_lock); }
-    kernel_choose_new_thread(current_thread, mtime, hart);
+    kernel_choose_new_thread(mtime, hart);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void do_syscall(Thread** current_thread, u64 mtime, u64 hart)
+void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
 {
-    u64 call_num = (*current_thread)->frame.regs[10];
+    u64 call_num = frame->regs[10];
          if(call_num == 0)
-    { syscall_surface_commit(current_thread, hart); }
+    { syscall_surface_commit(hart); }
     else if(call_num == 1)
-    { syscall_surface_acquire(current_thread, hart); }
+    { syscall_surface_acquire(hart); }
     else if(call_num == 2)
-    { syscall_thread_awake_after_time(current_thread, hart, mtime); }
+    { syscall_thread_awake_after_time(hart, mtime); }
     else if(call_num == 3)
-    { syscall_thread_awake_on_surface(current_thread, hart, mtime); }
+    { syscall_thread_awake_on_surface(hart, mtime); }
     else if(call_num == 4)
-    { syscall_get_rawmouse_events(current_thread, hart); }
+    { syscall_get_rawmouse_events(hart); }
     else if(call_num == 5)
-    { syscall_get_keyboard_events(current_thread, hart); }
+    { syscall_get_keyboard_events(hart); }
     else if(call_num == 6)
-    { syscall_switch_vo(current_thread, hart); }
+    { syscall_switch_vo(hart); }
     else if(call_num == 7)
-    { syscall_get_vo_id(current_thread, hart); }
+    { syscall_get_vo_id(hart); }
     else if(call_num == 8)
-    { syscall_alloc_pages(current_thread, hart); }
+    { syscall_alloc_pages(hart); }
     else if(call_num == 9)
-    { syscall_shrink_allocation(current_thread, hart); }
+    { syscall_shrink_allocation(hart); }
     else if(call_num == 10)
-    { syscall_surface_consumer_has_commited(current_thread, hart); }
+    { syscall_surface_consumer_has_commited(hart); }
     else if(call_num == 11)
-    { syscall_surface_consumer_get_size(current_thread, hart); }
+    { syscall_surface_consumer_get_size(hart); }
     else if(call_num == 12)
-    { syscall_surface_consumer_set_size(current_thread, hart); }
+    { syscall_surface_consumer_set_size(hart); }
     else if(call_num == 13)
-    { syscall_surface_consumer_fetch(current_thread, hart); }
+    { syscall_surface_consumer_fetch(hart); }
     else if(call_num == 14)
-    { syscall_time_get_seconds(current_thread, hart, mtime); }
+    { syscall_time_get_seconds(hart, mtime); }
     else if(call_num == 15)
-    { syscall_file_get_name(current_thread, hart); }
+    { syscall_file_get_name(hart); }
     else if(call_num == 23)
-    { syscall_directory_get_files(current_thread, hart); }
+    { syscall_directory_get_files(hart); }
     else if(call_num == 26)
-    { syscall_create_process_from_file(current_thread, hart); }
+    { syscall_create_process_from_file(hart); }
     else if(call_num == 27)
-    { syscall_surface_consumer_create(current_thread, hart); }
+    { syscall_surface_consumer_create(hart); }
     else if(call_num == 28)
-    { syscall_surface_consumer_fire(current_thread, hart); }
+    { syscall_surface_consumer_fire(hart); }
     else if(call_num == 29)
-    { syscall_surface_forward_to_consumer(current_thread, hart); }
+    { syscall_surface_forward_to_consumer(hart); }
     else if(call_num == 30)
-    { syscall_surface_stop_forwarding_to_consumer(current_thread, hart); }
+    { syscall_surface_stop_forwarding_to_consumer(hart); }
     else if(call_num == 31)
-    { syscall_forward_keyboard_events(current_thread, hart); }
+    { syscall_forward_keyboard_events(hart); }
     else if(call_num == 32)
-    { syscall_thread_sleep(current_thread, hart, mtime); }
+    { syscall_thread_sleep(hart, mtime); }
     else if(call_num == 33)
-    { syscall_thread_awake_on_keyboard(current_thread, hart); }
+    { syscall_thread_awake_on_keyboard(hart); }
     else if(call_num == 34)
-    { syscall_thread_awake_on_mouse(current_thread, hart); }
+    { syscall_thread_awake_on_mouse(hart); }
     else if(call_num == 35)
-    { syscall_stream_put(current_thread, hart); }
+    { syscall_stream_put(hart); }
     else if(call_num == 36)
-    { syscall_stream_take(current_thread, hart); }
+    { syscall_stream_take(hart); }
     else if(call_num == 37)
-    { syscall_process_create_out_stream(current_thread, hart); }
+    { syscall_process_create_out_stream(hart); }
     else if(call_num == 38)
-    { syscall_process_create_in_stream(current_thread, hart); }
+    { syscall_process_create_in_stream(hart); }
     else if(call_num == 39)
-    { syscall_process_start(current_thread, hart); }
+    { syscall_process_start(hart); }
     else if(call_num == 40)
-    { syscall_thread_new(current_thread, hart); }
+    { syscall_thread_new(hart); }
     else if(call_num == 41)
-    { syscall_semaphore_create(current_thread, hart); }
+    { syscall_semaphore_create(hart); }
     else if(call_num == 42)
-    { syscall_semaphore_release(current_thread, hart); }
+    { syscall_semaphore_release(hart); }
     else if(call_num == 43)
-    { syscall_thread_awake_on_semaphore(current_thread, hart); }
+    { syscall_thread_awake_on_semaphore(hart); }
     else if(call_num == 44)
-    { syscall_process_exit(current_thread, hart, mtime); }
+    { syscall_process_exit(hart, mtime); }
     else if(call_num == 45)
-    { syscall_process_is_alive(current_thread, hart); }
+    { syscall_process_is_alive(hart); }
     else if(call_num == 46)
-    { syscall_process_kill(current_thread, hart); }
+    { syscall_process_kill(hart); }
     else if(call_num == 47)
-    { syscall_out_stream_destroy(current_thread, hart); }
+    { syscall_out_stream_destroy(hart); }
     else if(call_num == 48)
-    { syscall_in_stream_destroy(current_thread, hart); }
+    { syscall_in_stream_destroy(hart); }
     else if(call_num == 49)
-    { syscall_IPFC_handler_create(current_thread, hart); }
+    { syscall_IPFC_handler_create(hart); }
     else if(call_num == 50)
-    { syscall_IPFC_session_init(current_thread, hart); }
+    { syscall_IPFC_session_init(hart); }
     else if(call_num == 51)
-    { syscall_IPFC_session_close(current_thread, hart); }
+    { syscall_IPFC_session_close(hart); }
     else if(call_num == 52)
-    { syscall_IPFC_call(current_thread, hart, mtime); }
+    { syscall_IPFC_call(hart, mtime); }
     else if(call_num == 53)
-    { syscall_IPFC_return(current_thread, hart, mtime); }
+    { syscall_IPFC_return(hart, mtime); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

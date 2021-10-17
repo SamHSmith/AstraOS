@@ -63,14 +63,22 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
 
 void try_assign_ipfc_stack(Process* process, Thread* thread);
 
-Thread* kernel_current_threads[KERNEL_MAX_HART_COUNT];
+Thread kernel_current_threads[KERNEL_MAX_HART_COUNT];
+u64 kernel_current_thread_pid[KERNEL_MAX_HART_COUNT];
+u32 kernel_current_thread_tid[KERNEL_MAX_HART_COUNT];
+u8 kernel_current_thread_has_thread[KERNEL_MAX_HART_COUNT];
 
 u64 current_thread_runtimes[KERNEL_MAX_HART_COUNT];
 
 u64 last_mtimes[KERNEL_MAX_HART_COUNT];
 
+/*
+ * The following function only changes kernel_current_thread_pid/tid.
+ * You the callee have to make sure you are not using an invalid pointer
+ */
+
 struct xoshiro256ss_state kernel_choose_new_thread_rando_state[KERNEL_MAX_HART_COUNT];
-void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
+void kernel_choose_new_thread(u64 new_mtime, u64 hart)
 {
     rwlock_acquire_read(&THREAD_RUNTIME_ARRAY_LOCK);
     ThreadRuntime* runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
@@ -209,14 +217,17 @@ void kernel_choose_new_thread(Thread** out_thread, u64 new_mtime, u64 hart)
     if(!found_new_thread)
     {
         // Causes the KERNEL nop thread to be loaded
-        *out_thread = 0;
+        kernel_current_thread_has_thread[hart] = 0;
         return;
     }
 
     current_thread_runtimes[hart] = new_thread_runtime;
 
     ThreadRuntime runtime = runtime_array[current_thread_runtimes[hart]];
-    *out_thread = &KERNEL_PROCESS_ARRAY[runtime.pid]->threads[runtime.tid];
+
+    kernel_current_thread_has_thread[hart] = 1;
+    kernel_current_thread_tid[hart] = runtime.tid;
+    kernel_current_thread_pid[hart] = runtime.pid;
 }
 
 void program_loader_program(u64 drive1_partitions_directory);
@@ -229,6 +240,7 @@ void process_init()
         last_mtimes[i] = 0;
     }
     rwlock_create(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 
     u64 pid = process_create(0, 0);
 
@@ -268,6 +280,7 @@ void process_init()
     tarr[thread1].frame.regs[10] = drive1_partition_directory;
 
     tarr[thread1].is_running = 1;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void try_assign_ipfc_stack(Process* process, Thread* thread)

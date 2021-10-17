@@ -12,6 +12,8 @@ Spinlock KERNEL_SPINLOCK;
 Spinlock KERNEL_MEMORY_SPINLOCK;
 Spinlock KERNEL_VIEWER_SPINLOCK;
 
+RWLock KERNEL_TRAP_LOCK;
+
 #include "random.c"
 
 #include "uart.c"
@@ -128,6 +130,7 @@ u64 kinit()
     KERNEL_MMU_TABLE = (u64)mem_init();
 
     rwlock_create(&THREAD_RUNTIME_ARRAY_LOCK);
+    rwlock_create(&KERNEL_TRAP_LOCK);
     for(s64 i = 0; i < KERNEL_HART_COUNT.value; i++)
     {
         Kallocation trap_stack = kalloc_pages(8);
@@ -312,6 +315,8 @@ void trap_hang_kernel(
     TrapFrame* frame
     )
 {
+    rwlock_release_read(&KERNEL_TRAP_LOCK);
+    rwlock_acquire_write(&KERNEL_TRAP_LOCK);
     printf("args:\n  epc: %llx\n  tval: %llx\n  cause: %llx\n  hart: %llx\n  status: %llx\n  frame: %llx\n",
             epc, tval, cause, hart, status, frame);
     printf("frame:\n regs:\n");
@@ -322,6 +327,23 @@ void trap_hang_kernel(
     printf("Kernel has hung.\n");
     u64 ptr = frame->regs[8];
     print_stacktrace(ptr, epc, frame->regs[1]);
+    printf("This is CPU#%llu\n", hart);
+    printf("Wide cpu status:\n");
+    for(s64 i = 0; i < KERNEL_HART_COUNT.value; i++)
+    {
+        if(kernel_current_thread_has_thread[hart])
+        {
+            Process* p = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+            printf("CPU#%llu is running (PID=%llu - TID#%llu)\n",
+                   i,
+                   kernel_current_threads[i].process_pid,
+                   kernel_current_thread_tid[hart]
+            );
+        }
+        else
+        {
+        }
+    }
     while(1) {}
 }
 
@@ -336,6 +358,8 @@ u64 m_trap(
 {
     u64 async = (cause >> 63) & 1 == 1;
     u64 cause_num = cause & 0xfff;
+
+    rwlock_acquire_read(&KERNEL_TRAP_LOCK);
 
     if(async)
     {
@@ -362,10 +386,10 @@ u64 m_trap(
         else if(cause_num == 7) {
 
             // Store thread
-            if(kernel_current_threads[hart] != 0)
+            if(kernel_current_thread_has_thread[hart])
             {
-                kernel_current_threads[hart]->frame = *frame;
-                kernel_current_threads[hart]->program_counter = epc;
+                kernel_current_threads[hart].frame = *frame;
+                kernel_current_threads[hart].program_counter = epc;
             }
             else // Store kernel thread
             {
@@ -453,25 +477,33 @@ u64 m_trap(
                 spinlock_release(&KERNEL_SPINLOCK);
             }
 #endif
+
+            if(kernel_current_thread_has_thread[hart])
+            { KERNEL_PROCESS_ARRAY[kernel_current_thread_pid[hart]]->threads[kernel_current_thread_tid[hart]] = kernel_current_threads[hart]; }
+
             kernel_choose_new_thread(
-                &kernel_current_threads[hart],
                 *mtime,
                 hart
             );
 
-            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK); // todo change to read
+            if(kernel_current_thread_has_thread[hart])
+            { kernel_current_threads[hart] = KERNEL_PROCESS_ARRAY[kernel_current_thread_pid[hart]]->threads[kernel_current_thread_tid[hart]]; }
 
-            if(kernel_current_threads[hart] != 0)
+            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+
+            if(kernel_current_thread_has_thread[hart])
             {
-                *mtimecmp = *mtime + (MACHINE_TIMER_SECOND / 200);
+                *mtimecmp = *mtime + (MACHINE_TIMER_SECOND / 120);
                 // Load thread
-                *frame = kernel_current_threads[hart]->frame;
-                return kernel_current_threads[hart]->program_counter;
+                *frame = kernel_current_threads[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
+                return kernel_current_threads[hart].program_counter;
             }
             else // Load kernel thread
             {
                 *mtimecmp = *mtime;
                 *frame = KERNEL_THREADS[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
                 return KERNEL_THREADS[hart].program_counter;
             }
         }
@@ -485,10 +517,11 @@ u64 m_trap(
         }
         else if(cause_num == 11)
         {
-            if(kernel_current_threads[hart] != 0)
+            // Store thread
+            if(kernel_current_thread_has_thread[hart])
             {
-                kernel_current_threads[hart]->frame = *frame;
-                kernel_current_threads[hart]->program_counter = epc;
+                kernel_current_threads[hart].frame = *frame;
+                kernel_current_threads[hart].program_counter = epc;
             }
             else // Store kernel thread
             {
@@ -527,15 +560,17 @@ u64 m_trap(
                 spinlock_release(&KERNEL_SPINLOCK);
             }
 
-            if(kernel_current_threads[hart] != 0)
+            if(kernel_current_thread_has_thread[hart])
             {
                 // Load thread
-                *frame = kernel_current_threads[hart]->frame;
-                return kernel_current_threads[hart]->program_counter;
+                *frame = kernel_current_threads[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
+                return kernel_current_threads[hart].program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREADS[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
                 return KERNEL_THREADS[hart].program_counter;
             }
         }
@@ -581,30 +616,46 @@ u64 m_trap(
         else if(cause_num == 9) {
 
             // Store thread
-            if(kernel_current_threads[hart] != 0)
+            if(kernel_current_thread_has_thread[hart])
             {
-                kernel_current_threads[hart]->frame = *frame;
-                kernel_current_threads[hart]->program_counter = epc;
+                kernel_current_threads[hart].frame = *frame;
+                kernel_current_threads[hart].program_counter = epc;
             }
             else // Store kernel thread
             {
-                KERNEL_THREADS[hart].frame = *frame;
-                KERNEL_THREADS[hart].program_counter = epc;
+                assert(0, "very odd");
+            }
+
+            // actually store thread into process array data structure
+            {
+                rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+                KERNEL_PROCESS_ARRAY[kernel_current_thread_pid[hart]]->threads[kernel_current_thread_tid[hart]] = kernel_current_threads[hart];
+                rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
             }
 
             volatile u64* mtime = (u64*)0x0200bff8;
             // locking happens inside do_syscall
-            do_syscall(&kernel_current_threads[hart], *mtime, hart);
+            do_syscall(&kernel_current_threads[hart].frame, *mtime, hart);
 
-            if(kernel_current_threads[hart] != 0)
+
+            // actually load thread from process array data structure
+            {
+                rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+                kernel_current_threads[hart] = KERNEL_PROCESS_ARRAY[kernel_current_thread_pid[hart]]->threads[kernel_current_thread_tid[hart]];
+                rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+            }
+
+            if(kernel_current_thread_has_thread[hart])
             {
                 // Load thread
-                *frame = kernel_current_threads[hart]->frame;
-                return kernel_current_threads[hart]->program_counter;
+                *frame = kernel_current_threads[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
+                return kernel_current_threads[hart].program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREADS[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
                 return KERNEL_THREADS[hart].program_counter;
             }
         }
@@ -625,6 +676,7 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
     }
+    rwlock_release_read(&KERNEL_TRAP_LOCK);
     return 0;
 }
 
