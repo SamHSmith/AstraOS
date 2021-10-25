@@ -8,6 +8,8 @@
 #include "../common/atomics.h"
 #include "../common/rwlock.h"
 
+#include "log.c"
+
 Spinlock KERNEL_SPINLOCK;
 Spinlock KERNEL_MEMORY_SPINLOCK;
 Spinlock KERNEL_VIEWER_SPINLOCK;
@@ -547,7 +549,42 @@ u64 m_trap(
                 while(plic_interrupt_next(&interrupt) && interrupt == 10)
                 {
                     uart_read(&character, 1);
-                    if(KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_count > 0)
+
+                    //TEMP
+                    if(character == 'l')
+                    {
+                        printf("Printing kernel event log:\n");
+                        rwlock_acquire_write(&KERNEL_LOG_LOCK);
+                        s64 log_len = KERNEL_LOG_SIZE;
+                        s64 log_index = atomic_s64_read(&KERNEL_LOG_INDEX);
+                        if(log_index < KERNEL_LOG_SIZE)
+                        { log_len = log_index; }
+
+                        u64 log_entry_counter = 0;
+                        for(s64 i = log_len; i > 0; i--)
+                        {
+                            KernelLogEntry entry = KERNEL_LOG[(log_index - i) % KERNEL_LOG_SIZE];
+                            if(entry.is_kernel)
+                            {
+                                printf("TODO print out kernel, not user, logs.\n");
+                            }
+                            else
+                            {
+                                printf("%3.3llu) H:%llu - T:%llu - PID:%llu - TID:%llu | %s:%llu - %s\n",
+                                       log_entry_counter++,
+                                       entry.hart,
+                                       entry.time,
+                                       entry.pid,
+                                       entry.tid,
+                                       entry.function_name,
+                                       entry.line_number,
+                                       entry.message);
+                            }
+                        }
+
+                        rwlock_release_write(&KERNEL_LOG_LOCK);
+                    }
+                    else if(KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_count > 0)
                     {
                         Stream* in_stream =
                             *((Stream**)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->in_stream_alloc.memory);

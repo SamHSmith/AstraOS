@@ -15,6 +15,11 @@ void syscall_surface_commit(u64 hart)
     Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
     TrapFrame* frame = &current_thread->frame;
 
+    kernel_log_user(hart,
+                    kernel_current_threads[hart].process_pid,
+                    kernel_current_thread_tid[hart],
+                    "process is attempting to commit surface");
+
     rwlock_acquire_write(&process->process_lock);
 
     u64 surface_slot = frame->regs[11];
@@ -52,6 +57,11 @@ void syscall_surface_acquire(u64 hart)
     Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
     TrapFrame* frame = &current_thread->frame;
 
+    kernel_log_user(hart,
+                    kernel_current_threads[hart].process_pid,
+                    kernel_current_thread_tid[hart],
+                    "process is attempting to acquire surface");
+
     rwlock_acquire_write(&process->process_lock);
 
     u64 surface_slot = frame->regs[11];
@@ -72,6 +82,14 @@ void syscall_surface_acquire(u64 hart)
         else if(page_count >= slot->fb_draw->alloc.page_count)
         {
             ret = surface_acquire(surface_slot, fb, process);
+
+            if(ret)
+            {
+                kernel_log_user(hart,
+                                kernel_current_threads[hart].process_pid,
+                                kernel_current_thread_tid[hart],
+                                "process has acquired surface");
+            }
         }
     }
     frame->regs[10] = ret;
