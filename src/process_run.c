@@ -83,6 +83,14 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
     rwlock_acquire_read(&THREAD_RUNTIME_ARRAY_LOCK);
     ThreadRuntime* runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
 
+    if(kernel_current_thread_has_thread[hart])
+    {
+        kernel_log_user(hart,
+                        kernel_current_thread_pid[hart],
+                        kernel_current_thread_tid[hart],
+                        "hart has abandoned thread");
+    }
+
     u8 found_new_thread = 0;
 
     u64 thread_counter = 0;
@@ -228,6 +236,11 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
     kernel_current_thread_has_thread[hart] = 1;
     kernel_current_thread_tid[hart] = runtime.tid;
     kernel_current_thread_pid[hart] = runtime.pid;
+
+    kernel_log_user(hart,
+                    kernel_current_thread_pid[hart],
+                    kernel_current_thread_tid[hart],
+                    "hart has chosen user thread");
 }
 
 void program_loader_program(u64 drive1_partitions_directory);

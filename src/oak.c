@@ -31,12 +31,18 @@ typedef struct
 
 void oak_send_video(Framebuffer* framebuffer)
 {
+    volatile u64* mtime = (u64*)0x0200bff8;
+    u64 start_time = *mtime;
+
     OakPacketVideo packet;
     packet.base.size = sizeof(packet);
     packet.base.device = 9;
     packet.frame_ptr = framebuffer->data;
     packet.frame_size = framebuffer->width * framebuffer->height * 4 * 4;
     send_oak_packet(&packet);
+
+    u64 end_time = *mtime;
+    printf("send video took : %llu\n", end_time - start_time);
 }
 
 typedef struct

@@ -699,7 +699,12 @@ void syscall_surface_consumer_fetch(u64 hart)
     u64 page_count = frame->regs[13];
     u64 ret = 0;
 
-    ret = surface_consumer_fetch(process, consumer_slot, fb, page_count);
+    kernel_log_user(hart,
+                    kernel_current_thread_pid[hart],
+                    kernel_current_thread_tid[hart],
+                    "process called consumer fetch");
+
+    ret = surface_consumer_fetch(process, consumer_slot, fb, page_count, hart);
 
     frame->regs[10] = ret;
     current_thread->program_counter += 4;
@@ -975,6 +980,11 @@ void syscall_surface_consumer_fire(u64 hart)
     rwlock_acquire_read(&process->process_lock);
 
     u64 consumer_slot = frame->regs[11];
+
+    kernel_log_user(hart,
+                    kernel_current_thread_pid[hart],
+                    kernel_current_thread_tid[hart],
+                    "process is firing a consumer");
 
     frame->regs[10] = surface_consumer_fire(process, consumer_slot);
     current_thread->program_counter += 4;

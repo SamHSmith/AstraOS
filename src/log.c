@@ -11,7 +11,7 @@ typedef struct
     u8 is_kernel;
 } KernelLogEntry;
 
-#define KERNEL_LOG_SIZE 200
+#define KERNEL_LOG_SIZE 400
 
 KernelLogEntry KERNEL_LOG[KERNEL_LOG_SIZE];
 atomic_s64 KERNEL_LOG_INDEX;
@@ -37,6 +37,25 @@ void kernel_log_user_(u32 hart, u64 pid, u32 tid, char* function_name, u64 line_
     entry.is_kernel = 0;
     entry.pid = pid;
     entry.tid = tid;
+    entry.function_name = function_name;
+    entry.line_number = line_number;
+    entry.message = message;
+    KERNEL_LOG[log_index] = entry;
+    rwlock_release_read(&KERNEL_LOG_LOCK);
+}
+
+#define kernel_log_kernel(hart, message) kernel_log_kernel_(hart, __func__, __LINE__, message)
+
+void kernel_log_kernel_(u32 hart, char* function_name, u64 line_number, char* message)
+{
+    rwlock_acquire_read(&KERNEL_LOG_LOCK);
+    s64 log_index = atomic_s64_increment(&KERNEL_LOG_INDEX) % KERNEL_LOG_SIZE;
+    u64* mtime = (u64*)0x0200bff8;
+
+    KernelLogEntry entry;
+    entry.time = *mtime;
+    entry.hart = hart;
+    entry.is_kernel = 1;
     entry.function_name = function_name;
     entry.line_number = line_number;
     entry.message = message;

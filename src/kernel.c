@@ -387,6 +387,8 @@ u64 m_trap(
         }
         else if(cause_num == 7) {
 
+            kernel_log_kernel(hart, "hart got a timer interrupt");
+
             // Store thread
             if(kernel_current_thread_has_thread[hart])
             {
@@ -412,7 +414,13 @@ u64 m_trap(
 
             if(spinlock_try_acquire(&KERNEL_VIEWER_SPINLOCK))
             {
+                kernel_log_kernel(hart, "hart start viewer talk block");
                 spinlock_acquire(&KERNEL_SPINLOCK);
+                kernel_log_kernel(hart, "hart has kernel spinlock for viewer talk");
+
+                // massive time loss in talking to the viewer
+                // either the slowness is in here or in qemu
+
                 // talk to viewer
                 volatile u8* viewer = 0x10000100;
                 volatile u8* viewer_should_read = 0x10000101;
@@ -462,6 +470,7 @@ u64 m_trap(
                 }
                 spinlock_release(&KERNEL_SPINLOCK);
                 spinlock_release(&KERNEL_VIEWER_SPINLOCK);
+                kernel_log_kernel(hart, "hart end viewer talk block");
             }
 
             volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -566,7 +575,13 @@ u64 m_trap(
                             KernelLogEntry entry = KERNEL_LOG[(log_index - i) % KERNEL_LOG_SIZE];
                             if(entry.is_kernel)
                             {
-                                printf("TODO print out kernel, not user, logs.\n");
+                                printf("%3.3llu) H:%llu - T:%llu | %s:%llu - %s\n",
+                                       log_entry_counter++,
+                                       entry.hart,
+                                       entry.time,
+                                       entry.function_name,
+                                       entry.line_number,
+                                       entry.message);
                             }
                             else
                             {

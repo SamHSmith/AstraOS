@@ -128,7 +128,7 @@ void _start()
         spinlock_release(&surface_visible_lock);
         u64 surface_handle = 0;
         AOS_thread_awake_on_surface(&surface_handle, 1);
-        AOS_thread_awake_after_time(100000);
+        AOS_thread_awake_after_time(100000);  // haha, this sleep causes frame drops
         AOS_thread_sleep();
         spinlock_acquire(&surface_visible_lock);
 
