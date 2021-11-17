@@ -55,6 +55,10 @@ m_trap_vector:
     sd a0, (t6)
     addi t6, t6, 8
 
+    # Here t6 has the original value of mscratch which
+    # we will put back in case we trap inside the kernel
+    csrw mscratch, t6
+
     addi t6, t6, -65*8
     mv sp, t6
 	# Get ready to go into Rust (trap.rs)
