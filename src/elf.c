@@ -85,7 +85,6 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
 
     u64 pid = process_create(parents, parent_count);
     Process* process = KERNEL_PROCESS_ARRAY[pid];
-#define proc process
 
     for(u64 i = 0; i < phnum; i++)
     {
@@ -106,7 +105,7 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
         Kallocation section_alloc = kalloc_pages((virtual_size + PAGE_SIZE - 1) / PAGE_SIZE);
         memset(section_alloc.memory, 0, section_alloc.page_count * PAGE_SIZE);
         memcpy(section_alloc.memory + virtual_paddr, ((u64)header) + ph->off, ph->filesz);
-        mmu_map_kallocation(proc->mmu_table, section_alloc, virtual_start, bits);
+        mmu_map_kallocation(process->mmu_table, section_alloc, virtual_start, bits);
 
         if((process->allocations_count + 1) * sizeof(Kallocation) > process->allocations_alloc.page_count * PAGE_SIZE)
         {
@@ -130,27 +129,27 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
 
     u32 thread1 = process_thread_create(pid, 1, 0, 0);
     process = KERNEL_PROCESS_ARRAY[pid];
-    proc->threads[thread1].stack_alloc = kalloc_pages(8);
-    proc->threads[thread1].frame.regs[8] = (~(0x1ffffff << 39)) & (~0xfff); // frame pointer
-    proc->threads[thread1].frame.regs[2] = proc->threads[thread1].frame.regs[8] - 4 * sizeof(u64);
+    process->threads[thread1].stack_alloc = kalloc_pages(8);
+    process->threads[thread1].frame.regs[8] = (~(0x1ffffff << 39)) & (~0xfff); // frame pointer
+    process->threads[thread1].frame.regs[2] = process->threads[thread1].frame.regs[8] - 4 * sizeof(u64);
     u64 stack_start =
-        proc->threads[thread1].frame.regs[8] - (PAGE_SIZE * proc->threads[thread1].stack_alloc.page_count);
-    proc->threads[thread1].frame.regs[8] = proc->threads[thread1].frame.regs[8] - 2 * sizeof(u64);
+        process->threads[thread1].frame.regs[8] - (PAGE_SIZE * process->threads[thread1].stack_alloc.page_count);
+    process->threads[thread1].frame.regs[8] = process->threads[thread1].frame.regs[8] - 2 * sizeof(u64);
     mmu_map_kallocation(
-        proc->mmu_table,
-        proc->threads[thread1].stack_alloc,
+        process->mmu_table,
+        process->threads[thread1].stack_alloc,
         stack_start,
         2 + 4
     );
     { // Mark end of stack for stacktrace
-        u64* frame = (u64)proc->threads[thread1].stack_alloc.memory +
-                        proc->threads[thread1].stack_alloc.page_count * PAGE_SIZE;
+        u64* frame = (u64)process->threads[thread1].stack_alloc.memory +
+                        process->threads[thread1].stack_alloc.page_count * PAGE_SIZE;
         *(frame-2) = 0;
     }
 
-    mmu_kernel_map_range(proc->mmu_table, 0x10000000, 0x10000000, 2 + 4); // UART
+    mmu_kernel_map_range(process->mmu_table, 0x10000000, 0x10000000, 2 + 4); // UART
 
-    proc->threads[thread1].program_counter = header->entry_addr;
+    process->threads[thread1].program_counter = header->entry_addr;
 
     *pid_ret = pid;
     kfree_pages(elf_alloc);
