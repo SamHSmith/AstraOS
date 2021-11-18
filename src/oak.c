@@ -42,7 +42,7 @@ void oak_send_video(Framebuffer* framebuffer)
     send_oak_packet(&packet);
 
     u64 end_time = *mtime;
-    printf("send video took : %llu\n", end_time - start_time);
+    //printf("send video took : %llu\n", end_time - start_time);
 }
 
 typedef struct
