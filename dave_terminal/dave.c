@@ -132,7 +132,7 @@ void _start()
         AOS_thread_sleep();
         spinlock_acquire(&surface_visible_lock);
 
-        if(process_is_running && !AOS_process_is_alive(process_pid))
+        if(process_is_running && !AOS_process_is_alive(process_pid)) // running process has exited
         {
             AOS_out_stream_destroy(process_stdin);
             AOS_in_stream_destroy(process_stdout);
@@ -142,6 +142,7 @@ void _start()
             text_buffer[text_len + 1] = '>';
             text_buffer[text_len + 2] = ' ';
             text_len += 3;
+            pre_send_to_stdin_len = 0;
         }
 
         if(!process_is_running)
@@ -207,14 +208,6 @@ void _start()
                                 *nullptr = 5;
                             }
                             text_len += written_count;
-                            process_is_running = 0;
-                        }
-                        if(!process_is_running)
-                        {
-                            text_buffer[text_len + 0] = ')';
-                            text_buffer[text_len + 1] = '>';
-                            text_buffer[text_len + 2] = ' ';
-                            text_len += 3;
                         }
                     }
                     else if(scancode == 35)
