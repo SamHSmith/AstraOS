@@ -7,7 +7,7 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 #echo $SCRIPTPATH
 cd $SCRIPTPATH
 
-QEMU_FLAGS="-machine virt -cpu rv64 -smp 2 -m 512M -serial stdio -bios none -kernel bin/kernel.bin -display sdl -s"
+QEMU_FLAGS="-machine virt -cpu rv64 -smp 8 -m 512M -serial stdio -bios none -kernel bin/kernel.bin -display sdl -s"
 QEMU="./qemu/build/qemu-system-riscv64"
 
 CFLAGS="$CFLAGS -g -Isrc/cyclone_crypto -Isrc/cyclone_crypto/common"
