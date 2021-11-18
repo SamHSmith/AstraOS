@@ -73,8 +73,8 @@ u64 current_thread_runtimes[KERNEL_MAX_HART_COUNT];
 u64 last_mtimes[KERNEL_MAX_HART_COUNT];
 
 /*
- * The following function only changes kernel_current_thread_pid/tid.
- * You the callee have to make sure you are not using an invalid pointer
+ * Make sure you do not have a lock on THREAD_RUNTIME_ARRAY_LOCK
+ * when calling kernel_choose_new_thread
  */
 
 struct xoshiro256ss_state kernel_choose_new_thread_rando_state[KERNEL_MAX_HART_COUNT];
@@ -90,6 +90,8 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
                         kernel_current_thread_tid[hart],
                         "hart has abandoned thread");
     }
+
+    kernel_current_thread_has_thread[hart] = 0;
 
     u8 found_new_thread = 0;
 
@@ -225,7 +227,6 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
     if(!found_new_thread)
     {
         // Causes the KERNEL nop thread to be loaded
-        kernel_current_thread_has_thread[hart] = 0;
         return;
     }
 

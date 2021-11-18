@@ -344,6 +344,7 @@ void trap_hang_kernel(
         }
         else
         {
+            printf("CPU#%llu is without a user thread to run\n", i);
         }
     }
     while(1) {}

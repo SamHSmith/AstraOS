@@ -230,8 +230,8 @@ void syscall_thread_sleep(u64 hart, u64 mtime)
     }
     // go to sleep
     frame->regs[10] = 1;
-    kernel_choose_new_thread(mtime, hart);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    kernel_choose_new_thread(mtime, hart);
 }
 
 void syscall_thread_awake_on_keyboard(u64 hart)
@@ -1738,8 +1738,8 @@ void syscall_process_exit(u64 hart, u64 mtime)
     process_flag_all_threads_for_destruction(process);
     rwlock_release_write(&process->process_lock);
 
-    kernel_choose_new_thread(mtime, hart);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    kernel_choose_new_thread(mtime, hart);
 }
 
 void syscall_process_is_alive(u64 hart)
@@ -2163,8 +2163,8 @@ void syscall_IPFC_call(u64 hart, u64 mtime)
     current_thread->IPFC_handler_index = handler_index;
     current_thread->is_running = 0;
 
-    kernel_choose_new_thread(mtime, hart);
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    kernel_choose_new_thread(mtime, hart);
 }
 
 void syscall_IPFC_return(u64 hart, u64 mtime)
@@ -2245,8 +2245,9 @@ void syscall_IPFC_return(u64 hart, u64 mtime)
     }
     else
     { rwlock_release_write(&process->process_lock); }
-    kernel_choose_new_thread(mtime, hart);
+
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    kernel_choose_new_thread(mtime, hart);
 }
 
 void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
