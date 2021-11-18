@@ -389,7 +389,7 @@ void _start()
             u64 practical_column_count = 1;
             if(column_count > practical_column_count) { practical_column_count = column_count; }
 
-            f64 time_frame_start = AOS_time_get_seconds();
+            f64 time_frame_start = AOS_H_time_get_seconds();
             f64 when_in_second_frame_start = modulo(time_frame_start, 1.0);
 
             u8 draw_text_buffer[row_count * practical_column_count];

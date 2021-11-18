@@ -687,20 +687,20 @@ while(1) {
 //            AOS_H_printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
         }
     }
-//f64 pre_sleep = AOS_time_get_seconds();
+//f64 pre_sleep = AOS_H_time_get_seconds();
     u64 AOS_wait_surface = 0;
     AOS_thread_awake_on_surface(&AOS_wait_surface, 1);
     AOS_thread_awake_on_mouse();
     AOS_thread_awake_on_keyboard();
     AOS_thread_awake_after_time(1000000);
     AOS_thread_sleep();
-//AOS_H_printf("temp slept for %lf seconds\n", AOS_time_get_seconds() - pre_sleep);
+//AOS_H_printf("temp slept for %lf seconds\n", AOS_H_time_get_seconds() - pre_sleep);
 
     Framebuffer* fb = 0x54000;
     u64 fb_page_count = AOS_surface_acquire(0, 0, 0);
     if(AOS_surface_acquire(0, fb, fb_page_count))
     {
-        double time_frame_start = AOS_time_get_seconds();
+        double time_frame_start = AOS_H_time_get_seconds();
 
         // Fetch from consumers and setup
         {
@@ -777,7 +777,7 @@ while(1) {
         bottom_banner_y = 0;
         if(fb->height > 16) { bottom_banner_y = fb->height - 16; }
 
-        f64 time_render_start = AOS_time_get_seconds();
+        f64 time_render_start = AOS_H_time_get_seconds();
 #if 1
         render_buffer = fb;
         atomic_s64_set(&render_work_done, 0);
@@ -922,7 +922,7 @@ while(1) {
             }
         }
 #endif
-        f64 time_render_end = AOS_time_get_seconds();
+        f64 time_render_end = AOS_H_time_get_seconds();
         //printf("it took %lf ms to render\n", (time_render_end - time_render_start)*1000.0);
 
         { // draw cursor
@@ -949,7 +949,7 @@ while(1) {
         }
 
         // frame time, bottom right
-        f64 time_frame_end = AOS_time_get_seconds();
+        f64 time_frame_end = AOS_H_time_get_seconds();
         f64 frame_time = (time_frame_end-time_frame_start) *1000.0;
         rolling_frame_time = rolling_frame_time * 0.9 + frame_time * 0.1;
         frame_time = rolling_frame_time;
@@ -972,7 +972,7 @@ while(1) {
         }
 
         // time since last frame, bottom right, above frametime
-        f64 time_right_now = AOS_time_get_seconds();
+        f64 time_right_now = AOS_H_time_get_seconds();
         f64 time_passed = (time_right_now-last_frame_time) *1000.0;
         rolling_time_passed = rolling_time_passed *0.9 + time_passed *0.1;
         time_passed = rolling_time_passed;

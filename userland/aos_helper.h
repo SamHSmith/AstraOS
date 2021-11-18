@@ -6,7 +6,6 @@
 #include "../common/types.h"
 #include "aos_syscalls.h"
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -980,6 +979,9 @@ s32 AOS_H_fctprintf(void (*out)(char character, void* arg), void* arg, const cha
   return ret;
 }
 
-
+f64 AOS_H_time_get_seconds()
+{
+    return (f64)AOS_get_cpu_time() / (f64)AOS_get_cpu_timer_frequency();
+}
 
 #endif // _AOS_HELPER

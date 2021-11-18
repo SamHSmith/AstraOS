@@ -57,7 +57,8 @@ u64 AOS_surface_consumer_get_size(u64 consumer_slot, volatile u32* width, volati
 u64 AOS_surface_consumer_set_size(u64 consumer_slot, u32 width, u32 height);
 u64 AOS_surface_consumer_fetch(u64 consumer_slot, volatile AOS_Framebuffer* fb, u64 page_count);
  
-f64 AOS_time_get_seconds();
+u64 AOS_get_cpu_time();
+u64 AOS_get_cpu_timer_frequency();
  
 u64 AOS_is_valid_file_id(u64 file_id);
 u64 AOS_is_valid_dir_id(u64 directory_id);

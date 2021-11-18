@@ -111,8 +111,8 @@ AOS_surface_consumer_fetch:
     ecall
     ret
 
-.global AOS_time_get_seconds
-AOS_time_get_seconds:
+.global AOS_get_cpu_time
+AOS_get_cpu_time:
     addi a0, x0, 14
     ecall
     ret
@@ -373,6 +373,12 @@ AOS_IPFC_call:
 AOS_IPFC_return:
     mv a1, a0
     addi a0, x0, 53
+    ecall
+    ret
+
+.global AOS_get_cpu_timer_frequency
+AOS_get_cpu_timer_frequency:
+    addi a0, x0, 54
     ecall
     ret
 

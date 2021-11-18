@@ -712,14 +712,46 @@ void syscall_surface_consumer_fetch(u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
-void syscall_time_get_seconds(u64 hart, u64 mtime)
+void syscall_get_cpu_time(u64 hart, u64 mtime)
 {
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
     Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
     Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
     TrapFrame* frame = &current_thread->frame;
 
-    *((f64*)&frame->regs[10]) = ((f64)mtime) / 10000000.0;
+    frame->regs[10] = mtime;
     current_thread->program_counter += 4;
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_get_cpu_timer_frequency(u64 hart, u64 mtime)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    frame->regs[10] = MACHINE_TIMER_SECOND;
+    current_thread->program_counter += 4;
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
 void syscall_file_get_name(u64 hart)
@@ -2249,7 +2281,7 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     else if(call_num == 13)
     { syscall_surface_consumer_fetch(hart); }
     else if(call_num == 14)
-    { syscall_time_get_seconds(hart, mtime); }
+    { syscall_get_cpu_time(hart, mtime); }
     else if(call_num == 15)
     { syscall_file_get_name(hart); }
     else if(call_num == 23)
@@ -2310,6 +2342,8 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_IPFC_call(hart, mtime); }
     else if(call_num == 53)
     { syscall_IPFC_return(hart, mtime); }
+    else if(call_num == 54)
+    { syscall_get_cpu_timer_frequency(hart, mtime); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }
