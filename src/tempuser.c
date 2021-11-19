@@ -9,6 +9,11 @@
 
 typedef struct
 {
+    u64 pid_owner;
+} Window;
+
+typedef struct
+{
     s64 x;
     s64 y;
     s64 new_x;
@@ -24,7 +29,7 @@ typedef struct
     u8 we_have_frame;
     u64 owned_in_stream;
     u64 owned_out_stream;
-} Window;
+} Program;
 
 f32 clamp_01(f32 f)
 {
@@ -33,7 +38,7 @@ f32 clamp_01(f32 f)
     return f;
 }
 
-Window windows[84];
+Program windows[84];
 u64 window_count;
 
 volatile u64 slot_count, slot_index;
@@ -358,34 +363,66 @@ u64 dave_ipfc_entry(u64 source_pid, u16 function_index, u64* ipfc_static_data)
     AOS_IPFC_return(5);
 }
 
+const char* TWA_IPFC_API_NAME = "thunder_windowed_application_ipfc_api_v1";
+// f1 is create window
+// f2 is destroy window
+// f3 is get surfaces
+void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_index, void* static_data_1024b)
+{
+    // this enables the use of global variables
+    __asm__(".option norelax");
+    __asm__("la gp, _global_pointer");
+    __asm__(".option relax");
+
+    if(function_index == 0)
+    {
+        AOS_H_printf("new window! from pid %llu\n", source_pid);
+        if(0) // can allocate new window
+        {
+            u64* window_handle = static_data_1024b;
+            // *window_handle = dumb;
+            AOS_IPFC_return(1);
+        }
+        else
+        {
+            AOS_IPFC_return(0);
+        }
+    }
+    else if(function_index == 1)
+    {
+        AOS_H_printf("destroy window! from pid %llu\n", source_pid);
+        u64* window_handle_pointer = static_data_1024b;
+        u64 window_handle = *window_handle_pointer;
+        // destroy thingy
+        AOS_IPFC_return(0);
+    }
+    else if(function_index == 2)
+    {
+        AOS_H_printf("get window surfaces! from pid %llu\n", source_pid);
+        u64 window_handle;
+        {
+            u64* window_handle_pointer = static_data_1024b;
+            window_handle = *window_handle_pointer;
+        }
+
+        if(1) // non valid handle
+        {
+            AOS_IPFC_return(0);
+        }
+#if 0
+        u16* copy_to = static_data_1024b;
+        for(u64 i = 0; i < 1024/sizeof(u16) && i < process_surface_count; i++)
+        { copy_to[i] = process_surfaces[i]; }
+        AOS_IPFC_return(process_surface_count);
+#endif
+    }
+    AOS_IPFC_return(0);
+}
+
 void program_loader_program(u64 drive1_partitions_directory)
 {
-//// nocheckin,   testing code
-
-u8* handler_name = "dave_ipfc_v1";
-u64 handler_name_len = strlen(handler_name);
-u64* handler_stacks_start = 0x675432000;
-AOS_alloc_pages(handler_stacks_start, 2*2);
-u64 dave_IPFC_handler;
-if(AOS_IPFC_handler_create(
-        handler_name,
-        handler_name_len,
-        dave_ipfc_entry,
-        handler_stacks_start,
-        2, 2,
-        &dave_IPFC_handler))
-{
-AOS_H_printf("created success\n");
-}
-else
-{
-AOS_H_printf("dave failure\n");
-}
 
 
-AOS_H_printf("now we do not destroy the handler.\nBecause the handler lives for the lifetime of the proc");
-
-///////////////////////// nocheckin end test
     window_count = 0;
     u8* print_text = "program loader program has started.\n";
     AOS_stream_put(0, print_text, strlen(print_text));
@@ -535,7 +572,7 @@ while(1) {
                 }
                 if(any_window)
                 {
-                    Window temp = windows[window];
+                    Program temp = windows[window];
                     for(u64 j = window; j + 1 < window_count; j++)
                     { windows[j] = windows[j+1]; }
                     windows[window_count-1] = temp;
@@ -567,7 +604,7 @@ while(1) {
                 }
                 if(any_window)
                 {
-                    Window temp = windows[window];
+                    Program temp = windows[window];
                     for(u64 j = window; j + 1 < window_count; j++)
                     { windows[j] = windows[j+1]; }
                     windows[window_count-1] = temp;
@@ -664,7 +701,7 @@ while(1) {
 
                                 if(is_moving_window)
                                 {
-                                    Window temp = windows[window_count-2];
+                                    Program temp = windows[window_count-2];
                                     windows[window_count-2] = windows[window_count-1];
                                     windows[window_count-1] = temp;
                                 }

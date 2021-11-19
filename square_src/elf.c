@@ -33,36 +33,33 @@ void _start()
         }
     }
 
-
-// nocheckin, test code
-{
-u8* name = "dave_ipfc_v1";
-u64 name_len = strlen(name);
-u64 session_id;
-if(AOS_IPFC_init_session(name, name_len, &session_id))
-{
-    AOS_H_printf("Session has been inited!\n");
-
-    u64 data[128];
-    data[1] = 3;
-    data[69] = 420;
-    AOS_H_printf("Calling function 42...\n");
-    AOS_H_printf("Return value of function 42 was %llu\n", AOS_IPFC_call(session_id, 42, data, data));
-
-    AOS_H_printf("Now printing static data returned by the ipfc\n");
-    for(u64 i = 0; i < 128; i++)
-    { AOS_H_printf("%llx\n", data[i]); }
-
-    AOS_H_printf("now we will close session#%llu\n", session_id);
-    AOS_IPFC_close_session(session_id);
-    AOS_H_printf("now it has been closed.\n");
-}
-else
-{
-    AOS_H_printf("failed to init session");
-}
-
-}
+    u8 is_running_as_twa = 0;
+    u64 twa_session_id;
+    u64 twa_window_handle = 0;
+    if(!is_running_as_ega)
+    {
+        u8* name = "thunder_windowed_application_ipfc_api_v1";
+        u64 name_len = strlen(name);
+        if(AOS_IPFC_init_session(name, name_len, &twa_session_id))
+        {
+            is_running_as_twa = 1;
+            // create window
+            u64 scratch[1024/8];
+            if(AOS_IPFC_call(twa_session_id, 0, 0, &scratch))
+            {
+                twa_window_handle = scratch[0];
+                AOS_H_printf("Created a thunder window! handle = %llu\n", twa_window_handle);
+            }
+            else
+            {
+                AOS_IPFC_close_session(twa_session_id);
+                is_running_as_twa = 0;
+                AOS_H_printf("Failed to create thunder window!\n");
+            }
+        }
+        else
+        { AOS_H_printf("Failed to init thunder session\n"); }
+    }
 
     f64 start_time = AOS_H_time_get_seconds();
 
