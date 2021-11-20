@@ -421,7 +421,10 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
 
 void program_loader_program(u64 drive1_partitions_directory)
 {
-
+    // this enables the use of global variables
+    __asm__(".option norelax");
+    __asm__("la gp, _global_pointer");
+    __asm__(".option relax");
 
     window_count = 0;
     u8* print_text = "program loader program has started.\n";
@@ -480,6 +483,18 @@ void program_loader_program(u64 drive1_partitions_directory)
     f64 last_frame_time = 0.0;
     f64 rolling_time_passed = 0.0;
     f64 rolling_frame_time = 0.0;
+
+    // setting up twa interface
+    {
+        u64 handler_name_len = strlen(TWA_IPFC_API_NAME);
+        u64 handler_stacks_start = 0x3241234000;
+        AOS_alloc_pages(handler_stacks_start, 2);
+        if(!AOS_IPFC_handler_create(TWA_IPFC_API_NAME, handler_name_len,
+                                    thunder_windowed_application_ipfc_api_entry,
+                                    handler_stacks_start, 2, 1, 0)
+        )
+        { AOS_H_printf("failed to init twa ipfc handler. Something is very wrong.\n"); }
+    }
 
 while(1) {
 

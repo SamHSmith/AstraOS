@@ -73,14 +73,13 @@ u64 current_thread_runtimes[KERNEL_MAX_HART_COUNT];
 u64 last_mtimes[KERNEL_MAX_HART_COUNT];
 
 /*
- * Make sure you do not have a lock on THREAD_RUNTIME_ARRAY_LOCK
+ * Make sure you have a READ lock on THREAD_RUNTIME_ARRAY_LOCK
  * when calling kernel_choose_new_thread
  */
 
 struct xoshiro256ss_state kernel_choose_new_thread_rando_state[KERNEL_MAX_HART_COUNT];
 void kernel_choose_new_thread(u64 new_mtime, u64 hart)
 {
-    rwlock_acquire_read(&THREAD_RUNTIME_ARRAY_LOCK);
     ThreadRuntime* runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
 
     if(kernel_current_thread_has_thread[hart])
@@ -223,7 +222,6 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
         spinlock_release(&runtime_array[new_thread_runtime].lock);
     }
 
-    rwlock_release_read(&THREAD_RUNTIME_ARRAY_LOCK);
     if(!found_new_thread)
     {
         // Causes the KERNEL nop thread to be loaded

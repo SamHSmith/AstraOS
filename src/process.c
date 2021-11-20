@@ -974,7 +974,7 @@ u64 process_ipfc_handler_create(
     
     Kallocation* array = process->ipfc_handler_alloc.memory;
     array[found_index] = alloc;
-    *out_handler_id_ptr = found_index;
+    if(out_handler_id_ptr) { *out_handler_id_ptr = found_index; }
     return 1;
 }
 
