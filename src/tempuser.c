@@ -9,11 +9,8 @@
 
 typedef struct
 {
-    u64 pid_owner;
-} Window;
-
-typedef struct
-{
+    u16 other_surface_slot;
+    u64 window_handle;
     s64 x;
     s64 y;
     s64 new_x;
@@ -27,9 +24,7 @@ typedef struct
     AOS_Framebuffer* fb;
     u64 fb_page_count;
     u8 we_have_frame;
-    u64 owned_in_stream;
-    u64 owned_out_stream;
-} Program;
+} Window;
 
 f32 clamp_01(f32 f)
 {
@@ -38,8 +33,19 @@ f32 clamp_01(f32 f)
     return f;
 }
 
-Program windows[84];
-u64 window_count;
+Window windows[84];
+u64 window_count = 0;
+u64 window_handle_counter = 0;
+
+typedef struct
+{
+    u64 pid;
+    u64 owned_in_stream;
+    u64 owned_out_stream;
+} Program;
+
+Program programs[84];
+u64 program_count;
 
 volatile u64 slot_count, slot_index;
 #define MAX_SLOT_COUNT 128
@@ -62,6 +68,29 @@ volatile Spinlock tempuser_printout_lock;
 atomic_s64 render_work_started;
 atomic_s64 render_work_done;
 u64 render_work_done_semaphore;
+
+f64 cursor_x = 0.0;
+f64 cursor_y = 0.0;
+f64 new_cursor_x = 0.0;
+f64 new_cursor_y = 0.0;
+
+f64 start_move_x = 0.0;
+f64 start_move_y = 0.0;
+
+f64 start_resize_cursor_x = 0.0;
+f64 start_resize_cursor_y = 0.0;
+u8 resize_x_invert = 0;
+u8 resize_y_invert = 0;
+u64 start_resize_window_width = 0;
+u64 start_resize_window_height = 0;
+s64 start_resize_window_x = 0;
+s64 start_resize_window_y = 0;
+
+u8 is_fullscreen_mode = 0;
+
+f64 last_frame_time = 0.0;
+f64 rolling_time_passed = 0.0;
+f64 rolling_frame_time = 0.0;
 
 typedef struct
 {
@@ -351,50 +380,99 @@ void render_thread_entry(u64 thread_number)
     }
 }
 
-u64 dave_ipfc_entry(u64 source_pid, u16 function_index, u64* ipfc_static_data)
-{
-    spinlock_acquire(&tempuser_printout_lock);
-    AOS_H_printf("~~~~DAVE IPFC FROM PID%llu, function_index=%llu~~~~\n", source_pid, function_index);
-    AOS_H_printf("Here comes the static data\n");
-    for(u64 i = 0; i < 128; i++)
-    { AOS_H_printf("%llx\n", ipfc_static_data[i]); ipfc_static_data[i] *= 2; }
-    spinlock_release(&tempuser_printout_lock);
-
-    AOS_IPFC_return(5);
-}
-
+Spinlock thunder_lock;
 const char* TWA_IPFC_API_NAME = "thunder_windowed_application_ipfc_api_v1";
-// f1 is create window
-// f2 is destroy window
-// f3 is get surfaces
+// f0 is create window
+// f1 is destroy window
+// f2 is get surfaces
 void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_index, void* static_data_1024b)
 {
     // this enables the use of global variables
     __asm__(".option norelax");
     __asm__("la gp, _global_pointer");
     __asm__(".option relax");
+    spinlock_acquire(&thunder_lock);
 
     if(function_index == 0)
     {
         AOS_H_printf("new window! from pid %llu\n", source_pid);
-        if(0) // can allocate new window
+        if(window_count + 1 < 84) // can allocate new window
         {
             u64* window_handle = static_data_1024b;
-            // *window_handle = dumb;
+            *window_handle = window_handle_counter++;
+            {
+                u64 con = 0;
+                u64 surface_slot;
+                if(AOS_surface_consumer_create(source_pid, &con, &surface_slot))
+                {
+                    windows[window_count].pid = source_pid;
+                    windows[window_count].consumer = con;
+                    windows[window_count].x = 20 + window_count*7;
+                    windows[window_count].y = 49*window_count;
+                    if(windows[window_count].y > 400) { windows[window_count].y = 400; }
+                    windows[window_count].new_x = windows[window_count].x;
+                    windows[window_count].new_y = windows[window_count].y;
+                    windows[window_count].width = 0;
+                    windows[window_count].height = 0;
+                    windows[window_count].new_width = 64;
+                    windows[window_count].new_height = 64;
+                    windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
+                    windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
+                    windows[window_count].we_have_frame = 0;
+                    windows[window_count].window_handle = *window_handle;
+                    windows[window_count].other_surface_slot = surface_slot;
+                    window_count++;
+
+                    if(is_moving_window)
+                    {
+                        Window temp = windows[window_count-2];
+                        windows[window_count-2] = windows[window_count-1];
+                        windows[window_count-1] = temp;
+                    }
+                }
+                else { AOS_H_printf("Failed to create consumer for PID: %llu\n", source_pid); }
+            }
+            spinlock_release(&thunder_lock);
             AOS_IPFC_return(1);
         }
         else
         {
+            spinlock_release(&thunder_lock);
             AOS_IPFC_return(0);
         }
     }
     else if(function_index == 1)
     {
-        AOS_H_printf("destroy window! from pid %llu\n", source_pid);
         u64* window_handle_pointer = static_data_1024b;
         u64 window_handle = *window_handle_pointer;
+        AOS_H_printf("destroy window with handle=%llu! from pid %llu\n", window_handle, source_pid);
         // destroy thingy
-        AOS_IPFC_return(0);
+
+        u64 destroyed = 0;
+
+        for(u64 i = 0; i < window_count; i++)
+        {
+            if(windows[i].pid != source_pid || windows[i].window_handle != window_handle)
+            { continue; }
+
+            destroyed = 1;
+
+            //TODO cleanup
+            if(i + 1 == window_count && is_fullscreen_mode)
+            {
+                AOS_surface_stop_forwarding_to_consumer(0);
+                is_fullscreen_mode = 0;
+            }
+
+            for(; i + 1 < window_count; i++)
+            {
+                windows[i] = windows[i+1];
+            }
+            window_count--;
+        }
+
+        spinlock_release(&thunder_lock);
+        AOS_IPFC_return(destroyed);
     }
     else if(function_index == 2)
     {
@@ -405,17 +483,22 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
             window_handle = *window_handle_pointer;
         }
 
-        if(1) // non valid handle
-        {
-            AOS_IPFC_return(0);
-        }
-#if 0
         u16* copy_to = static_data_1024b;
-        for(u64 i = 0; i < 1024/sizeof(u16) && i < process_surface_count; i++)
-        { copy_to[i] = process_surfaces[i]; }
-        AOS_IPFC_return(process_surface_count);
-#endif
+
+        for(u64 i = 0; i < window_count; i++)
+        {
+            if(windows[i].pid != source_pid || windows[i].window_handle != window_handle)
+            { continue; }
+
+            copy_to[0] = windows[i].other_surface_slot;
+            spinlock_release(&thunder_lock);
+            AOS_IPFC_return(1);
+        }
+        spinlock_release(&thunder_lock);
+        AOS_IPFC_return(0);
     }
+
+    spinlock_release(&thunder_lock);
     AOS_IPFC_return(0);
 }
 
@@ -431,6 +514,8 @@ void program_loader_program(u64 drive1_partitions_directory)
     AOS_stream_put(0, print_text, strlen(print_text));
 
     spinlock_create(&tempuser_printout_lock);
+    spinlock_create(&thunder_lock);
+    spinlock_acquire(&thunder_lock);
     render_work_semaphore = AOS_semaphore_create(0, THREAD_COUNT * JOBS_PER_THREAD);
     render_work_done_semaphore = AOS_semaphore_create(0, 1);
     {
@@ -460,29 +545,6 @@ void program_loader_program(u64 drive1_partitions_directory)
         AOS_H_printf("temporary program loader has found %s\n", partition_names[i]);
     }
     slot_index = 0;
-
-    f64 cursor_x = 0.0;
-    f64 cursor_y = 0.0;
-    f64 new_cursor_x = 0.0;
-    f64 new_cursor_y = 0.0;
-
-    f64 start_move_x = 0.0;
-    f64 start_move_y = 0.0;
-
-    f64 start_resize_cursor_x = 0.0;
-    f64 start_resize_cursor_y = 0.0;
-    u8 resize_x_invert = 0;
-    u8 resize_y_invert = 0;
-    u64 start_resize_window_width = 0;
-    u64 start_resize_window_height = 0;
-    s64 start_resize_window_x = 0;
-    s64 start_resize_window_y = 0;
-
-    u8 is_fullscreen_mode = 0;
-
-    f64 last_frame_time = 0.0;
-    f64 rolling_time_passed = 0.0;
-    f64 rolling_frame_time = 0.0;
 
     // setting up twa interface
     {
@@ -519,6 +581,7 @@ while(1) {
         }
     }
 
+#if 0
     { // Read from stdin
         while(1)
         {
@@ -537,19 +600,20 @@ while(1) {
             else { break; }
         }
     }
+#endif
 
-    { // Read stdout of windows
+    { // Read stdout of programs
         spinlock_acquire(&tempuser_printout_lock);
-        for(u64 i = 0; i < window_count; i++)
+        for(u64 i = 0; i < program_count; i++)
         {
             u64 byte_count = 0;
-            AOS_stream_take(windows[i].owned_in_stream, 0, 0, &byte_count);
+            AOS_stream_take(programs[i].owned_in_stream, 0, 0, &byte_count);
             u8 scratch[512];
             do {
                 u64 dummy_byte_count;
                 u64 read_count = byte_count;
                 if(read_count > 512) { read_count = 512; }
-                if(AOS_stream_take(windows[i].owned_in_stream, scratch, read_count, &dummy_byte_count))
+                if(AOS_stream_take(programs[i].owned_in_stream, scratch, read_count, &dummy_byte_count))
                 {
                     AOS_stream_put(AOS_STREAM_STDOUT, scratch, read_count);
                     byte_count-=read_count;
@@ -587,7 +651,7 @@ while(1) {
                 }
                 if(any_window)
                 {
-                    Program temp = windows[window];
+                    Window temp = windows[window];
                     for(u64 j = window; j + 1 < window_count; j++)
                     { windows[j] = windows[j+1]; }
                     windows[window_count-1] = temp;
@@ -619,7 +683,7 @@ while(1) {
                 }
                 if(any_window)
                 {
-                    Program temp = windows[window];
+                    Window temp = windows[window];
                     for(u64 j = window; j + 1 < window_count; j++)
                     { windows[j] = windows[j+1]; }
                     windows[window_count-1] = temp;
@@ -685,7 +749,7 @@ while(1) {
                     { slot_index++; }
                     else if(scancode == 35 && slot_index < slot_count)
                     {
-                        for(u64 i = 0; window_count + 1 < 84 && i < 1; i++)
+                        for(u64 i = 0; program_count + 1 < 84 && window_count + 1 < 84 && i < 1; i++)
                         {
                         u64 pid = 0;
                         if(AOS_create_process_from_file(partitions[slot_index], &pid))
@@ -709,14 +773,16 @@ while(1) {
                                 windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                                 windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
                                 windows[window_count].we_have_frame = 0;
-                                AOS_process_create_out_stream(pid, 0, &windows[window_count].owned_in_stream);
-                                AOS_process_create_in_stream(pid, &windows[window_count].owned_out_stream, 0);
+                                windows[window_count].window_handle = window_handle_counter++;
+                                AOS_process_create_out_stream(pid, 0, &programs[program_count].owned_in_stream);
+                                AOS_process_create_in_stream(pid, &programs[program_count].owned_out_stream, 0);
                                 AOS_process_start(pid);
                                 window_count++;
+                                program_count++;
 
                                 if(is_moving_window)
                                 {
-                                    Program temp = windows[window_count-2];
+                                    Window temp = windows[window_count-2];
                                     windows[window_count-2] = windows[window_count-1];
                                     windows[window_count-1] = temp;
                                 }
@@ -745,7 +811,9 @@ while(1) {
     AOS_thread_awake_on_mouse();
     AOS_thread_awake_on_keyboard();
     AOS_thread_awake_after_time(1000000);
+    spinlock_release(&thunder_lock);
     AOS_thread_sleep();
+    spinlock_acquire(&thunder_lock);
 //AOS_H_printf("temp slept for %lf seconds\n", AOS_H_time_get_seconds() - pre_sleep);
 
     Framebuffer* fb = 0x54000;

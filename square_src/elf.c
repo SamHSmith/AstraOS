@@ -56,6 +56,14 @@ void _start()
                 is_running_as_twa = 0;
                 AOS_H_printf("Failed to create thunder window!\n");
             }
+
+#if 0
+            // for testing destroy window
+            if(!AOS_IPFC_call(twa_session_id, 1, &scratch, 0))
+            {
+                AOS_H_printf("Failed to destroy window...\n");
+            }
+#endif
         }
         else
         { AOS_H_printf("Failed to init thunder session\n"); }
@@ -72,11 +80,18 @@ while(1)
 {
     u16 surfaces[512];
                             surfaces[0] = 0;  // temp
-    u16 surface_count = 1;
+    u16 surface_count = 1; // temp
     if(is_running_as_ega)
     {
         f64 sec_before_call = AOS_H_time_get_seconds();
         surface_count = AOS_IPFC_call(ega_session_id, 0, 0, surfaces);
+        f64 sec_after_call = AOS_H_time_get_seconds();
+        AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
+    }
+    else if(is_running_as_twa)
+    {
+        f64 sec_before_call = AOS_H_time_get_seconds();
+        surface_count = AOS_IPFC_call(twa_session_id, 2, &twa_window_handle, surfaces);
         f64 sec_after_call = AOS_H_time_get_seconds();
         AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
     }
