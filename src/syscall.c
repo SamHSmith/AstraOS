@@ -2163,6 +2163,11 @@ void syscall_IPFC_call(u64 hart, u64 mtime)
     current_thread->IPFC_handler_index = handler_index;
     current_thread->is_running = 0;
 
+    kernel_log_user(hart,
+                    kernel_current_threads[hart].process_pid,
+                    kernel_current_thread_tid[hart],
+                    "thread called ipfc");
+
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
     rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
     kernel_choose_new_thread(mtime, hart);
@@ -2247,6 +2252,11 @@ void syscall_IPFC_return(u64 hart, u64 mtime)
     }
     else
     { rwlock_release_write(&process->process_lock); }
+
+    kernel_log_user(hart,
+                    kernel_current_threads[hart].process_pid,
+                    kernel_current_thread_tid[hart],
+                    "thread returned ipfc");
 
     kernel_choose_new_thread(mtime, hart);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);

@@ -88,6 +88,7 @@ while(1)
         f64 sec_after_call = AOS_H_time_get_seconds();
         AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
     }
+#if 1
     else if(is_running_as_twa)
     {
         f64 sec_before_call = AOS_H_time_get_seconds();
@@ -95,6 +96,7 @@ while(1)
         f64 sec_after_call = AOS_H_time_get_seconds();
         AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
     }
+#endif
 
     AOS_thread_awake_on_surface(&surfaces, surface_count);
     AOS_thread_sleep();

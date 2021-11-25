@@ -576,7 +576,7 @@ u64 m_trap(
                             KernelLogEntry entry = KERNEL_LOG[(log_index - i) % KERNEL_LOG_SIZE];
                             if(entry.is_kernel)
                             {
-                                printf("%3.3llu) H:%llu - T:%llu | %s:%llu - %s\n",
+                                printf("%3.3llu) H:%llu - T: %llu | %s:%llu - %s\n",
                                        log_entry_counter++,
                                        entry.hart,
                                        entry.time,
@@ -586,7 +586,7 @@ u64 m_trap(
                             }
                             else
                             {
-                                printf("%3.3llu) H:%llu - T:%llu - PID:%llu - TID:%llu | %s:%llu - %s\n",
+                                printf("%3.3llu) H:%llu - T: %llu - PID:%llu - TID:%llu | %s:%llu - %s\n",
                                        log_entry_counter++,
                                        entry.hart,
                                        entry.time,

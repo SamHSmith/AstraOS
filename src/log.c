@@ -11,7 +11,7 @@ typedef struct
     u8 is_kernel;
 } KernelLogEntry;
 
-#define KERNEL_LOG_SIZE 400
+#define KERNEL_LOG_SIZE 800
 
 KernelLogEntry KERNEL_LOG[KERNEL_LOG_SIZE];
 atomic_s64 KERNEL_LOG_INDEX;

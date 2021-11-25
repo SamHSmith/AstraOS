@@ -9,6 +9,7 @@
 
 typedef struct
 {
+    Spinlock lock;
     u16 other_surface_slot;
     u64 window_handle;
     s64 x;
@@ -380,7 +381,7 @@ void render_thread_entry(u64 thread_number)
     }
 }
 
-Spinlock thunder_lock;
+RWLock thunder_lock;
 const char* TWA_IPFC_API_NAME = "thunder_windowed_application_ipfc_api_v1";
 // f0 is create window
 // f1 is destroy window
@@ -391,10 +392,13 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
     __asm__(".option norelax");
     __asm__("la gp, _global_pointer");
     __asm__(".option relax");
-    spinlock_acquire(&thunder_lock);
+
+    rwlock_acquire_read(&thunder_lock);
 
     if(function_index == 0)
     {
+        rwlock_release_read(&thunder_lock);
+        rwlock_acquire_write(&thunder_lock);
         AOS_H_printf("new window! from pid %llu\n", source_pid);
         if(window_count + 1 < 84) // can allocate new window
         {
@@ -432,12 +436,12 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                 }
                 else { AOS_H_printf("Failed to create consumer for PID: %llu\n", source_pid); }
             }
-            spinlock_release(&thunder_lock);
+            rwlock_release_write(&thunder_lock);
             AOS_IPFC_return(1);
         }
         else
         {
-            spinlock_release(&thunder_lock);
+            rwlock_release_write(&thunder_lock);
             AOS_IPFC_return(0);
         }
     }
@@ -447,6 +451,9 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
         u64 window_handle = *window_handle_pointer;
         AOS_H_printf("destroy window with handle=%llu! from pid %llu\n", window_handle, source_pid);
         // destroy thingy
+
+        rwlock_release_read(&thunder_lock);
+        rwlock_acquire_write(&thunder_lock);
 
         u64 destroyed = 0;
 
@@ -471,7 +478,7 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
             window_count--;
         }
 
-        spinlock_release(&thunder_lock);
+        rwlock_release_write(&thunder_lock);
         AOS_IPFC_return(destroyed);
     }
     else if(function_index == 2)
@@ -491,14 +498,14 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
             { continue; }
 
             copy_to[0] = windows[i].other_surface_slot;
-            spinlock_release(&thunder_lock);
+            rwlock_release_read(&thunder_lock);
             AOS_IPFC_return(1);
         }
-        spinlock_release(&thunder_lock);
+        rwlock_release_read(&thunder_lock);
         AOS_IPFC_return(0);
     }
 
-    spinlock_release(&thunder_lock);
+    rwlock_release_read(&thunder_lock);
     AOS_IPFC_return(0);
 }
 
@@ -515,7 +522,7 @@ void program_loader_program(u64 drive1_partitions_directory)
 
     spinlock_create(&tempuser_printout_lock);
     spinlock_create(&thunder_lock);
-    spinlock_acquire(&thunder_lock);
+    rwlock_acquire_read(&thunder_lock);
     render_work_semaphore = AOS_semaphore_create(0, THREAD_COUNT * JOBS_PER_THREAD);
     render_work_done_semaphore = AOS_semaphore_create(0, 1);
     {
@@ -561,6 +568,8 @@ void program_loader_program(u64 drive1_partitions_directory)
 while(1) {
 
     { // Check for program not alive's
+        rwlock_release_read(&thunder_lock);
+        rwlock_acquire_write(&thunder_lock);
         for(u64 i = 0; i < window_count; i++)
         {
             if(AOS_process_is_alive(windows[i].pid))
@@ -579,6 +588,8 @@ while(1) {
             }
             window_count--;
         }
+        rwlock_release_write(&thunder_lock);
+        rwlock_acquire_read(&thunder_lock);
     }
 
 #if 0
@@ -624,6 +635,8 @@ while(1) {
     }
 
     { // Mouse events
+        rwlock_release_read(&thunder_lock);
+        rwlock_acquire_write(&thunder_lock);
         u64 mouse_event_count = AOS_get_rawmouse_events(0, 0);
         AOS_RawMouseEvent mouse_events[mouse_event_count];
         mouse_event_count = AOS_get_rawmouse_events(mouse_events, mouse_event_count);
@@ -703,6 +716,8 @@ while(1) {
                 is_resizing_window = 0;
             }
         }
+        rwlock_release_write(&thunder_lock);
+        rwlock_acquire_read(&thunder_lock);
     }
 
     { // Keyboard events
@@ -811,9 +826,9 @@ while(1) {
     AOS_thread_awake_on_mouse();
     AOS_thread_awake_on_keyboard();
     AOS_thread_awake_after_time(1000000);
-    spinlock_release(&thunder_lock);
+    rwlock_release_read(&thunder_lock);
     AOS_thread_sleep();
-    spinlock_acquire(&thunder_lock);
+    rwlock_acquire_read(&thunder_lock);
 //AOS_H_printf("temp slept for %lf seconds\n", AOS_H_time_get_seconds() - pre_sleep);
 
     Framebuffer* fb = 0x54000;
@@ -1121,6 +1136,8 @@ while(1) {
 
         // move windows and resize them
         {
+            rwlock_release_read(&thunder_lock);
+            rwlock_acquire_write(&thunder_lock);
             for(u64 i = 0; i < window_count; i++)
             {
                 windows[i].x = windows[i].new_x;
@@ -1128,6 +1145,8 @@ while(1) {
                 windows[i].width = windows[i].new_width;
                 windows[i].height = windows[i].new_height;
             }
+            rwlock_release_write(&thunder_lock);
+            rwlock_acquire_read(&thunder_lock);
         }
 
         cursor_x = new_cursor_x;
