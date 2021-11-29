@@ -92,7 +92,9 @@ while(1)
     else if(is_running_as_twa)
     {
         f64 sec_before_call = AOS_H_time_get_seconds();
-        surface_count = AOS_IPFC_call(twa_session_id, 2, &twa_window_handle, surfaces);
+        u64 scratch[1024/8];
+        scratch[0] = twa_window_handle;
+        surface_count = AOS_IPFC_call(twa_session_id, 2, scratch, surfaces);
         f64 sec_after_call = AOS_H_time_get_seconds();
         AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
     }

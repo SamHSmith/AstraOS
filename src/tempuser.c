@@ -393,13 +393,16 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
     __asm__("la gp, _global_pointer");
     __asm__(".option relax");
 
+//    f64 before = AOS_H_time_get_seconds();
     rwlock_acquire_read(&thunder_lock);
 
     if(function_index == 0)
     {
         rwlock_release_read(&thunder_lock);
         rwlock_acquire_write(&thunder_lock);
+        spinlock_acquire(&tempuser_printout_lock);
         AOS_H_printf("new window! from pid %llu\n", source_pid);
+        spinlock_release(&tempuser_printout_lock);
         if(window_count + 1 < 84) // can allocate new window
         {
             u64* window_handle = static_data_1024b;
@@ -434,7 +437,12 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                         windows[window_count-1] = temp;
                     }
                 }
-                else { AOS_H_printf("Failed to create consumer for PID: %llu\n", source_pid); }
+                else
+                {
+                    spinlock_acquire(&tempuser_printout_lock);
+                    AOS_H_printf("Failed to create consumer for PID: %llu\n", source_pid);
+                    spinlock_release(&tempuser_printout_lock);
+                }
             }
             rwlock_release_write(&thunder_lock);
             AOS_IPFC_return(1);
@@ -449,7 +457,9 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
     {
         u64* window_handle_pointer = static_data_1024b;
         u64 window_handle = *window_handle_pointer;
+        spinlock_acquire(&tempuser_printout_lock);
         AOS_H_printf("destroy window with handle=%llu! from pid %llu\n", window_handle, source_pid);
+        spinlock_release(&tempuser_printout_lock);
         // destroy thingy
 
         rwlock_release_read(&thunder_lock);
@@ -483,7 +493,9 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
     }
     else if(function_index == 2)
     {
-        AOS_H_printf("get window surfaces! from pid %llu\n", source_pid);
+//        spinlock_acquire(&tempuser_printout_lock);
+//        AOS_H_printf("get window surfaces! from pid %llu\n", source_pid);
+//        spinlock_release(&tempuser_printout_lock);
         u64 window_handle;
         {
             u64* window_handle_pointer = static_data_1024b;
@@ -499,6 +511,10 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
 
             copy_to[0] = windows[i].other_surface_slot;
             rwlock_release_read(&thunder_lock);
+//            f64 after = AOS_H_time_get_seconds();
+//            spinlock_acquire(&tempuser_printout_lock);
+//            AOS_H_printf("total ipfc time is %lf ms\n", (after-before) * 1000.0);
+//            spinlock_release(&tempuser_printout_lock);
             AOS_IPFC_return(1);
         }
         rwlock_release_read(&thunder_lock);
@@ -521,7 +537,7 @@ void program_loader_program(u64 drive1_partitions_directory)
     AOS_stream_put(0, print_text, strlen(print_text));
 
     spinlock_create(&tempuser_printout_lock);
-    spinlock_create(&thunder_lock);
+    rwlock_create(&thunder_lock);
     rwlock_acquire_read(&thunder_lock);
     render_work_semaphore = AOS_semaphore_create(0, THREAD_COUNT * JOBS_PER_THREAD);
     render_work_done_semaphore = AOS_semaphore_create(0, 1);
@@ -855,7 +871,11 @@ while(1) {
                     }
                 }
                 else
-                { AOS_H_printf("frame has been dropped\n"); }
+                {
+                    spinlock_acquire(&tempuser_printout_lock);
+                    AOS_H_printf("frame has been dropped\n");
+                    spinlock_release(&tempuser_printout_lock);
+                }
 
                 // do move, not related to consumers
                 if(is_moving_window && i + 1 == window_count)

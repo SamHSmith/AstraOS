@@ -73,13 +73,14 @@ u64 current_thread_runtimes[KERNEL_MAX_HART_COUNT];
 u64 last_mtimes[KERNEL_MAX_HART_COUNT];
 
 /*
- * Make sure you have a READ lock on THREAD_RUNTIME_ARRAY_LOCK
+ * Make sure you have a READ lock on KERNEL_PROCESS_ARRAY_RWLOCK
  * when calling kernel_choose_new_thread
  */
 
 struct xoshiro256ss_state kernel_choose_new_thread_rando_state[KERNEL_MAX_HART_COUNT];
 void kernel_choose_new_thread(u64 new_mtime, u64 hart)
 {
+    rwlock_acquire_read(&THREAD_RUNTIME_ARRAY_LOCK);
     ThreadRuntime* runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
 
     if(kernel_current_thread_has_thread[hart])
@@ -131,6 +132,9 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
         u8 thread_live = thread_runtime_is_live(thread, new_mtime);
 
         // try punt thread to other hart
+        // all threads involved with ipfc's are core locked
+        // so they are not considered
+        if(!thread->IPFC_status)
         {
             u64 lowest_hart = 0;
             u64 lowest_count = U32_MAX; // don't want to overflow
@@ -224,6 +228,7 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
 
     if(!found_new_thread)
     {
+        rwlock_release_read(&THREAD_RUNTIME_ARRAY_LOCK);
         // Causes the KERNEL nop thread to be loaded
         return;
     }
@@ -231,6 +236,8 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
     current_thread_runtimes[hart] = new_thread_runtime;
 
     ThreadRuntime runtime = runtime_array[current_thread_runtimes[hart]];
+
+    rwlock_release_read(&THREAD_RUNTIME_ARRAY_LOCK);
 
     kernel_current_thread_has_thread[hart] = 1;
     kernel_current_thread_tid[hart] = runtime.tid;

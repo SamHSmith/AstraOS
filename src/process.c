@@ -30,6 +30,7 @@ typedef struct
     Kallocation stack_alloc;
     u64 program_counter;
     u64 process_pid;
+    u64 thread_runtime_index;
     u8 is_initialized;
     u8 is_running;
     u8 should_be_destroyed;
@@ -40,6 +41,7 @@ typedef struct
     // 2 is IPFC thread awaiting stack
     // 3 is IPFC running
     u64 IPFC_other_pid;
+    u64 IPFC_caller_runtime_index;
     u32 IPFC_other_tid;
     u16 IPFC_function_index;
     u16 IPFC_handler_index;
@@ -229,9 +231,12 @@ Kallocation THREAD_GROUP_ARRAY_ALLOC;
 u64 THREAD_GROUP_ARRAY_LEN;
 // uses the same lock as above
 
-// have thread group be zero if you don't have special intentions
-// starting_t_value should be zero for non ipfc threads
-u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u32 starting_t_value)
+// you must have a write lock on KERNEL_PROCESS_ARRAY_RWLOCK when calling
+// thread create.
+// have thread_group be zero if you don't have special intentions
+// out_runtime_index should either be zero or a pointer to a u64
+// it gives you the runtime index of the new thread
+u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64* out_runtime_index)
 {
     assert(pid < KERNEL_PROCESS_ARRAY_LEN, "pid is within range");
     assert(KERNEL_PROCESS_ARRAY[pid]->mmu_table != 0, "pid refers to a valid process");
@@ -322,6 +327,12 @@ u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u32 starting_t_va
  
         runtime = THREAD_RUNTIME_ARRAY_LEN++;
     }
+
+    if(out_runtime_index)
+    {
+        *out_runtime_index = runtime;
+    }
+    KERNEL_PROCESS_ARRAY[pid]->threads[tid].thread_runtime_index = runtime;
  
     ThreadRuntime* r = ((ThreadRuntime*)THREAD_RUNTIME_ARRAY_ALLOC.memory) + runtime;
     spinlock_create(&r->lock);
@@ -331,7 +342,7 @@ u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u32 starting_t_va
     r->is_initialized = 1;
     r->owning_hart.value = hart;
     r->allowed_width = KERNEL_HART_COUNT.value; // less temp
-    r->t_value = starting_t_value;
+    r->t_value = 0;
 
     // now we must identify and log the thread group
     {
