@@ -785,40 +785,10 @@ while(1) {
                         u64 pid = 0;
                         if(AOS_create_process_from_file(partitions[slot_index], &pid))
                         {
-                            AOS_H_printf("PROCESS CREATED, PID=%llu\n", pid);
-                            u64 con = 0;
-                            u64 surface_slot;
-                            if(AOS_surface_consumer_create(pid, &con, &surface_slot))
-                            {
-                                windows[window_count].pid = pid;
-                                windows[window_count].consumer = con;
-                                windows[window_count].x = 20 + window_count*7;
-                                windows[window_count].y = 49*window_count;
-                                if(windows[window_count].y > 400) { windows[window_count].y = 400; }
-                                windows[window_count].new_x = windows[window_count].x;
-                                windows[window_count].new_y = windows[window_count].y;
-                                windows[window_count].width = 0;
-                                windows[window_count].height = 0;
-                                windows[window_count].new_width = 64;
-                                windows[window_count].new_height = 64;
-                                windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
-                                windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
-                                windows[window_count].we_have_frame = 0;
-                                windows[window_count].window_handle = window_handle_counter++;
-                                AOS_process_create_out_stream(pid, 0, &programs[program_count].owned_in_stream);
-                                AOS_process_create_in_stream(pid, &programs[program_count].owned_out_stream, 0);
-                                AOS_process_start(pid);
-                                window_count++;
-                                program_count++;
-
-                                if(is_moving_window)
-                                {
-                                    Window temp = windows[window_count-2];
-                                    windows[window_count-2] = windows[window_count-1];
-                                    windows[window_count-1] = temp;
-                                }
-                            }
-                            else { AOS_H_printf("Failed to create consumer for PID: %llu\n", pid); }
+                            AOS_process_create_out_stream(pid, 0, &programs[program_count].owned_in_stream);
+                            AOS_process_create_in_stream(pid, &programs[program_count].owned_out_stream, 0);
+                            AOS_process_start(pid);
+                            program_count++;
                         }
                         else { AOS_H_printf("failed to create process."); }
                         }

@@ -122,12 +122,58 @@ void _start()
     AOS_alloc_pages(pre_send_to_stdin, 1);
     u64 pre_send_to_stdin_len = 0;
 
+    u8 is_running_as_twa = 0;
+    u64 twa_session_id;
+    u64 twa_window_handle = 0;
+    {
+        u8* name = "thunder_windowed_application_ipfc_api_v1";
+        u64 name_len = strlen(name);
+        if(AOS_IPFC_init_session(name, name_len, &twa_session_id))
+        {
+            is_running_as_twa = 1;
+            // create window
+            u64 scratch[1024/8];
+            if(AOS_IPFC_call(twa_session_id, 0, 0, &scratch))
+            {
+                twa_window_handle = scratch[0];
+                AOS_H_printf("Created a thunder window! handle = %llu\n", twa_window_handle);
+            }
+            else
+            {
+                AOS_IPFC_close_session(twa_session_id);
+                is_running_as_twa = 0;
+                AOS_H_printf("Failed to create thunder window!\n");
+            }
+        }
+        else
+        { AOS_H_printf("Failed to init thunder session\n"); }
+    }
+
     spinlock_acquire(&surface_visible_lock);
     while(1)
     {
         spinlock_release(&surface_visible_lock);
-        u64 surface_handle = 0;
-        AOS_thread_awake_on_surface(&surface_handle, 1);
+
+#define DEBUG_IPFC_TIME 0
+
+        u16 surfaces[512];
+        u16 surface_count = 0;
+
+        if(is_running_as_twa)
+        {
+#if DEBUG_IPFC_TIME
+            f64 sec_before_call = AOS_H_time_get_seconds();
+#endif
+            u64 scratch[1024/8];
+            scratch[0] = twa_window_handle;
+            surface_count = AOS_IPFC_call(twa_session_id, 2, scratch, surfaces);
+#if DEBUG_IPFC_TIME
+            f64 sec_after_call = AOS_H_time_get_seconds();
+            AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
+#endif
+        }
+
+        AOS_thread_awake_on_surface(&surfaces, surface_count);
         AOS_thread_awake_after_time(100000);  // haha, this sleep causes frame drops
         AOS_thread_sleep();
         spinlock_acquire(&surface_visible_lock);
@@ -156,13 +202,13 @@ void _start()
             { surface_visible = 0; }
 
             if(show_console)
-            { AOS_surface_stop_forwarding_to_consumer(surface_handle); }
+            { AOS_surface_stop_forwarding_to_consumer(surfaces[0]); }
             else
             {
                 if(surface_visible)
-                { AOS_surface_forward_to_consumer(surface_handle, consumer_handle); }
+                { AOS_surface_forward_to_consumer(surfaces[0], consumer_handle); }
                 else
-                { AOS_surface_stop_forwarding_to_consumer(surface_handle); }
+                { AOS_surface_stop_forwarding_to_consumer(surfaces[0]); }
             }
         }
 
@@ -370,10 +416,9 @@ void _start()
             text_len += taken_count;
         }
 
-
         AOS_Framebuffer* fb = 0x696969000;
         u64 fb_page_count = 9001;
-        if(AOS_surface_acquire(surface_handle, fb, fb_page_count))
+        if(surface_count && AOS_surface_acquire(surfaces[0], fb, fb_page_count))
         {
             u64 column_count = fb->width / 8;
             u64 row_count = (fb->height / 16) + 1;
@@ -529,7 +574,7 @@ void _start()
                     }
                 }
             }
-            AOS_surface_commit(surface_handle);
+            AOS_surface_commit(surfaces[0]);
         }
     }
 }
