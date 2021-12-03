@@ -76,6 +76,11 @@ void _start()
     f64 last_frame_time = start_time;
     u8 input = 0;
 
+    f64 cursor_x = 0.0;
+    f64 cursor_y = 0.0;
+
+    u8 lock_square_to_cursor = 0;
+
 while(1)
 {
 #define DEBUG_IPFC_TIME 0
@@ -105,6 +110,20 @@ while(1)
         f64 sec_after_call = AOS_H_time_get_seconds();
         AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
 #endif
+
+        {
+            f64 fscratch[1024/8];
+            if(AOS_IPFC_call(twa_session_id, 3, scratch, fscratch))
+            {
+//                AOS_H_printf("       cursor position is %3.3lf %3.3lf\n", fscratch[0], fscratch[1]);
+                cursor_x = fscratch[0];
+                cursor_y = fscratch[1];
+            }
+            else
+            {
+                AOS_H_printf("failed to get cursor location\n");
+            }
+        }
     }
 
     AOS_thread_awake_on_surface(&surfaces, surface_count);
@@ -168,6 +187,8 @@ while(1)
                     { input = input | 4; }
                     else if(scancode == 102)
                     { input = input | 8; }
+                    else if(scancode == 60)
+                    { lock_square_to_cursor = !lock_square_to_cursor; }
                 }
                 else
                 {
@@ -198,6 +219,12 @@ while(1)
 
         f32 square_x = (f32)square_x_control + sineF32(3.0*time)/2.0;
         f32 square_y = (f32)square_y_control + sineF32(3.0*time/M_PI)/2.0;
+
+        if(lock_square_to_cursor)
+        {
+            square_x = ( cursor_x - 0.5) * 2.0;
+            square_y = (-cursor_y + 0.5) * 2.0;
+        }
 
         f32 red = (sineF32((time*M_PI)/2.0) + 1.0) / 2.0;
         f32 green = (sineF32((time*M_PI)/3.0) + 1.0) / 2.0;
@@ -269,7 +296,7 @@ while(1)
         }
         AOS_surface_commit(surfaces[0]);
         f64 frame_end = AOS_H_time_get_seconds();
-        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
+//        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
     }
 }
 }

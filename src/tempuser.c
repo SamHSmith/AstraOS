@@ -22,6 +22,8 @@ typedef struct
     u64 height;
     u64 new_width;
     u64 new_height;
+    f64 cursor_x;
+    f64 cursor_y;
     AOS_Framebuffer* fb;
     u64 fb_page_count;
     u8 we_have_frame;
@@ -386,6 +388,7 @@ const char* TWA_IPFC_API_NAME = "thunder_windowed_application_ipfc_api_v1";
 // f0 is create window
 // f1 is destroy window
 // f2 is get surfaces
+// f3 is get cursor pos
 void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_index, void* static_data_1024b)
 {
     // this enables the use of global variables
@@ -515,6 +518,32 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
 //            spinlock_acquire(&tempuser_printout_lock);
 //            AOS_H_printf("total ipfc time is %lf ms\n", (after-before) * 1000.0);
 //            spinlock_release(&tempuser_printout_lock);
+            AOS_IPFC_return(1);
+        }
+        rwlock_release_read(&thunder_lock);
+        AOS_IPFC_return(0);
+    }
+    else if(function_index == 3)
+    {
+//        spinlock_acquire(&tempuser_printout_lock);
+//        AOS_H_printf("get cursor pos! from pid %llu\n", source_pid);
+//        spinlock_release(&tempuser_printout_lock);
+        u64 window_handle;
+        {
+            u64* window_handle_pointer = static_data_1024b;
+            window_handle = *window_handle_pointer;
+        }
+
+        f64* copy_to = static_data_1024b;
+
+        for(u64 i = 0; i < window_count; i++)
+        {
+            if(windows[i].pid != source_pid || windows[i].window_handle != window_handle)
+            { continue; }
+
+            copy_to[0] = windows[i].cursor_x;
+            copy_to[1] = windows[i].cursor_y;
+            rwlock_release_read(&thunder_lock);
             AOS_IPFC_return(1);
         }
         rwlock_release_read(&thunder_lock);
@@ -732,6 +761,19 @@ while(1) {
                 is_resizing_window = 0;
             }
         }
+
+        for(u64 i = 0; i < window_count; i++)
+        {
+            f64 dx = (f64)new_cursor_x - (f64)(windows[i].new_x + BORDER_SIZE);
+            f64 dy = (f64)new_cursor_y - (f64)(windows[i].new_y + BORDER_SIZE);
+
+            dx /= (f64)(windows[i].new_width - 2*BORDER_SIZE);
+            dy /= (f64)(windows[i].new_height - 2*BORDER_SIZE);
+
+            windows[i].cursor_x = dx;
+            windows[i].cursor_y = dy;
+        }
+
         rwlock_release_write(&thunder_lock);
         rwlock_acquire_read(&thunder_lock);
     }
