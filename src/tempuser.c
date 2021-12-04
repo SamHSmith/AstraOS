@@ -764,6 +764,38 @@ while(1) {
 
         for(u64 i = 0; i < window_count; i++)
         {
+            // do move, not related to consumers
+            if(is_moving_window && i + 1 == window_count)
+            {
+                windows[i].new_x = (s64)(new_cursor_x - start_move_x);
+                windows[i].new_y = (s64)(new_cursor_y - start_move_y);
+            }
+
+            // do resize, this is releated to consumers
+            if(is_resizing_window && i + 1 == window_count)
+            {
+                s64 new_width = (s64)(new_cursor_x - start_resize_cursor_x);
+                s64 new_height = (s64)(new_cursor_y - start_resize_cursor_y);
+                if(resize_x_invert) {
+                    windows[i].new_x = start_resize_window_x + new_width;
+                    if(windows[i].new_x > start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE)
+                    { windows[i].new_x = start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE; }
+                    new_width *= -1;
+                }
+                if(resize_y_invert) {
+                    windows[i].new_y = start_resize_window_y + new_height;
+                    if(windows[i].new_y > start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE)
+                    { windows[i].new_y = start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE; }
+                    new_height *= -1;
+                }
+                new_width  += start_resize_window_width;
+                new_height += start_resize_window_height;
+                if(new_width < 2*BORDER_SIZE) { new_width = 2*BORDER_SIZE; }
+                if(new_height < 2*BORDER_SIZE) { new_height = 2*BORDER_SIZE; }
+                windows[i].new_width = (u64)new_width;
+                windows[i].new_height = (u64)new_height;
+            }
+
             f64 dx = (f64)new_cursor_x - (f64)(windows[i].new_x + BORDER_SIZE);
             f64 dy = (f64)new_cursor_y - (f64)(windows[i].new_y + BORDER_SIZE);
 
@@ -887,38 +919,6 @@ while(1) {
                     spinlock_acquire(&tempuser_printout_lock);
                     AOS_H_printf("frame has been dropped\n");
                     spinlock_release(&tempuser_printout_lock);
-                }
-
-                // do move, not related to consumers
-                if(is_moving_window && i + 1 == window_count)
-                {
-                    windows[i].new_x = (s64)(new_cursor_x - start_move_x);
-                    windows[i].new_y = (s64)(new_cursor_y - start_move_y);
-                }
-
-                // do resize, this is releated to consumers
-                if(is_resizing_window && i + 1 == window_count)
-                {
-                    s64 new_width = (s64)(new_cursor_x - start_resize_cursor_x);
-                    s64 new_height = (s64)(new_cursor_y - start_resize_cursor_y);
-                    if(resize_x_invert) {
-                        windows[i].new_x = start_resize_window_x + new_width;
-            if(windows[i].new_x > start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE)
-            { windows[i].new_x = start_resize_window_x + (s64)start_resize_window_width - 2*BORDER_SIZE; }
-                        new_width *= -1;
-                    }
-                    if(resize_y_invert) {
-                        windows[i].new_y = start_resize_window_y + new_height;
-            if(windows[i].new_y > start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE)
-            { windows[i].new_y = start_resize_window_y + (s64)start_resize_window_height - 2*BORDER_SIZE; }
-                        new_height *= -1;
-                    }
-                    new_width  += start_resize_window_width;
-                    new_height += start_resize_window_height;
-                    if(new_width < 2*BORDER_SIZE) { new_width = 2*BORDER_SIZE; }
-                    if(new_height < 2*BORDER_SIZE) { new_height = 2*BORDER_SIZE; }
-                    windows[i].new_width = (u64)new_width;
-                    windows[i].new_height = (u64)new_height;
                 }
 
                 AOS_surface_consumer_set_size(
