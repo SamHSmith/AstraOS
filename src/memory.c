@@ -97,7 +97,13 @@ typedef struct Kallocation
 
 Kallocation kalloc_pages(u64 page_count)
 {
-    if(page_count == 0) { Kallocation al = {0}; return al; }
+    spinlock_acquire(&KERNEL_MEMORY_SPINLOCK); // TODO maybe move this down so we don't lock local work?
+    if(page_count == 0)
+    {
+        spinlock_release(&KERNEL_MEMORY_SPINLOCK);
+        Kallocation al = {0};
+        return al;
+    }
     s64 a_size = 0;
     for(u64 i = 0; i < 64; i++)
     {
@@ -110,7 +116,12 @@ Kallocation kalloc_pages(u64 page_count)
         }
     }
 
-    if(a_size < 0) { Kallocation al = {0}; return al; }
+    if(a_size < 0)
+    {
+        spinlock_release(&KERNEL_MEMORY_SPINLOCK);
+        Kallocation al = {0};
+        return al;
+    }
 
     u64 allocation_splits = 0;
     for(u64 i = 0; i < ALLOCATION_SPLIT_COUNT; i++)
@@ -159,18 +170,23 @@ Kallocation kalloc_pages(u64 page_count)
     // HEAP_START isn't always 4096 aligned so the first page will be smaller in some cases.
     al.memory = (void*)((HEAP_START - (HEAP_START % PAGE_SIZE)) + (page_address * PAGE_SIZE));
     al.page_count = page_count;
+    spinlock_release(&KERNEL_MEMORY_SPINLOCK);
     return al;
 }
 
 void kfree_pages(Kallocation a)
 {
+    if(!a.page_count)
+    { return; }
     u64 addr = ((u64)a.memory);
     if(addr <= HEAP_START) { return; }
     addr -= HEAP_START;
     if((addr % PAGE_SIZE) != 0) { return; } //TODO: some kind of error maybe
     addr /= PAGE_SIZE;
 
+    spinlock_acquire(&KERNEL_MEMORY_SPINLOCK);
     mem_table_set_taken(addr, a.page_count, 0);
+    spinlock_release(&KERNEL_MEMORY_SPINLOCK);
 }
 
 void* kalloc_single_page()
@@ -262,11 +278,11 @@ void mmu_map(u64* root, u64 vaddr, u64 paddr, u64 bits, s64 level)
 
 void mmu_kernel_map_range(u64* root, void* start, void* end, u64 bits)
 {
-    u64 memaddr = ((u64)start) & ~(PAGE_SIZE - 1);
-    u64 num_kb_pages = (u64)end;
-    num_kb_pages += PAGE_SIZE - (num_kb_pages % PAGE_SIZE);
-    num_kb_pages = (num_kb_pages - memaddr) / PAGE_SIZE;
+    assert((u64)start % PAGE_SIZE == 0, "map range start is page aligned");
+    assert((u64)end % PAGE_SIZE == 0, "map range end is page aligned");
+    u64 num_kb_pages = ((u64)end - (u64)start) / PAGE_SIZE;
  
+    u64 memaddr = start;
     for(u64 i = 0; i < num_kb_pages; i++)
     {
         mmu_map(root, memaddr, memaddr, bits, 0);
@@ -383,14 +399,14 @@ u64* mem_init()
     mmu_kernel_map_range(table, (u64*)HEAP_START, (u64*)(HEAP_START + HEAP_SIZE),   2 + 4);
 
     //Map the uart
-    mmu_kernel_map_range(table, 0x10000000, 0x10000000, 2 + 4);
+    mmu_kernel_map_range(table, 0x10000000, 0x10001000, 2 + 4);
 
     //Map the clint
-    mmu_kernel_map_range(table, 0x02000000, 0x0200ffff, 2 + 4);
+    mmu_kernel_map_range(table, 0x2000000, 0x2010000, 2 + 4);
 
     //Map the plic
-    mmu_kernel_map_range(table, (u64*)0x0c000000, (u64*)0x0c002001, 2 + 4);
-    mmu_kernel_map_range(table, (u64*)0x0c200000, (u64*)0x0c208001, 2 + 4);
+    mmu_kernel_map_range(table, (u64*)0x0c000000, (u64*)0x0c003000, 2 + 4);
+    mmu_kernel_map_range(table, (u64*)0x0c200000, (u64*)0x0c209000, 2 + 4);
 
     return table;
 }

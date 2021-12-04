@@ -33,41 +33,36 @@ void _start()
         }
     }
 
-    u8 is_running_as_twa = 0;
-    u64 twa_session_id;
-    u64 twa_window_handle = 0;
-    if(!is_running_as_ega)
-    {
-        u8* name = "thunder_windowed_application_ipfc_api_v1";
-        u64 name_len = strlen(name);
-        if(AOS_IPFC_init_session(name, name_len, &twa_session_id))
-        {
-            is_running_as_twa = 1;
-            // create window
-            u64 scratch[1024/8];
-            if(AOS_IPFC_call(twa_session_id, 0, 0, &scratch))
-            {
-                twa_window_handle = scratch[0];
-                AOS_H_printf("Created a thunder window! handle = %llu\n", twa_window_handle);
-            }
-            else
-            {
-                AOS_IPFC_close_session(twa_session_id);
-                is_running_as_twa = 0;
-                AOS_H_printf("Failed to create thunder window!\n");
-            }
 
-#if 0
-            // for testing destroy window
-            if(!AOS_IPFC_call(twa_session_id, 1, &scratch, 0))
-            {
-                AOS_H_printf("Failed to destroy window...\n");
-            }
-#endif
-        }
-        else
-        { AOS_H_printf("Failed to init thunder session\n"); }
-    }
+// nocheckin, test code
+{
+u8* name = "dave_ipfc_v1";
+u64 name_len = strlen(name);
+u64 session_id;
+if(AOS_IPFC_init_session(name, name_len, &session_id))
+{
+    AOS_H_printf("Session has been inited!\n");
+
+    u64 data[128];
+    data[1] = 3;
+    data[69] = 420;
+    AOS_H_printf("Calling function 42...\n");
+    AOS_H_printf("Return value of function 42 was %llu\n", AOS_IPFC_call(session_id, 42, data, data));
+
+    AOS_H_printf("Now printing static data returned by the ipfc\n");
+    for(u64 i = 0; i < 128; i++)
+    { AOS_H_printf("%llx\n", data[i]); }
+
+    AOS_H_printf("now we will close session#%llu\n", session_id);
+    AOS_IPFC_close_session(session_id);
+    AOS_H_printf("now it has been closed.\n");
+}
+else
+{
+    AOS_H_printf("failed to init session");
+}
+
+}
 
     f64 start_time = AOS_H_time_get_seconds();
 
@@ -76,54 +71,17 @@ void _start()
     f64 last_frame_time = start_time;
     u8 input = 0;
 
-    f64 cursor_x = 0.0;
-    f64 cursor_y = 0.0;
-
-    u8 lock_square_to_cursor = 0;
-
 while(1)
 {
-#define DEBUG_IPFC_TIME 0
-
     u16 surfaces[512];
-    u16 surface_count = 0;
+                            surfaces[0] = 0;  // temp
+    u16 surface_count = 1;
     if(is_running_as_ega)
     {
-#if DEBUG_IPFC_TIME
         f64 sec_before_call = AOS_H_time_get_seconds();
-#endif
         surface_count = AOS_IPFC_call(ega_session_id, 0, 0, surfaces);
-#if DEBUG_IPFC_TIME
         f64 sec_after_call = AOS_H_time_get_seconds();
         AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
-#endif
-    }
-    else if(is_running_as_twa)
-    {
-#if DEBUG_IPFC_TIME
-        f64 sec_before_call = AOS_H_time_get_seconds();
-#endif
-        u64 scratch[1024/8];
-        scratch[0] = twa_window_handle;
-        surface_count = AOS_IPFC_call(twa_session_id, 2, scratch, surfaces);
-#if DEBUG_IPFC_TIME
-        f64 sec_after_call = AOS_H_time_get_seconds();
-        AOS_H_printf("time to get surfaces via ipfc : %5.5lf ms\n", (sec_after_call - sec_before_call) * 1000.0);
-#endif
-
-        {
-            f64 fscratch[1024/8];
-            if(AOS_IPFC_call(twa_session_id, 3, scratch, fscratch))
-            {
-//                AOS_H_printf("       cursor position is %3.3lf %3.3lf\n", fscratch[0], fscratch[1]);
-                cursor_x = fscratch[0];
-                cursor_y = fscratch[1];
-            }
-            else
-            {
-                AOS_H_printf("failed to get cursor location\n");
-            }
-        }
     }
 
     AOS_thread_awake_on_surface(&surfaces, surface_count);
@@ -187,8 +145,6 @@ while(1)
                     { input = input | 4; }
                     else if(scancode == 102)
                     { input = input | 8; }
-                    else if(scancode == 60)
-                    { lock_square_to_cursor = !lock_square_to_cursor; }
                 }
                 else
                 {
@@ -219,12 +175,6 @@ while(1)
 
         f32 square_x = (f32)square_x_control + sineF32(3.0*time)/2.0;
         f32 square_y = (f32)square_y_control + sineF32(3.0*time/M_PI)/2.0;
-
-        if(lock_square_to_cursor)
-        {
-            square_x = ( cursor_x - 0.5) * 2.0;
-            square_y = (-cursor_y + 0.5) * 2.0;
-        }
 
         f32 red = (sineF32((time*M_PI)/2.0) + 1.0) / 2.0;
         f32 green = (sineF32((time*M_PI)/3.0) + 1.0) / 2.0;
@@ -296,7 +246,7 @@ while(1)
         }
         AOS_surface_commit(surfaces[0]);
         f64 frame_end = AOS_H_time_get_seconds();
-//        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
+        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
     }
 }
 }

@@ -111,8 +111,8 @@ AOS_surface_consumer_fetch:
     ecall
     ret
 
-.global AOS_time_get_seconds
-AOS_time_get_seconds:
+.global AOS_get_cpu_time
+AOS_get_cpu_time:
     addi a0, x0, 14
     ecall
     ret
@@ -163,6 +163,7 @@ AOS_create_process_from_file:
 
 .global AOS_surface_consumer_create
 AOS_surface_consumer_create:
+    mv a3, a2
     mv a2, a1
     mv a1, a0
     addi a0, x0, 27
@@ -217,3 +218,167 @@ AOS_thread_awake_on_mouse:
     addi a0, x0, 34
     ecall
     ret
+
+.global AOS_stream_put
+AOS_stream_put:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 35
+    ecall
+    ret
+
+.global AOS_stream_take
+AOS_stream_take:
+    mv a4, a3
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 36
+    ecall
+    ret
+
+.global AOS_process_create_out_stream
+AOS_process_create_out_stream:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 37
+    ecall
+    ret
+
+.global AOS_process_create_in_stream
+AOS_process_create_in_stream:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 38
+    ecall
+    ret
+
+.global AOS_process_start
+AOS_process_start:
+    mv a1, a0
+    addi a0, x0, 39
+    ecall
+    ret
+
+.global AOS_thread_new
+AOS_thread_new:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 40
+    ecall
+    ret
+
+.global AOS_semaphore_create
+AOS_semaphore_create:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 41
+    ecall
+    ret
+
+.global AOS_semaphore_release
+AOS_semaphore_release:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 42
+    ecall
+    ret
+
+.global AOS_thread_awake_on_semaphore
+AOS_thread_awake_on_semaphore:
+    mv a1, a0
+    addi a0, x0, 43
+    ecall
+    ret
+
+.global AOS_process_exit
+AOS_process_exit:
+    addi a0, x0, 44
+    ecall
+    ret
+
+.global AOS_process_is_alive
+AOS_process_is_alive:
+    mv a1, a0
+    addi a0, x0, 45
+    ecall
+    ret
+
+.global AOS_process_kill
+AOS_process_kill:
+    mv a1, a0
+    addi a0, x0, 46
+    ecall
+    ret
+
+.global AOS_out_stream_destroy
+AOS_out_stream_destroy:
+    mv a1, a0
+    addi a0, x0, 47
+    ecall
+    ret
+
+.global AOS_in_stream_destroy
+AOS_in_stream_destroy:
+    mv a1, a0
+    addi a0, x0, 48
+    ecall
+    ret
+
+.global AOS_IPFC_handler_create
+AOS_IPFC_handler_create:
+    mv a7, a6
+    mv a6, a5
+    mv a5, a4
+    mv a4, a3
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 49
+    ecall
+    ret
+
+.global AOS_IPFC_init_session
+AOS_IPFC_init_session:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 50
+    ecall
+    ret
+
+.global AOS_IPFC_close_session
+AOS_IPFC_close_session:
+    mv a1, a0
+    addi a0, x0, 51
+    ecall
+    ret
+
+.global AOS_IPFC_call
+AOS_IPFC_call:
+    mv a4, a3
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 52
+    ecall
+    ret
+
+.global AOS_IPFC_return
+AOS_IPFC_return:
+    mv a1, a0
+    addi a0, x0, 53
+    ecall
+    ret
+
+.global AOS_get_cpu_timer_frequency
+AOS_get_cpu_timer_frequency:
+    addi a0, x0, 54
+    ecall
+    ret
+

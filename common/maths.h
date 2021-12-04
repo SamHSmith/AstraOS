@@ -63,46 +63,27 @@ typedef union {
 f64 f64ToInteger = 1.0 / 2.22044604925031308085e-16;
 
 f64 floor(f64 x) {
-	if (x == 0) return x;
-
-	ConvertF64Integer convert = {x};
-	u64 sign = convert.i & 0x8000000000000000;
-	int exponent = (int) ((convert.i >> 52) & 0x7FF) - 0x3FF;
-
-	if (exponent >= 52) {
-		// There aren't any bits representing a fractional part.
-		return x;
-	} else if (exponent >= 0) {
-		// Positive exponent.
-		f64 y = sign ? (x - f64ToInteger + f64ToInteger - x) : (x + f64ToInteger - f64ToInteger - x);
-		return y > 0 ? x + y - 1 : x + y;
-	} else if (exponent < 0) {
-		// Negative exponent.
-		return sign ? -1.0 : 0.0;
-	}
-
-	return 0;
+    if(x >= 0.0)
+    {
+        x =   (f64) ((u64) x);
+    }
+    else
+    {
+        x = -((f64) ((u64)(-x))) - 1.0;
+    }
+    return x;
 }
 
 f32 floorF32(f32 x) {
-	ConvertF32Integer convert = {x};
-	u32 sign = convert.i & 0x80000000;
-	int exponent = (int) ((convert.i >> 23) & 0xFF) - 0x7F;
-
-	if (exponent >= 23) {
-		// There aren't any bits representing a fractional part.
-	} else if (exponent >= 0) {
-		// Positive exponent.
-		u32 mask = 0x7FFFFF >> exponent;
-		if (!(mask & convert.i)) return x; // Already an integer.
-		if (sign) convert.i += mask;
-		convert.i &= ~mask; // Mask out the fractional bits.
-	} else if (exponent < 0) {
-		// Negative exponent.
-		return sign ? -1.0 : 0.0;
-	}
-
-	return convert.f;
+    if(x >= 0.0)
+    {
+        x =   (f32) ((u64) x);
+    }
+    else
+    {
+        x = -((f32) ((u64)(-x))) - 1.0;
+    }
+    return x;
 }
 
 #define D(x) (((ConvertF64Integer) { .i = (x) }).d)

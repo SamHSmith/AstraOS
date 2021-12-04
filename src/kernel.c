@@ -1,7 +1,24 @@
-#include "../common/types.h"
-#include "random.h"
 
-#include "uart.h"
+#define MACHINE_TIMER_SECOND 10000000
+#define KERNEL_MAX_HART_COUNT 64
+
+#include "../common/types.h"
+#include "../common/maths.h"
+#include "../common/spinlock.h"
+#include "../common/atomics.h"
+#include "../common/rwlock.h"
+
+#include "log.c"
+
+Spinlock KERNEL_SPINLOCK;
+Spinlock KERNEL_MEMORY_SPINLOCK;
+Spinlock KERNEL_VIEWER_SPINLOCK;
+
+RWLock KERNEL_TRAP_LOCK;
+
+#include "random.c"
+
+#include "uart.c"
 #include "printf.h"
 void _putchar(char c)
 {
@@ -38,58 +55,130 @@ void assert(u64 stat, char* error)
     }
 }
 
-#include "libfuncs.h"
+#include "libfuncs.c"
 
-#include "memory.h"
-#include "libfuncs2.h"
+#include "memory.c"
+#include "libfuncs2.c"
 #include "cyclone_crypto/hash/sha512.h"
 
-#include "disk.h"
-#include "file.h"
+#include "disk.c"
+#include "file.c"
 
-#include "plic.h"
-#include "input.h"
-#include "process.h"
+#include "stream.c"
 
-#include "video.h"
-#include "elf.h"
+atomic_s64 KERNEL_HART_COUNT;
 
-#include "process_run.h"
+#include "plic.c"
+#include "input.c"
+#include "process.c"
 
-#include "syscall.h"
+#include "video.c"
+#include "elf.c"
+
+
+extern u64 KERNEL_START_OTHER_HARTS;
+
+u64 KERNEL_MMU_TABLE;
+u64 KERNEL_SATP_VALUE;
+
+
+u64 KERNEL_TRAP_STACK_TOP[KERNEL_MAX_HART_COUNT];
+Kallocation KERNEL_TRAP_STACK_ALLOCS[KERNEL_MAX_HART_COUNT];
+ 
+u64 KERNEL_STACK_TOP[KERNEL_MAX_HART_COUNT];
+Kallocation KERNEL_STACK_ALLOCS[KERNEL_MAX_HART_COUNT-1];
+ 
+Thread KERNEL_THREADS[KERNEL_MAX_HART_COUNT];
+
+
+/*
+ * Debug
+ */
+u64 wait_time_acc[KERNEL_MAX_HART_COUNT];
+u64 wait_time_times[KERNEL_MAX_HART_COUNT];
+u64 wait_time_print_time[KERNEL_MAX_HART_COUNT];
+
+
+#include "process_run.c"
+
+#include "../userland/aos_syscalls.h"
+#include "syscall.c"
 
 
 //for rendering
 Framebuffer* framebuffer = 0;
 u8 frame_has_been_requested = 0;
 
-#include "oak.h"
+#include "oak.c"
 
 void uart_write_string(char* str)
 {
     uart_write((u8*)str, strlen(str));
 }
 
-u64 KERNEL_MMU_TABLE;
-Thread KERNEL_THREAD;
-u64 KERNEL_TRAP_STACK = 0; // will need more when we have multicore
+struct xoshiro256ss_state KERNEL_GLOBAL_RANDO_STATE = {5, 42, 68, 1};
 u64 kinit()
 {
     uart_init();
-    KERNEL_MMU_TABLE = (u64)mem_init();
-    Kallocation stack = kalloc_pages(8);
-    KERNEL_TRAP_STACK = stack.memory + (PAGE_SIZE * stack.page_count);
 
-    u64 satp_val = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
+    printf("Counting HARTS...");
+    KERNEL_HART_COUNT.value = 0;
+    atomic_s64_increment(&KERNEL_HART_COUNT);
+    for(u64 i = 0; i < 2000000; i++) { __asm__("nop"); } // wait
+    KERNEL_START_OTHER_HARTS = 0; // causes other harts to increment and get ready
+    for(u64 i = 0; i < 4000000; i++) { __asm__("nop"); } // wait
+    printf("    There are %lld HARTS.\n", KERNEL_HART_COUNT.value);
+
+    KERNEL_MMU_TABLE = (u64)mem_init();
+
+    rwlock_create(&THREAD_RUNTIME_ARRAY_LOCK);
+    rwlock_create(&KERNEL_TRAP_LOCK);
+    for(s64 i = 0; i < KERNEL_HART_COUNT.value; i++)
+    {
+        Kallocation trap_stack = kalloc_pages(8);
+        KERNEL_TRAP_STACK_TOP[i] = trap_stack.memory + (PAGE_SIZE * trap_stack.page_count);
+        KERNEL_TRAP_STACK_ALLOCS[i] = trap_stack;
+
+        if(i == 0)
+        {
+            KERNEL_STACK_TOP[0] = KERNEL_STACK_END;
+        }
+        else
+        {
+            Kallocation stack = kalloc_pages(8);
+            KERNEL_STACK_TOP[i] = stack.memory + (PAGE_SIZE * trap_stack.page_count);
+            KERNEL_STACK_ALLOCS[i-1] = stack;
+        }
+
+        //rando state
+        kernel_choose_new_thread_rando_state[i].s[0] = xoshiro256ss(&KERNEL_GLOBAL_RANDO_STATE);
+        kernel_choose_new_thread_rando_state[i].s[1] = xoshiro256ss(&KERNEL_GLOBAL_RANDO_STATE);
+        kernel_choose_new_thread_rando_state[i].s[2] = xoshiro256ss(&KERNEL_GLOBAL_RANDO_STATE);
+        kernel_choose_new_thread_rando_state[i].s[3] = xoshiro256ss(&KERNEL_GLOBAL_RANDO_STATE);
+
+        // debug
+        wait_time_acc[i] = 0;
+        wait_time_times[i] = 0;
+        wait_time_print_time[i] = 0;
+    }
+
+    KERNEL_SATP_VALUE = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
 
     printf("Entering supervisor mode...");
-    return satp_val;
+    return KERNEL_SATP_VALUE;
 }
 
 void kmain()
 {
     printf("done.\n    Successfully entered kmain with supervisor mode enabled.\n\n");
     uart_write_string("Hello there, welcome to the ROS operating system\nYou have no idea the pain I went through to make these characters you type appear on screen\n\n");
+
+    // lock kernel
+    spinlock_create(&KERNEL_SPINLOCK);
+    spinlock_create(&KERNEL_MEMORY_SPINLOCK);
+    spinlock_create(&KERNEL_VIEWER_SPINLOCK);
+    spinlock_acquire(&KERNEL_SPINLOCK);
+    KERNEL_START_OTHER_HARTS = 0;
 
     /* TESTING */
     u64 dir_id = kernel_directory_create_imaginary("Über directory");
@@ -160,21 +249,6 @@ mem_debug_dump_table_counts(1);
 
     load_drive_partitions();
     debug_print_directory_tree(drive1_partition_directory, "");
-    {
-        u64 partition_count = kernel_directory_get_files(drive1_partition_directory, 0, 0);
-        u64 partitions[partition_count];
-        kernel_directory_get_files(drive1_partition_directory, partitions, partition_count);
-
-        for(u64 i = 0; i < 0/*partition_count*/; i++)
-        {
-            u64 pid;
-            if(!create_proccess_from_file(partitions[i], &pid)) { continue; }
-            u64 name_len = kernel_file_get_name(partitions[i], 0, 0);
-            u8 name[name_len];
-            kernel_file_get_name(partitions[i], name, name_len);
-            printf("Loaded elf file from partition \"%s\"\n", name);
-        }
-    }
 
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)
@@ -207,20 +281,31 @@ mem_debug_dump_table_counts(1);
     plic_interrupt_enable(10);
     plic_interrupt_set_priority(10, 1);
 
-    for(s64 i = 0; i < 5; i++) { uart_write_string("\n"); } //tells the viewer we have initialized
-
     process_init();
+    spinlock_release(&KERNEL_SPINLOCK);
+
+    for(u64 i = 0; i < 10000; i++) { __asm__("nop"); } // wait
+    KERNEL_START_OTHER_HARTS = 1;
+
+    u64* mtimecmp = ((u64*)0x02004000) + 0; // hartid is 0
+    u64* mtime = (u64*)0x0200bff8;
+    *mtimecmp = *mtime;
 
     while(1)
-    {
-//        printf("Kernel Bored :(\n");
-//        for(u64 i = 0; i < 640000000; i++) {}
-    }
+    { __asm__("wfi"); }
 }
 
-void kinit_hart(u64 hartid)
+void kmain_hart(u64 hartid)
 {
+    spinlock_acquire(&KERNEL_SPINLOCK);
+    printf("initialized hart#%llu\n", hartid);
+    spinlock_release(&KERNEL_SPINLOCK);
 
+    u64* mtimecmp = ((u64*)0x02004000) + hartid;
+    u64* mtime = (u64*)0x0200bff8;
+    *mtimecmp = *mtime;
+    while(1)
+    { __asm__("wfi"); }
 }
 
 void trap_hang_kernel(
@@ -232,6 +317,8 @@ void trap_hang_kernel(
     TrapFrame* frame
     )
 {
+    rwlock_release_read(&KERNEL_TRAP_LOCK);
+    rwlock_acquire_write(&KERNEL_TRAP_LOCK);
     printf("args:\n  epc: %llx\n  tval: %llx\n  cause: %llx\n  hart: %llx\n  status: %llx\n  frame: %llx\n",
             epc, tval, cause, hart, status, frame);
     printf("frame:\n regs:\n");
@@ -241,12 +328,27 @@ void trap_hang_kernel(
     printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
     printf("Kernel has hung.\n");
     u64 ptr = frame->regs[8];
-    u64 r = mmu_virt_to_phys(frame->satp << 12, ptr, (u64*)&ptr);
     print_stacktrace(ptr, epc, frame->regs[1]);
+    printf("This is CPU#%llu\n", hart);
+    printf("Wide cpu status:\n");
+    for(s64 i = 0; i < KERNEL_HART_COUNT.value; i++)
+    {
+        if(kernel_current_thread_has_thread[hart])
+        {
+            Process* p = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+            printf("CPU#%llu is running (PID=%llu - TID#%llu)\n",
+                   i,
+                   kernel_current_threads[i].process_pid,
+                   kernel_current_thread_tid[hart]
+            );
+        }
+        else
+        {
+            printf("CPU#%llu is without a user thread to run\n", i);
+        }
+    }
     while(1) {}
 }
-
-#define VIEWBUFF_SIZE (4096*1024)
 
 u64 m_trap(
     u64 epc,
@@ -259,6 +361,8 @@ u64 m_trap(
 {
     u64 async = (cause >> 63) & 1 == 1;
     u64 cause_num = cause & 0xfff;
+
+    rwlock_acquire_read(&KERNEL_TRAP_LOCK);
 
     if(async)
     {
@@ -284,60 +388,135 @@ u64 m_trap(
         }
         else if(cause_num == 7) {
 
+            kernel_log_kernel(hart, "hart got a timer interrupt");
+
             // Store thread
-            if(kernel_current_thread != 0)
+            if(kernel_current_thread_has_thread[hart])
             {
-                kernel_current_thread->frame = *frame;
-                kernel_current_thread->program_counter = epc;
+                kernel_current_threads[hart].frame = *frame;
+                kernel_current_threads[hart].program_counter = epc;
             }
             else // Store kernel thread
             {
-                KERNEL_THREAD.frame = *frame;
-                KERNEL_THREAD.program_counter = epc;
+                KERNEL_THREADS[hart].frame = *frame;
+                KERNEL_THREADS[hart].program_counter = epc;
             }
 
-            // talk to viewer
-            volatile u8* viewer = 0x10000100;
-            volatile u8* viewer_should_read = 0x10000101;
-
-            Surface* surface = &((SurfaceSlot*)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]
-                               ->surface_alloc.memory)->surface;
-
-            while(*viewer_should_read)
             {
-                recieve_oak_packet();
+                volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+                volatile u64* mtime = (u64*)0x0200bff8;
+                u64 start_wait = *mtime;
+                rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+                u64 end_wait = *mtime;
+
+                wait_time_acc[hart] += end_wait - start_wait;
+                wait_time_times[hart] += 1;
             }
-            if(frame_has_been_requested &&
-                surface_slot_has_commited(KERNEL_PROCESS_ARRAY[vos[current_vo].pid], 0))
+
+            if(spinlock_try_acquire(&KERNEL_VIEWER_SPINLOCK))
             {
-                framebuffer = surface_slot_swap_present_buffer(
-                                KERNEL_PROCESS_ARRAY[vos[current_vo].pid],
-                                0,
-                                framebuffer
-                );
-                oak_send_video(framebuffer);
+                kernel_log_kernel(hart, "hart start viewer talk block");
+                spinlock_acquire(&KERNEL_SPINLOCK);
+                kernel_log_kernel(hart, "hart has kernel spinlock for viewer talk");
 
-                frame_has_been_requested = 0;
+                // massive time loss in talking to the viewer
+                // either the slowness is in here or in qemu
+
+                // talk to viewer
+                volatile u8* viewer = 0x10000100;
+                volatile u8* viewer_should_read = 0x10000101;
+
+                SurfaceSlot* surface = (SurfaceSlot*)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]
+                                ->surface_alloc.memory;
+
+
+                while(*viewer_should_read)
+                {
+                    recieve_oak_packet();
+                }
+                if(frame_has_been_requested)
+                {
+                    Process* process = KERNEL_PROCESS_ARRAY[vos[current_vo].pid];
+                    rwlock_acquire_write(&process->process_lock);
+                    if(surface_slot_has_commited(process, 0, 1))
+                    {
+                        framebuffer = surface_slot_swap_present_buffer(
+                                        process,
+                                        0,
+                                        framebuffer
+                        );
+                        oak_send_video(framebuffer);
+
+                        frame_has_been_requested = 0;
+                    }
+                    else
+                    {
+                        surface_slot_fire(process, 0, 0);
+                    }
+                    rwlock_release_write(&process->process_lock);
+                }
+
+                // Output VO stream out to serial
+                if(KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_count > 0)
+                {
+                    Stream* out_stream = *((Stream**)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_alloc.memory);
+                    u64 byte_count = 0;
+                    stream_take(out_stream, 0, 0, &byte_count);
+                    while(byte_count)
+                    {
+                        u8 buffer[32];
+                        u64 count = stream_take(out_stream, buffer, 32, &byte_count);
+                        printf("%.*s", count, buffer);
+                    }
+                }
+                spinlock_release(&KERNEL_SPINLOCK);
+                spinlock_release(&KERNEL_VIEWER_SPINLOCK);
+                kernel_log_kernel(hart, "hart end viewer talk block");
             }
 
-
-            // Reset the Machine Timer
-            volatile u64* mtimecmp = (u64*)0x02004000;
+            volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
             volatile u64* mtime = (u64*)0x0200bff8;
-
-            kernel_current_thread = kernel_choose_new_thread(*mtime, kernel_current_thread != 0);
-            *mtimecmp = *mtime + (10000000 / 1000);
-
-            if(kernel_current_thread != 0)
+#if 0
+            if(*mtime >= wait_time_print_time[hart] && 1)
             {
+                spinlock_acquire(&KERNEL_SPINLOCK);
+                printf("average wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf μs\n", hart, ((f64)(wait_time_acc[hart]) / (f64)wait_time_times[hart]) / (f64)(MACHINE_TIMER_SECOND/1000000));
+                printf("total wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf ms\n", hart, (f64)wait_time_acc[hart] / (f64)(MACHINE_TIMER_SECOND/1000));
+                printf("percentage of time spent waiting on PROC_ARRAY_RWLOCK for hart%llu is %lf %%\n", hart, 100.0*((f64)wait_time_acc[hart] / (f64)(MACHINE_TIMER_SECOND*10)));
+                wait_time_acc[hart] = 0;
+                wait_time_times[hart] = 0;
+                wait_time_print_time[hart] = *mtime + (MACHINE_TIMER_SECOND*10);
+                spinlock_release(&KERNEL_SPINLOCK);
+            }
+#endif
+
+            if(kernel_current_thread_has_thread[hart])
+            { KERNEL_PROCESS_ARRAY[kernel_current_thread_pid[hart]]->threads[kernel_current_thread_tid[hart]] = kernel_current_threads[hart]; }
+
+            kernel_choose_new_thread(
+                *mtime,
+                hart
+            );
+
+            if(kernel_current_thread_has_thread[hart])
+            { kernel_current_threads[hart] = KERNEL_PROCESS_ARRAY[kernel_current_thread_pid[hart]]->threads[kernel_current_thread_tid[hart]]; }
+
+            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+
+            if(kernel_current_thread_has_thread[hart])
+            {
+                *mtimecmp = *mtime + (MACHINE_TIMER_SECOND / 120);
                 // Load thread
-                *frame = kernel_current_thread->frame;
-                return kernel_current_thread->program_counter;
+                *frame = kernel_current_threads[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
+                return kernel_current_threads[hart].program_counter;
             }
             else // Load kernel thread
             {
-                *frame = KERNEL_THREAD.frame;
-                return KERNEL_THREAD.program_counter;
+                *mtimecmp = *mtime;
+                *frame = KERNEL_THREADS[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
+                return KERNEL_THREADS[hart].program_counter;
             }
         }
         else if(cause_num == 8) {
@@ -350,36 +529,102 @@ u64 m_trap(
         }
         else if(cause_num == 11)
         {
-//            printf("Machine external interrupt CPU%lld\n", hart);
             // Store thread
-            if(kernel_current_thread != 0)
+            if(kernel_current_thread_has_thread[hart])
             {
-                kernel_current_thread->frame = *frame;
-                kernel_current_thread->program_counter = epc;
+                kernel_current_threads[hart].frame = *frame;
+                kernel_current_threads[hart].program_counter = epc;
             }
             else // Store kernel thread
             {
-                KERNEL_THREAD.frame = *frame;
-                KERNEL_THREAD.program_counter = epc;
+                KERNEL_THREADS[hart].frame = *frame;
+                KERNEL_THREADS[hart].program_counter = epc;
             }
 
-            u32 interrupt;
-            char character;
-            while(plic_interrupt_next(&interrupt))
+            if(spinlock_try_acquire(&KERNEL_SPINLOCK))
             {
-                printf("you entered the character: %c over serial\n", character);
-                plic_interrupt_complete(interrupt);
+                {
+                volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+                volatile u64* mtime = (u64*)0x0200bff8;
+                u64 start_wait = *mtime;
+                rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+                u64 end_wait = *mtime;
+
+                wait_time_acc[hart] += end_wait - start_wait;
+                wait_time_times[hart] += 1;
+                }
+
+                u32 interrupt;
+                char character;
+                while(plic_interrupt_next(&interrupt) && interrupt == 10)
+                {
+                    uart_read(&character, 1);
+
+                    //TEMP
+                    if(character == 'l')
+                    {
+                        printf("Printing kernel event log:\n");
+                        rwlock_acquire_write(&KERNEL_LOG_LOCK);
+                        s64 log_len = KERNEL_LOG_SIZE;
+                        s64 log_index = atomic_s64_read(&KERNEL_LOG_INDEX);
+                        if(log_index < KERNEL_LOG_SIZE)
+                        { log_len = log_index; }
+
+                        u64 log_entry_counter = 0;
+                        for(s64 i = log_len; i > 0; i--)
+                        {
+                            KernelLogEntry entry = KERNEL_LOG[(log_index - i) % KERNEL_LOG_SIZE];
+                            if(entry.is_kernel)
+                            {
+                                printf("%4.4llu) H:%llu - T: %llu | %s:%llu - %s\n",
+                                       log_entry_counter++,
+                                       entry.hart,
+                                       entry.time,
+                                       entry.function_name,
+                                       entry.line_number,
+                                       entry.message);
+                            }
+                            else
+                            {
+                                printf("%4.4llu) H:%llu - T: %llu - PID:%llu - TID:%llu | %s:%llu - %s\n",
+                                       log_entry_counter++,
+                                       entry.hart,
+                                       entry.time,
+                                       entry.pid,
+                                       entry.tid,
+                                       entry.function_name,
+                                       entry.line_number,
+                                       entry.message);
+                            }
+                        }
+
+                        rwlock_release_write(&KERNEL_LOG_LOCK);
+                    }
+                    else if(KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_count > 0)
+                    {
+                        Stream* in_stream =
+                            *((Stream**)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->in_stream_alloc.memory);
+                        stream_put(in_stream, &character, 1);
+                    }
+                    plic_interrupt_complete(interrupt);
+                }
+
+                rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK); // todo change to read
+                spinlock_release(&KERNEL_SPINLOCK);
             }
-            if(kernel_current_thread != 0)
+
+            if(kernel_current_thread_has_thread[hart])
             {
                 // Load thread
-                *frame = kernel_current_thread->frame;
-                return kernel_current_thread->program_counter;
+                *frame = kernel_current_threads[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
+                return kernel_current_threads[hart].program_counter;
             }
             else // Load kernel thread
             {
-                *frame = KERNEL_THREAD.frame;
-                return KERNEL_THREAD.program_counter;
+                *frame = KERNEL_THREADS[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
+                return KERNEL_THREADS[hart].program_counter;
             }
         }
     }
@@ -422,31 +667,49 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 9) {
+
             // Store thread
-            if(kernel_current_thread != 0)
+            if(kernel_current_thread_has_thread[hart])
             {
-                kernel_current_thread->frame = *frame;
-                kernel_current_thread->program_counter = epc;
+                kernel_current_threads[hart].frame = *frame;
+                kernel_current_threads[hart].program_counter = epc;
             }
             else // Store kernel thread
             {
-                KERNEL_THREAD.frame = *frame;
-                KERNEL_THREAD.program_counter = epc;
+                assert(0, "very odd");
+            }
+
+            // actually store thread into process array data structure
+            {
+                rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+                KERNEL_PROCESS_ARRAY[kernel_current_thread_pid[hart]]->threads[kernel_current_thread_tid[hart]] = kernel_current_threads[hart];
+                rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
             }
 
             volatile u64* mtime = (u64*)0x0200bff8;
-            do_syscall(&kernel_current_thread, *mtime);
+            // locking happens inside do_syscall
+            do_syscall(&kernel_current_threads[hart].frame, *mtime, hart);
 
-            if(kernel_current_thread != 0)
+
+            // actually load thread from process array data structure
+            {
+                rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+                kernel_current_threads[hart] = KERNEL_PROCESS_ARRAY[kernel_current_thread_pid[hart]]->threads[kernel_current_thread_tid[hart]];
+                rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+            }
+
+            if(kernel_current_thread_has_thread[hart])
             {
                 // Load thread
-                *frame = kernel_current_thread->frame;
-                return kernel_current_thread->program_counter;
+                *frame = kernel_current_threads[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
+                return kernel_current_threads[hart].program_counter;
             }
             else // Load kernel thread
             {
-                *frame = KERNEL_THREAD.frame;
-                return KERNEL_THREAD.program_counter;
+                *frame = KERNEL_THREADS[hart].frame;
+                rwlock_release_read(&KERNEL_TRAP_LOCK);
+                return KERNEL_THREADS[hart].program_counter;
             }
         }
         else if(cause_num == 11) {
@@ -466,7 +729,8 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
     }
+    rwlock_release_read(&KERNEL_TRAP_LOCK);
     return 0;
 }
 
-#include "tempuser.h"
+#include "tempuser.c"

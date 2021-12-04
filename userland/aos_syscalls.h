@@ -1,4 +1,7 @@
 
+#ifndef __AOS_SYSCALLS_H
+#define __AOS_SYSCALLS_H
+
 #include "../common/types.h"
 
 typedef struct
@@ -54,7 +57,8 @@ u64 AOS_surface_consumer_get_size(u64 consumer_slot, volatile u32* width, volati
 u64 AOS_surface_consumer_set_size(u64 consumer_slot, u32 width, u32 height);
 u64 AOS_surface_consumer_fetch(u64 consumer_slot, volatile AOS_Framebuffer* fb, u64 page_count);
  
-f64 AOS_time_get_seconds();
+u64 AOS_get_cpu_time();
+u64 AOS_get_cpu_timer_frequency();
  
 u64 AOS_is_valid_file_id(u64 file_id);
 u64 AOS_is_valid_dir_id(u64 directory_id);
@@ -74,20 +78,94 @@ u64 AOS_directory_add_file(u64 dir_id, u64 file_id); // not done
  
 u64 AOS_create_process_from_file(u64 file_id, volatile u64* pid);
  
-u64 AOS_surface_consumer_create(u64 foriegn_pid, volatile u64* surface_consumer);
+u64 AOS_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer, u64* surface_slot);
 u64 AOS_surface_consumer_fire(u64 consumer_slot);
 
 u64 AOS_surface_forward_to_consumer(u64 surface_slot, u64 consumer_slot);
 u64 AOS_surface_stop_forwarding_to_consumer(u64 surface_slot);
 
+#define AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT 20
 u64 AOS_forward_keyboard_events(AOS_KeyboardEvent* buf, u64 len, u64 pid);
 
 u64 AOS_thread_sleep();
 u64 AOS_thread_awake_on_keyboard();
 u64 AOS_thread_awake_on_mouse();
 
+#define AOS_STREAM_STDOUT 0
+#define AOS_STREAM_STDIN 0
+u64 AOS_stream_put(u64 out_stream, u8* memory, u64 count);
+u64 AOS_stream_take(u64 in_stream, u8* buffer, u64 buffer_size, u64* byte_count_in_stream);
+
+// out and in refer to the *other* process. So create_out_stream creates a stream from you to the other process
+u64 AOS_process_create_out_stream(u64 process_handle, u64* foreign_out_stream, u64* owned_in_stream);
+u64 AOS_process_create_in_stream(u64 process_handle, u64* owned_out_stream, u64* foreign_in_stream);
+
+void AOS_process_start(u64 process_handle);
+
+typedef struct
+{
+    u64 regs[32];
+    u64 fregs[32];
+} AOS_TrapFrame;
+
+// all ipfc threads use thread_group 0, the main thread is always 1.
+// If you want to go wide over all cores create as many threads as cores
+// in a unique thread group. That ensures they don't end up on the same core.
+u64 AOS_thread_new(u64 program_counter, AOS_TrapFrame* register_values, u32 thread_group);
+
+// returns a semaphore handle
+u64 AOS_semaphore_create(u32 initial_value, u32 max_value);
+// returns true if success
+// if you don't care about previous_value you can pass null.
+u64 AOS_semaphore_release(u64 semaphore, u32 release_count, u32* previous_value);
+// returns true if the awake was set on the thread successfully.
+// when the thread is awoken by the semaphore's value being > 0,
+// the semaphore's value is decremented by 1.
+u64 AOS_thread_awake_on_semaphore(u64 semaphore);
+
+void AOS_process_exit();
+
+u64 AOS_process_is_alive(u64 pid);
+
+u64 AOS_process_kill(u64 pid);
+
+u64 AOS_out_stream_destroy(u64 out_stream);
+u64 AOS_in_stream_destroy(u64 in_stream);
+
+// BEGIN IPFC's
+// BEGIN CALLEE
+// returns true on success
+// name_len can not be greater than 64
+// handler_id_ptr can be 0 if you don't want to know
+// the handler_id of the created IPFC handler.
+u64 AOS_IPFC_handler_create(
+        u8* name,
+        u64 name_len,
+        u64(*ipfc_entry_point)(u64 source_pid, u16 function_index, u64* ipfc_static_data_1024_bytes),
+        void* stack_pages_start, // page aligned
+        u64 pages_per_stack,
+        u64 stack_count,
+        u64* handler_id_ptr);
+
+u64 AOS_IPFC_return(u64 return_value);
+// END CALLEE
+
+// BEGIN CALLER
+u64 AOS_IPFC_init_session(u8* name, u64 name_len, u64* session_id);
+void AOS_IPFC_close_session(u64 session_id);
+
+u64 AOS_IPFC_call(  u64 session_id,
+                    u16 function_index,
+                    void* ipfc_static_data_1024_bytes_in,
+                    void* ipfc_static_data_1024_bytes_out);
+// END CALLER
+// END IPFC's
+
+
 // give file to proccess
 // give directory to proccess
  
 // create file
 // create directory
+
+#endif

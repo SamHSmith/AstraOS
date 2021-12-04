@@ -31,12 +31,18 @@ typedef struct
 
 void oak_send_video(Framebuffer* framebuffer)
 {
+    volatile u64* mtime = (u64*)0x0200bff8;
+    u64 start_time = *mtime;
+
     OakPacketVideo packet;
     packet.base.size = sizeof(packet);
     packet.base.device = 9;
     packet.frame_ptr = framebuffer->data;
     packet.frame_size = framebuffer->width * framebuffer->height * 4 * 4;
     send_oak_packet(&packet);
+
+    u64 end_time = *mtime;
+    //printf("send video took : %llu\n", end_time - start_time);
 }
 
 typedef struct
@@ -95,7 +101,7 @@ void oak_recieve_video_out_request(OakPacketVideoOutRequest* packet)
     Process* process = KERNEL_PROCESS_ARRAY[vos[current_vo].pid];
     SurfaceSlot* surface_slot_array =
         (SurfaceSlot*)process->surface_alloc.memory;
-    Surface* surface = &surface_slot_array[0].surface;
+    SurfaceSlot* surface = surface_slot_array;
 
     surface->width = packet->width;
     surface->height = packet->height;
@@ -107,7 +113,6 @@ void oak_recieve_video_out_request(OakPacketVideoOutRequest* packet)
         kfree_pages(framebuffer->alloc);
         framebuffer = framebuffer_create(packet->width, packet->height);
     }
-    surface_slot_fire(process, 0);
     frame_has_been_requested = 1;
 }
 
