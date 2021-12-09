@@ -221,9 +221,12 @@ void _start()
                 if(kbd_events[i].event == AOS_KEYBOARD_EVENT_NOTHING)
                 { continue; }
 
+                u8 is_forwarding_input = !show_console && surface_visible;
+
                 if(kbd_events[i].event == AOS_KEYBOARD_EVENT_PRESSED)
                 {
                     u64 scancode = kbd_events[i].scancode;
+
                     if(scancode == 21)
                     {
                         if(text_len > 0 && pre_send_to_stdin_len > 0) { text_len--; }
@@ -256,7 +259,7 @@ void _start()
                             text_len += written_count;
                         }
                     }
-                    else if(scancode == 35)
+                    else if(!is_forwarding_input && scancode == 35)
                     {
                         text_buffer[text_len] = '\n';
                         text_len++;
@@ -373,7 +376,7 @@ void _start()
                     {
                         show_console = !show_console;
                     }
-                    else if(pre_send_to_stdin_len < 4096)
+                    else if(!is_forwarding_input && pre_send_to_stdin_len < 4096)
                     {
                         u8 character = scancode_to_u8(scancode, kbd_events[i].current_state);
                         if(character != 0)
@@ -390,7 +393,15 @@ void _start()
                     u64 scancode = kbd_events[i].scancode;
 
                 }
-                AOS_H_printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+
+                if(is_forwarding_input)
+                {
+                    AOS_forward_keyboard_events(&kbd_events[i], 1, process_pid);
+                }
+                else
+                {
+                    AOS_H_printf("kbd event: %u, scancode: %u\n", kbd_events[i].event, kbd_events[i].scancode);
+                }
             }
         }
 
