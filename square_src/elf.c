@@ -220,7 +220,7 @@ while(1)
         f32 square_x = (f32)square_x_control + sineF32(3.0*time)/2.0;
         f32 square_y = (f32)square_y_control + sineF32(3.0*time/M_PI)/2.0;
 
-        if(lock_square_to_cursor)
+        if(is_running_as_twa && lock_square_to_cursor)
         {
             square_x = ( cursor_x - 0.5) * 2.0;
             square_y = (-cursor_y + 0.5) * 2.0;
