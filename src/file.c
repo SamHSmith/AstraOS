@@ -7,7 +7,7 @@ typedef struct
     u8 name[64];
     u8 _padding[32];
 } KernelFileImaginary;
-#define KERNEL_FILE_TYPE_IMAGINARY 0
+#define KERNEL_FILE_TYPE_IMAGINARY 1
 
 typedef struct
 {
@@ -15,10 +15,12 @@ typedef struct
     u64 start_block;
     u64 block_count;
 } KernelFileDrivePartition;
-#define KERNEL_FILE_TYPE_DRIVE_PARTITION 1
+#define KERNEL_FILE_TYPE_DRIVE_PARTITION 2
 
 u8 has_loaded_drive1_partitions = 0;
 u64 drive1_partition_directory = 0;
+
+#define KERNEL_FILE_TYPE_DESTROYED 0
 
 typedef struct
 {
@@ -92,6 +94,13 @@ u64 is_valid_file_id(u64 file_id)
         return 0;
     }
     return 1;
+}
+
+u64 kernel_file_is_destroyed(u64 file_id)
+{
+    assert(is_valid_file_id(file_id), "the file id you are checking destroyed on is valid.");
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    return file->type == KERNEL_FILE_TYPE_DESTROYED;
 }
 
 u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
@@ -377,19 +386,22 @@ void kernel_file_free(u64 file_id)
 
 ///////////////////////// START DIRECTORY
 
+#define KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN 55
+#define KERNEL_DIRECTORY_IMAGINARY_SUBITEM_MAX 15
 typedef struct
 {
-    u8 name[56];
-    u64 subdirs[8];
-    u64 subdir_count;
-    u64 files[8];
-    u64 file_count;
+    u8 name[KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN];
+    u8 subitem_count;
+    u64 subitems[KERNEL_DIRECTORY_IMAGINARY_SUBITEM_MAX]; // most significant bit is set if it's a file
+    u64 continue_directory; // most significant bit is set if there is a continuation
 } KernelDirectoryImaginary;
-#define KERNEL_DIRECTORY_TYPE_IMAGINARY 0
+#define KERNEL_DIRECTORY_TYPE_IMAGINARY 1
+
+#define KERNEL_DIRECTORY_TYPE_DESTROYED 0
 
 typedef struct
 {
-    u64 type;
+    u8 type;
     u64 reference_count; // zero is uninitialized
     union {
         KernelDirectoryImaginary imaginary;
@@ -444,9 +456,8 @@ u64 kernel_directory_create_imaginary(char* name)
     KernelDirectory* dir = KERNEL_DIRECTORY_ARRAY + dir_id;
     dir->type = KERNEL_DIRECTORY_TYPE_IMAGINARY;
     KernelDirectoryImaginary* imaginary = &dir->imaginary;
-    imaginary->subdir_count = 0;
-    imaginary->file_count = 0;
-    strncpy(imaginary->name, name, 56);
+    imaginary->subitem_count = 0;
+    strncpy(imaginary->name, name, KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN);
     return dir_id;
 }
 
@@ -460,6 +471,13 @@ u64 is_valid_dir_id(u64 dir_id)
     return 1;
 }
 
+u64 kernel_directory_is_destroyed(u64 dir_id)
+{
+    assert(is_valid_dir_id(dir_id), "the dir_id you are checking destroyed on is valid.");
+    KernelDirectory* dir = KERNEL_DIRECTORY_ARRAY + dir_id;
+    return dir->type == KERNEL_DIRECTORY_TYPE_DESTROYED;
+}
+
 // where there is variable data to be returned we fill submitted buffer as much as possible and return real size
 u64 kernel_directory_get_name(u64 dir_id, u8* buf, u64 buf_size)
 {
@@ -468,11 +486,11 @@ u64 kernel_directory_get_name(u64 dir_id, u8* buf, u64 buf_size)
     if(dir->type == KERNEL_DIRECTORY_TYPE_IMAGINARY)
     {
         KernelDirectoryImaginary* imaginary = &dir->imaginary;
-        u64 name_len = strnlen_s(imaginary->name, 56);
+        u64 name_len = strnlen_s(imaginary->name, KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN);
 
         u64 cpy_len = name_len; if(cpy_len > buf_size) { cpy_len = buf_size; }
         strncpy(buf, imaginary->name, cpy_len);
-        if(buf_size > 56) { buf[56] = 0; }
+        if(buf_size > KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN) { buf[KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN] = 0; }
         else if(buf_size > 0) { buf[buf_size-1] = 0; }
         return name_len + 1;
     }
@@ -491,11 +509,56 @@ u64 kernel_directory_get_subdirectories(u64 dir_id, u64* buf, u64 buf_size)
     {
         KernelDirectoryImaginary* imaginary = &dir->imaginary;
 
-        if(buf_size > imaginary->subdir_count) { buf_size = imaginary->subdir_count; }
-        for(u64 i = 0; i < buf_size; i++)
-        { buf[i] = imaginary->subdirs[i]; }
+        u64 found_count = 0;
+        {
+            // prune destroyed
+            u64 insert_index = 0;
+            for(u64 i = 0; i < imaginary->subitem_count; i++)
+            {
+                if((imaginary->subitems[i] & 0x8000000000000000ull) != 0) // is file
+                {
+                    u64 file = imaginary->subitems[i] & ~0x8000000000000000ull;
+                    if(kernel_file_is_destroyed(file)) // aka should be pruned
+                    { kernel_file_free(file); }
+                    else
+                    {     // otherwise we keep it
+                        imaginary->subitems[insert_index] = imaginary->subitems[i];
+                        insert_index++;
+                    }
+                }
+                else // is a directory
+                {
+                    u64 direct = imaginary->subitems[i];
+                    if(kernel_directory_is_destroyed(direct)) // aka should be pruned
+                    { kernel_directory_free(direct); }
+                    else
+                    {     // otherwise we keep it
+                        imaginary->subitems[insert_index] = imaginary->subitems[i];
+                        insert_index++;
+                        if(found_count < buf_size)
+                        {
+                            buf[found_count] = direct;
+                        }
+                        found_count++;
+                    }
+                }
+            }
+        }
 
-        return imaginary->subdir_count;
+        if((imaginary->continue_directory & 0x8000000000000000ull) == 0)
+        {
+            return found_count;
+        }
+
+        u64 put_count = found_count;
+        if(put_count > buf_size)
+        { put_count = buf_size; }
+
+        return found_count + kernel_directory_get_subdirectories(
+            imaginary->continue_directory & ~0x8000000000000000ull,
+            buf + put_count,
+            buf_size - put_count
+        );
     }
     else
     {
@@ -512,11 +575,56 @@ u64 kernel_directory_get_files(u64 dir_id, u64* buf, u64 buf_size)
     {
         KernelDirectoryImaginary* imaginary = &dir->imaginary;
 
-        if(buf_size > imaginary->file_count) { buf_size = imaginary->file_count; }
-        for(u64 i = 0; i < buf_size; i++)
-        { buf[i] = imaginary->files[i]; }
+        u64 found_count = 0;
+        {
+            // prune destroyed
+            u64 insert_index = 0;
+            for(u64 i = 0; i < imaginary->subitem_count; i++)
+            {
+                if((imaginary->subitems[i] & 0x8000000000000000ull) != 0) // is file
+                {
+                    u64 file = imaginary->subitems[i] & ~0x8000000000000000ull;
+                    if(kernel_file_is_destroyed(file)) // aka should be pruned
+                    { kernel_file_free(file); }
+                    else
+                    {     // otherwise we keep it
+                        imaginary->subitems[insert_index] = imaginary->subitems[i];
+                        insert_index++;
+                        if(found_count < buf_size)
+                        {
+                            buf[found_count] = file;
+                        }
+                        found_count++;
+                    }
+                }
+                else // is a directory
+                {
+                    u64 direct = imaginary->subitems[i];
+                    if(kernel_directory_is_destroyed(direct)) // aka should be pruned
+                    { kernel_directory_free(direct); }
+                    else
+                    {     // otherwise we keep it
+                        imaginary->subitems[insert_index] = imaginary->subitems[i];
+                        insert_index++;
+                    }
+                }
+            }
+        }
 
-        return imaginary->file_count;
+        if((imaginary->continue_directory & 0x8000000000000000ull) == 0)
+        {
+            return found_count;
+        }
+
+        u64 put_count = found_count;
+        if(put_count > buf_size)
+        { put_count = buf_size; }
+
+        return found_count + kernel_directory_get_files(
+            imaginary->continue_directory & ~0x8000000000000000ull,
+            buf + put_count,
+            buf_size - put_count
+        );
     }
     else
     {
@@ -526,7 +634,7 @@ u64 kernel_directory_get_files(u64 dir_id, u64* buf, u64 buf_size)
 }
 
 // returns true if the operation was successful.
-// You might think this function should increment the reference count of subdirectory
+// You might think this function should increment the reference count of subdirectory,
 // that is wrong think. The caller could be passing ownership to us or keeping a reference for itself.
 // Since it is ambiguous from our side it is *YOUR* responsibility to increment the subdirectory's
 // reference counter if you intend to hold on to a local copy of subdirectory.
@@ -538,11 +646,11 @@ u64 kernel_directory_add_subdirectory(u64 dir_id, u64 subdirectory)
     {
         KernelDirectoryImaginary* imaginary = &dir->imaginary;
  
-        if(imaginary->subdir_count >= 8) { return 0; }
-        for(u64 i = 0; i < imaginary->subdir_count; i++)
-        { if(imaginary->subdirs[i] == subdirectory) { return 0; } }
-        imaginary->subdirs[imaginary->subdir_count] = subdirectory;
-        imaginary->subdir_count += 1;
+        if(imaginary->subitem_count >= KERNEL_DIRECTORY_IMAGINARY_SUBITEM_MAX) { return 0; }
+        for(u64 i = 0; i < imaginary->subitem_count; i++)
+        { if(imaginary->subitems[i] == subdirectory) { return 0; } }
+        imaginary->subitems[imaginary->subitem_count] = subdirectory;
+        imaginary->subitem_count += 1;
  
         return 1;
     }
@@ -561,11 +669,13 @@ u64 kernel_directory_add_file(u64 dir_id, u64 file_id)
     {
         KernelDirectoryImaginary* imaginary = &dir->imaginary;
 
-        if(imaginary->file_count >= 8) { return 0; }
-        for(u64 i = 0; i < imaginary->file_count; i++)
-        { if(imaginary->files[i] == file_id) { return 0; } }
-        imaginary->files[imaginary->file_count] = file_id;
-        imaginary->file_count += 1;
+        u64 file = file_id | 0x8000000000000000ull;
+
+        if(imaginary->subitem_count >= KERNEL_DIRECTORY_IMAGINARY_SUBITEM_MAX) { return 0; }
+        for(u64 i = 0; i < imaginary->subitem_count; i++)
+        { if(imaginary->subitems[i] == file) { return 0; } }
+        imaginary->subitems[imaginary->subitem_count] = file;
+        imaginary->subitem_count += 1;
 
         return 1;
     }
@@ -594,17 +704,18 @@ void kernel_directory_free(u64 dir_id)
     u64 file_count = kernel_directory_get_files(dir_id, 0, 0);
     u64 files[file_count];
     kernel_directory_get_files(dir_id, files, file_count);
-    for(u64 i = 0; i < file_count; i++)
-    {
-        kernel_file_free(files[i]);
-    }
 
     u64 sub_dir_count = kernel_directory_get_subdirectories(dir_id, 0, 0);
     u64 sub_dirs[sub_dir_count];
     kernel_directory_get_subdirectories(dir_id, sub_dirs, sub_dir_count);
+
     for(u64 i = 0; i < sub_dir_count; i++)
     {
         kernel_directory_free(sub_dirs[i]);
+    }
+    for(u64 i = 0; i < file_count; i++)
+    {
+        kernel_file_free(files[i]);
     }
 
     if(dir->type == KERNEL_DIRECTORY_TYPE_IMAGINARY)
