@@ -188,7 +188,7 @@ void kmain()
     printf("The directory created is called : %s\n", dir_name);
 
     u64 smol_dir = kernel_directory_create_imaginary("smõl directory");
-    u64 file_id = kernel_file_create_imaginary("an imaginary file");
+    u64 file_id = kernel_file_imaginary_create("an imaginary file");
     kernel_file_increment_reference_count(file_id);
     kernel_directory_add_file(smol_dir, file_id);
     kernel_directory_add_subdirectory(dir_id, smol_dir);
@@ -201,33 +201,42 @@ void kmain()
     kernel_directory_add_subdirectory(full_dir_id, kernel_directory_create_imaginary("another small directory"));
     kernel_directory_add_subdirectory(full_dir_id, kernel_directory_create_imaginary("another small directory"));
 
-    for(u64 i = 0; i < 10; i++)
+    u64 file_to_remove = S64_MAX;
+
+    for(u64 i = 0; i < 3; i++)
     {
         char name[32];
         sprintf(name, "file#%lld", 10-i);
-        u64 file = kernel_file_create_imaginary(name);
+        u64 file = kernel_file_imaginary_create(name);
+        file_to_remove = file;
         if(!kernel_directory_add_file(full_dir_id, file))
         {
-//            kernel_file_free(file);
+            kernel_file_free(file);
             if(is_valid_file_id(file)) { printf("file free failed for %s\n", name); }
         }
     }
 
     debug_print_directory_tree(dir_id, "");
     kernel_directory_free(dir_id);
+
+    kernel_file_imaginary_destroy(file_to_remove);
     debug_print_directory_tree(full_dir_id, "");
     kernel_directory_free(full_dir_id);
 
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    mem_debug_dump_table_counts(1);
     kernel_file_set_size(file_id, 100);
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    mem_debug_dump_table_counts(1);
     kernel_file_set_size(file_id, 10000);
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    mem_debug_dump_table_counts(1);
     kernel_file_set_size(file_id, 6100);
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    mem_debug_dump_table_counts(1);
     kernel_file_set_size(file_id, 100000);
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
-mem_debug_dump_table_counts(1);
+    mem_debug_dump_table_counts(1);
     u8 block[PAGE_SIZE];
     u64 op_arr[2];
     op_arr[0] = 0;
@@ -244,8 +253,10 @@ mem_debug_dump_table_counts(1);
         );
     }
     kfree_single_page(compare);
+    kernel_file_imaginary_destroy(file_id);
+    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     kernel_file_free(file_id);
-mem_debug_dump_table_counts(1);
+    mem_debug_dump_table_counts(1);
 
     load_drive_partitions();
     debug_print_directory_tree(drive1_partition_directory, "");

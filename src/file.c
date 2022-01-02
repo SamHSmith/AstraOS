@@ -75,17 +75,6 @@ u64 kernel_file_create()
     return file_id;
 }
 
-u64 kernel_file_create_imaginary(char* name)
-{
-    u64 file_id = kernel_file_create();
-    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
-    file->type = KERNEL_FILE_TYPE_IMAGINARY;
-    KernelFileImaginary* imaginary = &file->imaginary;
-    memset(imaginary, 0, sizeof(*imaginary));
-    strncpy(imaginary->name, name, 64);
-    return file_id;
-}
-
 u64 is_valid_file_id(u64 file_id)
 {
     KernelFile* file = KERNEL_FILE_ARRAY + file_id;
@@ -103,14 +92,44 @@ u64 kernel_file_is_destroyed(u64 file_id)
     return file->type == KERNEL_FILE_TYPE_DESTROYED;
 }
 
+u64 kernel_file_imaginary_create(char* name)
+{
+    u64 file_id = kernel_file_create();
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    file->type = KERNEL_FILE_TYPE_IMAGINARY;
+    KernelFileImaginary* imaginary = &file->imaginary;
+    memset(imaginary, 0, sizeof(*imaginary));
+    strncpy(imaginary->name, name, 64);
+    return file_id;
+}
+
+u64 kernel_file_imaginary_destroy(u64 file_id)
+{
+    if((!is_valid_file_id(file_id)) || kernel_file_is_destroyed(file_id)) { return 0; }
+
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    KernelFileImaginary* imaginary = &file->imaginary;
+
+    void** page_array = imaginary->page_array_alloc.memory;
+    for(u64 i = 0; i < imaginary->page_array_len; i++)
+    {
+        kfree_single_page(page_array[i]);
+    }
+    kfree_pages(imaginary->page_array_alloc);
+
+    file->type = KERNEL_FILE_TYPE_DESTROYED;
+    return 1;
+}
+
 u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
 {
-    if(!is_valid_file_id(file_id) || !buf_size) { return 0; }
+    if((!is_valid_file_id(file_id)) || kernel_file_is_destroyed(file_id)) { return 0; }
     KernelFile* file = KERNEL_FILE_ARRAY + file_id;
     if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
     {
         KernelFileImaginary* imaginary = &file->imaginary;
         u64 name_len = strnlen_s(imaginary->name, 64);
+        if(!buf_size) { return name_len + 1; }
 
         u64 cpy_len = name_len; if(cpy_len > buf_size) { cpy_len = buf_size; }
         strncpy(buf, imaginary->name, cpy_len);
@@ -122,6 +141,7 @@ u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
     {
         KernelFileDrivePartition* part = &file->drive_partition;
         u64 name_len = strnlen_s(part->name, 54);
+        if(!buf_size) { return name_len + 1; }
  
         u64 cpy_len = name_len; if(cpy_len + 1 > buf_size) { cpy_len = buf_size - 1; }
         strncpy(buf, part->name, cpy_len);
@@ -138,7 +158,7 @@ u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
 
 u64 kernel_file_get_size(u64 file_id)
 {
-    if(!is_valid_file_id(file_id)) { return 0; }
+    if((!is_valid_file_id(file_id)) || kernel_file_is_destroyed(file_id)) { return 0; }
     KernelFile* file = KERNEL_FILE_ARRAY + file_id;
     if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
     {
@@ -159,7 +179,7 @@ u64 kernel_file_get_size(u64 file_id)
 
 u64 kernel_file_get_block_count(u64 file_id)
 {
-    if(!is_valid_file_id(file_id)) { return 0; }
+    if((!is_valid_file_id(file_id)) || kernel_file_is_destroyed(file_id)) { return 0; }
     KernelFile* file = KERNEL_FILE_ARRAY + file_id;
     if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
     {
@@ -181,7 +201,7 @@ u64 kernel_file_get_block_count(u64 file_id)
 // returns true if the operation was successful.
 u64 kernel_file_set_size(u64 file_id, u64 new_size)
 {
-    if(!is_valid_file_id(file_id)) { return 0; }
+    if((!is_valid_file_id(file_id)) || kernel_file_is_destroyed(file_id)) { return 0; }
     KernelFile* file = KERNEL_FILE_ARRAY + file_id;
     u64 new_block_count = (new_size + PAGE_SIZE) / PAGE_SIZE;
     if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
@@ -247,7 +267,7 @@ u64 kernel_file_set_size(u64 file_id, u64 new_size)
 // return true on success
 u64 kernel_file_read_blocks(u64 file_id, u64* op_array, u64 op_count)
 {
-    if(!is_valid_file_id(file_id)) { return 0; }
+    if((!is_valid_file_id(file_id)) || kernel_file_is_destroyed(file_id)) { return 0; }
     KernelFile* file = KERNEL_FILE_ARRAY + file_id;
     if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
     {
@@ -301,7 +321,7 @@ u64 kernel_file_read_blocks(u64 file_id, u64* op_array, u64 op_count)
 
 u64 kernel_file_write_blocks(u64 file_id, u64* op_array, u64 op_count)
 {
-    if(!is_valid_file_id(file_id)) { return 0; }
+    if((!is_valid_file_id(file_id)) || kernel_file_is_destroyed(file_id)) { return 0; }
     KernelFile* file = KERNEL_FILE_ARRAY + file_id;
     if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
     {
@@ -376,6 +396,10 @@ void kernel_file_free(u64 file_id)
             kfree_single_page(page_array[i]);
         }
         kfree_pages(imaginary->page_array_alloc);
+        file->reference_count = 0;
+    }
+    else if(file->type == KERNEL_FILE_TYPE_DESTROYED)
+    {
         file->reference_count = 0;
     }
     else
@@ -543,6 +567,7 @@ u64 kernel_directory_get_subdirectories(u64 dir_id, u64* buf, u64 buf_size)
                     }
                 }
             }
+            imaginary->subitem_count = insert_index;
         }
 
         if((imaginary->continue_directory & 0x8000000000000000ull) == 0)
@@ -609,6 +634,7 @@ u64 kernel_directory_get_files(u64 dir_id, u64* buf, u64 buf_size)
                     }
                 }
             }
+            imaginary->subitem_count = insert_index;
         }
 
         if((imaginary->continue_directory & 0x8000000000000000ull) == 0)
