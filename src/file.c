@@ -1,17 +1,19 @@
 
+#define KERNEL_FILE_IMAGINARY_NAME_LEN 64
 typedef struct
 {
     Kallocation page_array_alloc;
     u64 page_array_len;
     u64 file_size;
-    u8 name[64];
+    u8 name[KERNEL_FILE_IMAGINARY_NAME_LEN];
     u8 _padding[32];
 } KernelFileImaginary;
 #define KERNEL_FILE_TYPE_IMAGINARY 1
 
+#define KERNEL_FILE_DRIVE_PARTITION_NAME_LEN 54
 typedef struct
 {
-    u8 name[54];
+    u8 name[KERNEL_FILE_DRIVE_PARTITION_NAME_LEN];
     u64 start_block;
     u64 block_count;
 } KernelFileDrivePartition;
@@ -36,25 +38,27 @@ Kallocation KERNEL_FILE_ARRAY_ALLOC = {0};
 #define KERNEL_FILE_ARRAY ((KernelFile*)KERNEL_FILE_ARRAY_ALLOC.memory)
 u64 KERNEL_FILE_ARRAY_LEN = 0;
 
-u64 kernel_file_create()
+void kernel_file_create(u64* buf, u64 count)
 {
-    u64 file_id = 0;
-    u8 found = 0;
-    for(u64 i = 0; i < KERNEL_FILE_ARRAY_LEN; i++)
+    for(u64 i = 0; i < KERNEL_FILE_ARRAY_LEN && count; i++)
     {
         if(KERNEL_FILE_ARRAY[i].reference_count == 0)
         {
-            file_id = i;
-            found = 1;
-            break;
+            u64 file_id = i;
+            KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+            memset(file, 0, sizeof(*file));
+            file->reference_count = 1;
+            *buf = file_id;
+            buf++;
+            count--;
         }
     }
-    if(!found)
+    if(count)
     {
-        if((KERNEL_FILE_ARRAY_LEN+1) * sizeof(KernelFile) > KERNEL_FILE_ARRAY_ALLOC.page_count * PAGE_SIZE)
+        if((KERNEL_FILE_ARRAY_LEN+count) * sizeof(KernelFile) > KERNEL_FILE_ARRAY_ALLOC.page_count * PAGE_SIZE)
         {
             Kallocation new_alloc =
-                kalloc_pages(((KERNEL_FILE_ARRAY_LEN+1) * sizeof(KernelFile) + PAGE_SIZE) / PAGE_SIZE);
+                kalloc_pages(((KERNEL_FILE_ARRAY_LEN+count) * sizeof(KernelFile) + PAGE_SIZE) / PAGE_SIZE);
             KernelFile* new_array = new_alloc.memory;
             for(u64 i = 0; i < KERNEL_FILE_ARRAY_LEN; i++)
             {
@@ -66,13 +70,17 @@ u64 kernel_file_create()
             }
             KERNEL_FILE_ARRAY_ALLOC = new_alloc;
         }
-        file_id = KERNEL_FILE_ARRAY_LEN;
-        KERNEL_FILE_ARRAY_LEN += 1;
     }
-    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
-    memset(file, 0, sizeof(*file));
-    file->reference_count = 1;
-    return file_id;
+    while(count)
+    {
+        u64 file_id = KERNEL_FILE_ARRAY_LEN++;
+        KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+        memset(file, 0, sizeof(*file));
+        file->reference_count = 1;
+        *buf = file_id;
+        buf++;
+        count--;
+    }
 }
 
 u64 is_valid_file_id(u64 file_id)
@@ -92,15 +100,16 @@ u64 kernel_file_is_destroyed(u64 file_id)
     return file->type == KERNEL_FILE_TYPE_DESTROYED;
 }
 
-u64 kernel_file_imaginary_create(char* name)
+void kernel_file_imaginary_create(u64* buf, u64 count)
 {
-    u64 file_id = kernel_file_create();
-    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
-    file->type = KERNEL_FILE_TYPE_IMAGINARY;
-    KernelFileImaginary* imaginary = &file->imaginary;
-    memset(imaginary, 0, sizeof(*imaginary));
-    strncpy(imaginary->name, name, 64);
-    return file_id;
+    kernel_file_create(buf, count);
+    for(u64 i = 0; i < count; i++)
+    {
+        u64 file_id = buf[i];
+        KernelFile* file = KERNEL_FILE_ARRAY + file_id; // is zeroed by kernel_file_create
+        file->type = KERNEL_FILE_TYPE_IMAGINARY;
+        KernelFileImaginary* imaginary = &file->imaginary;
+    }
 }
 
 u64 kernel_file_imaginary_destroy(u64 file_id)
@@ -121,6 +130,29 @@ u64 kernel_file_imaginary_destroy(u64 file_id)
     return 1;
 }
 
+u64 kernel_file_set_name(u64 file_id, u8* new_name)
+{
+    if((!is_valid_file_id(file_id)) || kernel_file_is_destroyed(file_id)) { return 0; }
+    KernelFile* file = KERNEL_FILE_ARRAY + file_id;
+    if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
+    {
+        KernelFileImaginary* imaginary = &file->imaginary;
+        strncpy(imaginary->name, new_name, KERNEL_FILE_IMAGINARY_NAME_LEN);
+        return 1;
+    }
+    else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
+    {
+        KernelFileDrivePartition* part = &file->drive_partition;
+        strncpy(part->name, new_name, KERNEL_FILE_DRIVE_PARTITION_NAME_LEN);
+        return 1;
+    }
+    else
+    {
+        printf("kernel_file_get_name: Unknown file type: %llu\n", file->type);
+        return 0;
+    }
+}
+
 u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
 {
     if((!is_valid_file_id(file_id)) || kernel_file_is_destroyed(file_id)) { return 0; }
@@ -128,19 +160,19 @@ u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
     if(file->type == KERNEL_FILE_TYPE_IMAGINARY)
     {
         KernelFileImaginary* imaginary = &file->imaginary;
-        u64 name_len = strnlen_s(imaginary->name, 64);
+        u64 name_len = strnlen_s(imaginary->name, KERNEL_FILE_IMAGINARY_NAME_LEN);
         if(!buf_size) { return name_len + 1; }
 
         u64 cpy_len = name_len; if(cpy_len > buf_size) { cpy_len = buf_size; }
         strncpy(buf, imaginary->name, cpy_len);
-        if(buf_size > 64) { buf[64] = 0; }
+        if(buf_size > KERNEL_FILE_IMAGINARY_NAME_LEN) { buf[KERNEL_FILE_IMAGINARY_NAME_LEN] = 0; }
         else if(buf_size > 0) { buf[buf_size-1] = 0; }
         return name_len + 1;
     }
     else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
     {
         KernelFileDrivePartition* part = &file->drive_partition;
-        u64 name_len = strnlen_s(part->name, 54);
+        u64 name_len = strnlen_s(part->name, KERNEL_FILE_DRIVE_PARTITION_NAME_LEN);
         if(!buf_size) { return name_len + 1; }
  
         u64 cpy_len = name_len; if(cpy_len + 1 > buf_size) { cpy_len = buf_size - 1; }
@@ -480,8 +512,11 @@ u64 kernel_directory_create_imaginary(char* name)
     KernelDirectory* dir = KERNEL_DIRECTORY_ARRAY + dir_id;
     dir->type = KERNEL_DIRECTORY_TYPE_IMAGINARY;
     KernelDirectoryImaginary* imaginary = &dir->imaginary;
-    imaginary->subitem_count = 0;
-    strncpy(imaginary->name, name, KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN);
+    memset(imaginary, 0, sizeof(*imaginary));
+    if(name)
+    { strncpy(imaginary->name, name, KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN); }
+    else
+    { imaginary->name[0] = 0; }
     return dir_id;
 }
 
@@ -672,7 +707,15 @@ u64 kernel_directory_add_subdirectory(u64 dir_id, u64 subdirectory)
     {
         KernelDirectoryImaginary* imaginary = &dir->imaginary;
  
-        if(imaginary->subitem_count >= KERNEL_DIRECTORY_IMAGINARY_SUBITEM_MAX) { return 0; }
+        if(imaginary->subitem_count >= KERNEL_DIRECTORY_IMAGINARY_SUBITEM_MAX)
+        {
+            if((imaginary->continue_directory & 0x8000000000000000ull) == 0) // no continue directory
+            {
+                imaginary->continue_directory = kernel_directory_create_imaginary(0) | 0x8000000000000000ull;
+            }
+            u64 continue_directory = imaginary->continue_directory & (~0x8000000000000000ull);
+            return kernel_directory_add_subdirectory(continue_directory, subdirectory);
+        }
         for(u64 i = 0; i < imaginary->subitem_count; i++)
         { if(imaginary->subitems[i] == subdirectory) { return 0; } }
         imaginary->subitems[imaginary->subitem_count] = subdirectory;
@@ -687,22 +730,71 @@ u64 kernel_directory_add_subdirectory(u64 dir_id, u64 subdirectory)
     }
 }
 
-u64 kernel_directory_add_file(u64 dir_id, u64 file_id)
+// returns false if the directory is at capacity or read only etc
+u64 kernel_directory_add_files(u64 dir_id, u64* files, u64 file_count)
 {
-    if(!is_valid_dir_id(dir_id) || !is_valid_file_id(file_id)) { return 0; }
+    assert(is_valid_dir_id(dir_id), "you passed a valid directory id to kernel_directory_add_files");
     KernelDirectory* dir = KERNEL_DIRECTORY_ARRAY + dir_id;
     if(dir->type == KERNEL_DIRECTORY_TYPE_IMAGINARY)
     {
         KernelDirectoryImaginary* imaginary = &dir->imaginary;
 
-        u64 file = file_id | 0x8000000000000000ull;
+        for(u64 i = 0; i < KERNEL_DIRECTORY_IMAGINARY_SUBITEM_MAX && file_count; i++)
+        {
+            u64 file = (*files) | 0x8000000000000000ull;
+            assert(is_valid_file_id(*files), "you passed a valid file id to kernel_directory_add_files");
 
-        if(imaginary->subitem_count >= KERNEL_DIRECTORY_IMAGINARY_SUBITEM_MAX) { return 0; }
-        for(u64 i = 0; i < imaginary->subitem_count; i++)
-        { if(imaginary->subitems[i] == file) { return 0; } }
-        imaginary->subitems[imaginary->subitem_count] = file;
-        imaginary->subitem_count += 1;
+            u8 taken = 0;
+            if(i < imaginary->subitem_count)
+            {
+                if(file == imaginary->subitems[i])
+                {
+                    files++;
+                    file_count--;
+                    continue;
+                }
 
+                if((imaginary->subitems[i] & 0x8000000000000000ull) != 0) // is file
+                {
+                    u64 file = imaginary->subitems[i] & ~0x8000000000000000ull;
+                    if(kernel_file_is_destroyed(file)) // aka should be pruned
+                    { kernel_file_free(file); }
+                    else
+                    { taken = 1; }
+                }
+                else // is a directory
+                {
+                    u64 direct = imaginary->subitems[i];
+                    if(kernel_directory_is_destroyed(direct)) // aka should be pruned
+                    { kernel_directory_free(direct); }
+                    else
+                    { taken = 1; }
+                }
+            }
+            else
+            { imaginary->subitem_count = i + 1; }
+
+
+            if(!taken)
+            {
+                imaginary->subitems[i] = file;
+                files++;
+                file_count--;
+            }
+        }
+
+        if(file_count)
+        {
+            if((imaginary->continue_directory & 0x8000000000000000ull) == 0) // no continue directory
+            {
+                u64 new_continue = kernel_directory_create_imaginary(0) | 0x8000000000000000ull; // this op can move things
+                dir = KERNEL_DIRECTORY_ARRAY + dir_id;
+                imaginary = &dir->imaginary;
+                imaginary->continue_directory = new_continue;
+            }
+            u64 continue_directory = imaginary->continue_directory & (~0x8000000000000000ull);
+            return kernel_directory_add_files(continue_directory, files, file_count);
+        }
         return 1;
     }
     else
@@ -727,25 +819,25 @@ void kernel_directory_free(u64 dir_id)
 
     if(dir->reference_count > 1) { dir->reference_count--; return; }
 
-    u64 file_count = kernel_directory_get_files(dir_id, 0, 0);
-    u64 files[file_count];
-    kernel_directory_get_files(dir_id, files, file_count);
-
-    u64 sub_dir_count = kernel_directory_get_subdirectories(dir_id, 0, 0);
-    u64 sub_dirs[sub_dir_count];
-    kernel_directory_get_subdirectories(dir_id, sub_dirs, sub_dir_count);
-
-    for(u64 i = 0; i < sub_dir_count; i++)
-    {
-        kernel_directory_free(sub_dirs[i]);
-    }
-    for(u64 i = 0; i < file_count; i++)
-    {
-        kernel_file_free(files[i]);
-    }
-
     if(dir->type == KERNEL_DIRECTORY_TYPE_IMAGINARY)
     {
+        KernelDirectoryImaginary* imaginary = &dir->imaginary;
+
+        for(u64 i = 0; i < imaginary->subitem_count; i++)
+        {
+            u64 item = imaginary->subitems[i];
+            if(item & 0x8000000000000000ull)
+            { // file
+                kernel_file_free(item & (~0x8000000000000000ull));
+            }
+            else
+            {
+                kernel_directory_free(item);
+            }
+        }
+
+        if(imaginary->continue_directory & 0x8000000000000000ull)
+        { kernel_directory_free(imaginary->continue_directory & (~0x8000000000000000ull)); }
         dir->reference_count = 0;
     }
     else
@@ -876,7 +968,8 @@ void load_drive_partitions()
             );
             RAD_PartitionTableEntry* entry = table->entries + i;
 
-            u64 file_id = kernel_file_create();
+            u64 file_id;
+            kernel_file_create(&file_id, 1);
             KernelFile* file = KERNEL_FILE_ARRAY + file_id;
             file->type = KERNEL_FILE_TYPE_DRIVE_PARTITION;
             KernelFileDrivePartition* part = &file->drive_partition;
@@ -886,7 +979,7 @@ void load_drive_partitions()
             part->start_block = entry->start_block;
             part->block_count = next_partition_start - entry->start_block;
 
-            kernel_directory_add_file(drive1_partition_directory, file_id);
+            kernel_directory_add_files(drive1_partition_directory, &file_id, 1);
         }
     }
 }

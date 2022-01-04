@@ -180,6 +180,7 @@ void kmain()
     spinlock_acquire(&KERNEL_SPINLOCK);
     KERNEL_START_OTHER_HARTS = 0;
 
+    printf("Pre file testing: "); mem_debug_dump_table_counts(1);
     /* TESTING */
     u64 dir_id = kernel_directory_create_imaginary("Über directory");
     u64 dir_name_len = kernel_directory_get_name(dir_id, 0, 0);
@@ -188,9 +189,10 @@ void kmain()
     printf("The directory created is called : %s\n", dir_name);
 
     u64 smol_dir = kernel_directory_create_imaginary("smõl directory");
-    u64 file_id = kernel_file_imaginary_create("an imaginary file");
+    u64 file_id;// = kernel_file_imaginary_create("an imaginary file");
+    kernel_file_imaginary_create(&file_id, 1);
     kernel_file_increment_reference_count(file_id);
-    kernel_directory_add_file(smol_dir, file_id);
+    kernel_directory_add_files(smol_dir, &file_id, 1);
     kernel_directory_add_subdirectory(dir_id, smol_dir);
 
     u64 full_dir_id = kernel_directory_create_imaginary("filled directory");
@@ -203,16 +205,20 @@ void kmain()
 
     u64 file_to_remove = S64_MAX;
 
-    for(u64 i = 0; i < 3; i++)
     {
-        char name[32];
-        sprintf(name, "file#%lld", 10-i);
-        u64 file = kernel_file_imaginary_create(name);
-        file_to_remove = file;
-        if(!kernel_directory_add_file(full_dir_id, file))
+        u64 file_count = 38;
+        u64 files[file_count];
+        kernel_file_imaginary_create(files, file_count);
+
+        for(u64 i = 0; i < file_count; i++)
         {
-            kernel_file_free(file);
-            if(is_valid_file_id(file)) { printf("file free failed for %s\n", name); }
+            char name[32];
+            sprintf(name, "file#%lld", i);
+            kernel_file_set_name(files[i], name);
+        }
+        if(!kernel_directory_add_files(full_dir_id, files, file_count))
+        {
+            printf("there was an error when adding to the directory\n");
         }
     }
 
@@ -256,7 +262,7 @@ void kmain()
     kernel_file_imaginary_destroy(file_id);
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     kernel_file_free(file_id);
-    mem_debug_dump_table_counts(1);
+    printf("Post file testing: "); mem_debug_dump_table_counts(1);
 
     load_drive_partitions();
     debug_print_directory_tree(drive1_partition_directory, "");
