@@ -143,6 +143,8 @@ void syscall_thread_awake_on_surface(u64 hart, u64 mtime)
     u64 count = frame->regs[12];
     current_thread->program_counter += 4;
 
+    assert(user_surface_slots % 2 == 0, "user_surface_slots is aligned");
+
     if(count == 0 || current_thread->awake_count + count > THREAD_MAX_AWAKE_COUNT)
     {
         frame->regs[10] = 0;
@@ -154,31 +156,27 @@ void syscall_thread_awake_on_surface(u64 hart, u64 mtime)
     u16 surface_slot_array[THREAD_MAX_AWAKE_COUNT];
     u64 surface_slot_count = 0;
 
-    u64 page_count = ((count*sizeof(u16))+PAGE_SIZE-1)/PAGE_SIZE;
-    u16* surface_slots;
-    for(s64 i = page_count; i >= 0; i--)
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_surface_slots, count * sizeof(u16))
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
     {
-        u64 convert_addr = user_surface_slots + i*PAGE_SIZE;
-        if(i == page_count)
-        { convert_addr -= i*PAGE_SIZE - count*sizeof(u16) + 1; }
-        if(mmu_virt_to_phys(process->mmu_table, convert_addr, (u64*)&surface_slots) != 0)
-        {
-            frame->regs[10] = 0;
-            rwlock_release_read(&process->process_lock);
-            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
-            return;
-        }
+        frame->regs[10] = 0;
+        rwlock_release_read(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
     }
+
     for(u64 i = 0; i < count; i++)
     {
         {
+            u16 surface_slot_index = *((u16*)mmu_virt_to_phys_buffer_get_address(my_buffer, sizeof(u16) * i));
             SurfaceSlot* slot=
-        ((SurfaceSlot*)process->surface_alloc.memory) + surface_slots[i];
+        ((SurfaceSlot*)process->surface_alloc.memory) + surface_slot_index;
 
-            if( surface_slots[i] < process->surface_count &&
+            if( surface_slot_index < process->surface_count &&
                 slot->is_initialized)
             {
-                surface_slot_array[surface_slot_count] = surface_slots[i];
+                surface_slot_array[surface_slot_count] = surface_slot_index;
                 surface_slot_count++;
             }
         }
@@ -314,6 +312,8 @@ void syscall_thread_awake_on_semaphore(u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+// TODO MERGE WITH KEYBOARD
+
 void syscall_get_rawmouse_events(u64 hart)
 {
     {
@@ -370,6 +370,8 @@ void syscall_get_rawmouse_events(u64 hart)
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
+
+// TODO MERGE WITH MOUSE
 
 void syscall_get_keyboard_events(u64 hart)
 {
@@ -488,6 +490,7 @@ void syscall_get_vo_id(u64 hart)
     }
 
     u64 user_vo_id_ptr = frame->regs[11];
+    assert(user_vo_id_ptr % 8 == 0, "the vo_id pointer passed to get vo_id is 8 byte aligned");
     if(ret && user_vo_id_ptr != 0)
     {
         u64* ptr;
@@ -523,6 +526,8 @@ void syscall_alloc_pages(u64 hart)
     u64 vaddr = frame->regs[11];
     u64 page_count = frame->regs[12];
     u64 ret = 0; //default case is failed allocation
+
+    assert(vaddr % PAGE_SIZE == 0, "vaddr passed to alloc_pages is 4096 aka PAGE_SIZE aligned");
 
     Kallocation a = kalloc_pages(page_count);
     if(a.page_count > 0)
@@ -560,6 +565,8 @@ void syscall_shrink_allocation(u64 hart)
     u64 vaddr = frame->regs[11];
     u64 new_page_count = frame->regs[12];
     u64 ret = 0; //default case is failed shrink
+
+    assert(vaddr % PAGE_SIZE == 0, "vaddr passed to shrink_allocation is 4096 aka PAGE_SIZE aligned");
 
     Kallocation remove = process_shrink_allocation(process, vaddr, new_page_count);
     if(remove.memory != 0)
@@ -620,6 +627,9 @@ void syscall_surface_consumer_get_size(u64 hart)
     u64 user_width = frame->regs[12];
     u64 user_height = frame->regs[13];
     u64 ret = 1;
+
+    assert(user_width % 4 == 0, "width pointer passed to consumer_get_size is 4 byte aligned");
+    assert(user_height % 4== 0, "height pointer passed to consumer_get_size is 4 byte aligned");
 
     u32* width;
     u32* height;
@@ -771,8 +781,8 @@ void syscall_file_get_name(u64 hart)
     TrapFrame* frame = &current_thread->frame;
 
     u64 user_file_id = frame->regs[11];
-    u64 user_buf = frame->regs[12];
-    u64 buf_size = frame->regs[13];
+    u64 user_buffer = frame->regs[12];
+    u64 user_buffer_size = frame->regs[13];
 
     u64 file_id;
     if(!process_get_read_access(process, user_file_id, &file_id))
@@ -782,37 +792,27 @@ void syscall_file_get_name(u64 hart)
         rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
- 
-    u64 buf = 0;
-    if(buf_size != 0)
+
+    u64 actual_count = user_buffer_size;
+    u8 temp_buf[KERNEL_FILE_MAX_NAME_LEN];
+    if(actual_count > KERNEL_FILE_MAX_NAME_LEN)
+    { actual_count = KERNEL_FILE_MAX_NAME_LEN; }
+
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_buffer, actual_count)
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
+    { // failed
+        frame->regs[10] = 0;
+    }
+    else
     {
-        if(!(mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf) == 0))
-        {
-            frame->regs[10] = 0;
-            current_thread->program_counter += 4;
-            rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-            return;
-        }
- 
-        {
-            u64 num_pages = (buf_size + PAGE_SIZE) / PAGE_SIZE;
-            u64 ptr = user_buf + PAGE_SIZE;
-            u64 temp;
-            for(u64 i = 1; i < num_pages; i++)
-            {
-                if(!(mmu_virt_to_phys(process->mmu_table, ptr, (u64*)&temp) == 0))
-                {
-                    frame->regs[10] = 0;
-                    current_thread->program_counter += 4;
-                    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-                    return;
-                }
-                ptr += PAGE_SIZE;
-            }
-        }
+        u64 copy_count = kernel_file_get_name(file_id, temp_buf, actual_count);
+
+        for(u64 i = 0; i < copy_count; i++)
+        { *((u8*)mmu_virt_to_phys_buffer_get_address(my_buffer, i)) = temp_buf[i]; }
+        frame->regs[10] = copy_count;
     }
  
-    frame->regs[10] = kernel_file_get_name(file_id, buf, buf_size);
     current_thread->program_counter += 4;
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
@@ -836,6 +836,8 @@ void syscall_directory_get_files(u64 hart)
     u64 dir_id = frame->regs[11];
     u64 user_buf = frame->regs[12];
     u64 buf_size = frame->regs[13];
+
+    assert(user_buf % 8 == 0, "buffer passed to syscall_directory_get_files is 8 byte aligned");
 
     u64 buf = 0;
     if(buf_size != 0)
@@ -1229,28 +1231,24 @@ void syscall_stream_put(u64 hart)
     }
     Stream* out_stream = out_stream_array[user_out_stream];
 
-    u64 page_count = (user_count+(user_memory % PAGE_SIZE) + PAGE_SIZE - 1) / PAGE_SIZE;
+    u64 actual_count = user_count;
+    u8 temp_buf[STREAM_SIZE];
+    if(actual_count > STREAM_SIZE)
+    { actual_count = STREAM_SIZE; }
 
-    u8* memory = 0;
-    if(page_count)
-    {
-    u64 i = page_count - 1;
-    while(1)
-    {
-        if(mmu_virt_to_phys(process->mmu_table, user_memory + (PAGE_SIZE * i),
-            (u64*)&memory) != 0)
-        {
-            frame->regs[10] = 0;
-            rwlock_release_read(&process->process_lock);
-            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
-            return;
-        }
-        if(i == 0) { break; }
-        i--;
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_memory, actual_count)
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
+    { // failed
+        frame->regs[10] = 0;
     }
+    else
+    {
+        for(u64 i = 0; i < actual_count; i++)
+        { temp_buf[i] = *((u8*)mmu_virt_to_phys_buffer_get_address(my_buffer, i)); }
+        frame->regs[10] = stream_put(out_stream, temp_buf, actual_count);
     }
 
-    frame->regs[10] = stream_put(out_stream, memory, user_count);
     rwlock_release_read(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
@@ -1302,27 +1300,26 @@ void syscall_stream_take(u64 hart)
     }
     Stream* in_stream = in_stream_array[user_in_stream];
 
-    u64 page_count = (user_buffer_size+(user_buffer % PAGE_SIZE) + PAGE_SIZE - 1) / PAGE_SIZE;
- 
-    u8* buffer = 0;
-    if(page_count)
-    {
-    u64 i = page_count - 1;
-    while(1)
-    {
-        if(mmu_virt_to_phys(process->mmu_table, user_buffer + PAGE_SIZE * i, (u64*)&buffer) != 0)
-        {
-            frame->regs[10] = 0;
-            rwlock_release_read(&process->process_lock);
-            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
-            return;
-        }
-        if(i == 0) { break; }
-        i--;
+    u64 actual_count = user_buffer_size;
+    u8 temp_buf[STREAM_SIZE];
+    if(actual_count > STREAM_SIZE)
+    { actual_count = STREAM_SIZE; }
+
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_buffer, actual_count)
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
+    { // failed
+        frame->regs[10] = 0;
     }
+    else
+    {
+        u64 copy_count = stream_take(in_stream, temp_buf, actual_count, byte_count_in_stream_ptr);
+
+        for(u64 i = 0; i < copy_count; i++)
+        { *((u8*)mmu_virt_to_phys_buffer_get_address(my_buffer, i)) = temp_buf[i]; }
+        frame->regs[10] = copy_count;
     }
 
-    frame->regs[10] = stream_take(in_stream, buffer, user_buffer_size, byte_count_in_stream_ptr);
     rwlock_release_read(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }

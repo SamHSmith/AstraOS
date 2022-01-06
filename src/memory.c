@@ -328,6 +328,72 @@ void mmu_map_kallocation(u64* root, Kallocation k, void* vaddr, u64 bits)
     }
 }
 
+/*
+    returns 0 on success.
+*/
+u64 mmu_virt_to_phys(u64* root, u64 vaddr, u64* paddr)
+{
+    u64 vpn[3];
+    vpn[0] = (vaddr >> 12) & 0x1ff;
+    vpn[1] = (vaddr >> 21) & 0x1ff;
+    vpn[2] = (vaddr >> 30) & 0x1ff;
+
+    u64* v = root + vpn[2];
+    for(s64 i = 2; i >= 0; i--)
+    {
+        if(!mmu_is_entry_valid(*v))
+        { return 1; }
+        else if(mmu_is_entry_leaf(*v))
+        {
+            u64 off_mask = (1 << (12 + i * 9)) - 1;
+            u64 vaddr_pgoff = vaddr & off_mask;
+            u64 addr = (*v << 2) & ~off_mask;
+            u64 res = addr | vaddr_pgoff;
+            *paddr = res;
+            return 0;
+        }
+        u64* entry = (u64*)((*v & ~0x3ff) << 2);
+        v = entry + vpn[i - 1];
+    }
+
+    return 2;
+}
+
+/* return 0 on success. start_page_vaddr should be page aligned */
+u64 mmu_virt_to_phys_pages(u64* root, u64 start_page_vaddr, u64* paddrs, u64 page_count)
+{
+    for(u64 i = 0; i < page_count; i++)
+    {
+        u64 ret = mmu_virt_to_phys(root, start_page_vaddr + (i * PAGE_SIZE), paddrs + i);
+        if(ret != 0)
+        {
+            return ret;
+        }
+    }
+    return 0;
+}
+
+#define mmu_virt_to_phys_buffer(name, table, start_address, byte_length) \
+u64 name_buf_start = start_address; \
+u64 name_page_offset = name_buf_start & 0xfffllu; \
+u64 name_total_byte_size = byte_length + name_page_offset; \
+u64 name_total_page_count = (name_total_byte_size + PAGE_SIZE - 1) / PAGE_SIZE; \
+u64 name_pages[name_total_page_count]; \
+u64 name_return_value = mmu_virt_to_phys_pages(table, name_buf_start & (~0xfffllu), name_pages, name_total_page_count);
+
+#define mmu_virt_to_phys_buffer_get_address(name, byte_index) \
+    (name_pages[(byte_index + name_page_offset) / PAGE_SIZE] + (byte_index + name_page_offset) % PAGE_SIZE)
+
+#define mmu_virt_to_phys_buffer_page_count(name) \
+    (name_total_page_count)
+
+#define mmu_virt_to_phys_buffer_pages(name) \
+    (name_pages)
+
+#define mmu_virt_to_phys_buffer_return_value(name) \
+    (name_return_value)
+
+
 u64* mem_init()
 {
     K_PAGE_COUNT = HEAP_SIZE / PAGE_SIZE;
@@ -401,6 +467,49 @@ u64* mem_init()
     //Map the uart
     mmu_kernel_map_range(table, 0x10000000, 0x10001000, 2 + 4);
 
+
+    /* Test code */
+    {
+        mmu_map(table, 0x10000000 + 1*0x1000, 0x10000000, 2 + 4, 0);
+        mmu_map(table, 0x10000000 + 2*0x1000, 0x10000000, 2 + 4, 0);
+        mmu_map(table, 0x10000000 + 3*0x1000, 0x10000000, 2 + 4, 0);
+        mmu_map(table, 0x10000000 + 4*0x1000, 0x20000000, 2 + 4, 0);
+        mmu_map(table, 0x10000000 + 5*0x1000, 0x20000000, 2 + 4, 0);
+        for(u64 i = 0; i < 10*2; i++)
+        {
+            void* test_addr = 0x10000000 - 0x1300 + (i * 0x1000);
+            void* result_addr;
+            u64 res = mmu_virt_to_phys(table, test_addr, &result_addr);
+            if(!res)
+            {
+                printf("0x%llx -> 0x%llx\n", test_addr, result_addr);
+            }
+            else
+            {
+                printf("0x%llx is not mapped.\n", test_addr);
+            }
+        }
+
+        u64 element_size = 512;
+        u64 element_count = 50;
+
+        mmu_virt_to_phys_buffer(my_buffer_mapping, table, 0x10001800, element_size * element_count)
+        u64 is_good = mmu_virt_to_phys_buffer_return_value(my_buffer_mapping);
+
+        printf("%llu\n", is_good);
+
+        for(u64 i = 0; i < mmu_virt_to_phys_buffer_page_count(my_buffer_mapping); i++)
+        {
+            printf("page%llu is 0x%llx\n", i, mmu_virt_to_phys_buffer_pages(my_buffer_mapping)[i]);
+        }
+        for(u64 i = 0; i < element_count; i++)
+        {
+            u64 addr = mmu_virt_to_phys_buffer_get_address(my_buffer_mapping, i * element_size);
+            printf("%llu : 0x%llx\n", i, addr);
+        }
+
+    }
+
     //Map the clint
     mmu_kernel_map_range(table, 0x2000000, 0x2010000, 2 + 4);
 
@@ -409,36 +518,5 @@ u64* mem_init()
     mmu_kernel_map_range(table, (u64*)0x0c200000, (u64*)0x0c209000, 2 + 4);
 
     return table;
-}
-
-/*
-    returns 0 on success.
-*/
-u64 mmu_virt_to_phys(u64* root, u64 vaddr, u64* paddr)
-{
-    u64 vpn[3];
-    vpn[0] = (vaddr >> 12) & 0x1ff;
-    vpn[1] = (vaddr >> 21) & 0x1ff;
-    vpn[2] = (vaddr >> 30) & 0x1ff;
-
-    u64* v = root + vpn[2];
-    for(s64 i = 2; i >= 0; i--)
-    {
-        if(!mmu_is_entry_valid(*v))
-        { return 1; }
-        else if(mmu_is_entry_leaf(*v))
-        {
-            u64 off_mask = (1 << (12 + i * 9)) - 1;
-            u64 vaddr_pgoff = vaddr & off_mask;
-            u64 addr = (*v << 2) & ~off_mask;
-            u64 res = addr | vaddr_pgoff;
-            *paddr = res;
-            return 0;
-        }
-        u64* entry = (u64*)((*v & ~0x3ff) << 2);
-        v = entry + vpn[i - 1];
-    }
-
-    return 2;
 }
 

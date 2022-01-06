@@ -90,6 +90,13 @@ Kallocation KERNEL_STACK_ALLOCS[KERNEL_MAX_HART_COUNT-1];
  
 Thread KERNEL_THREADS[KERNEL_MAX_HART_COUNT];
 
+// This tracks how many times each hart enters the kernel
+// If you trap from having made an error in the kernel, the error
+// handler will be able to see that because of this variable.
+// And it needs to do so to be able to remove locks from the crashed
+// execution.
+s64 KERNEL_TRAP_ENTER_ACC[KERNEL_MAX_HART_COUNT];
+
 
 /*
  * Debug
@@ -138,6 +145,8 @@ u64 kinit()
         Kallocation trap_stack = kalloc_pages(8);
         KERNEL_TRAP_STACK_TOP[i] = trap_stack.memory + (PAGE_SIZE * trap_stack.page_count);
         KERNEL_TRAP_STACK_ALLOCS[i] = trap_stack;
+
+        KERNEL_TRAP_ENTER_ACC[i] = 0;
 
         if(i == 0)
         {
@@ -334,8 +343,8 @@ void trap_hang_kernel(
     TrapFrame* frame
     )
 {
-    rwlock_release_read(&KERNEL_TRAP_LOCK);
-    rwlock_acquire_write(&KERNEL_TRAP_LOCK);
+    atomic_s64_increment(&KERNEL_TRAP_LOCK.write);
+    for(u64 i = 0; i < 1000000; i++) { __asm__("nop"); }
     printf("args:\n  epc: %llx\n  tval: %llx\n  cause: %llx\n  hart: %llx\n  status: %llx\n  frame: %llx\n",
             epc, tval, cause, hart, status, frame);
     printf("frame:\n regs:\n");
@@ -378,6 +387,8 @@ u64 m_trap(
 {
     u64 async = (cause >> 63) & 1 == 1;
     u64 cause_num = cause & 0xfff;
+
+    KERNEL_TRAP_ENTER_ACC[hart]++;
 
     rwlock_acquire_read(&KERNEL_TRAP_LOCK);
 
@@ -526,6 +537,7 @@ u64 m_trap(
                 // Load thread
                 *frame = kernel_current_threads[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
+                KERNEL_TRAP_ENTER_ACC[hart]--;
                 return kernel_current_threads[hart].program_counter;
             }
             else // Load kernel thread
@@ -533,6 +545,7 @@ u64 m_trap(
                 *mtimecmp = *mtime;
                 *frame = KERNEL_THREADS[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
+                KERNEL_TRAP_ENTER_ACC[hart]--;
                 return KERNEL_THREADS[hart].program_counter;
             }
         }
@@ -635,12 +648,14 @@ u64 m_trap(
                 // Load thread
                 *frame = kernel_current_threads[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
+                KERNEL_TRAP_ENTER_ACC[hart]--;
                 return kernel_current_threads[hart].program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREADS[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
+                KERNEL_TRAP_ENTER_ACC[hart]--;
                 return KERNEL_THREADS[hart].program_counter;
             }
         }
@@ -720,12 +735,14 @@ u64 m_trap(
                 // Load thread
                 *frame = kernel_current_threads[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
+                KERNEL_TRAP_ENTER_ACC[hart]--;
                 return kernel_current_threads[hart].program_counter;
             }
             else // Load kernel thread
             {
                 *frame = KERNEL_THREADS[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
+                KERNEL_TRAP_ENTER_ACC[hart]--;
                 return KERNEL_THREADS[hart].program_counter;
             }
         }
@@ -747,6 +764,7 @@ u64 m_trap(
         }
     }
     rwlock_release_read(&KERNEL_TRAP_LOCK);
+    KERNEL_TRAP_ENTER_ACC[hart]--;
     return 0;
 }
 
