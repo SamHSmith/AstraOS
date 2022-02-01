@@ -3,7 +3,6 @@
 
 ### For information on how to build AstraOS, see : http://samhsmith.net/blog/astraos_v0_2_on_manjaro.gmi
 
-## Source: http://samhsmith.net/blog/astraos_v0_2_is_here.gmi
 # AstraOS v0.2 is finally here!
 
 What things are new from version 0.1? Well, in no particular order,
