@@ -35,12 +35,18 @@ typedef struct
     u64 keys_down[4];
 } AOS_KeyboardState;
  
+#define _AOS_KeyboardEvent \
+struct \
+{ \
+    u8 event; \
+    u8 scancode; \
+    AOS_KeyboardState current_state; \
+}
 typedef struct
 {
-    u8 event;
-    u8 scancode;
-    AOS_KeyboardState current_state;
-} AOS_KeyboardEvent;
+    _AOS_KeyboardEvent;
+    u8 _padding[NEXT_POWER_OF_2(sizeof(_AOS_KeyboardEvent)) - sizeof(_AOS_KeyboardEvent)];
+} __attribute__((aligned (NEXT_POWER_OF_2(sizeof(_AOS_KeyboardEvent))))) AOS_KeyboardEvent;
 #define AOS_KEYBOARD_EVENT_NOTHING 0
 #define AOS_KEYBOARD_EVENT_PRESSED 1
 #define AOS_KEYBOARD_EVENT_RELEASED 2

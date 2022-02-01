@@ -629,7 +629,7 @@ u64 kernel_directory_get_subdirectories(u64 dir_id, u64* buf, u64 buf_size)
     }
 }
 
-u64 kernel_directory_get_files(u64 dir_id, u64* buf, u64 buf_size)
+u64 kernel_directory_get_files(u64 dir_id, u64 start_index, u64* buf, u64 buf_size)
 {
     if(!is_valid_dir_id(dir_id)) { return 0; }
     KernelDirectory* dir = KERNEL_DIRECTORY_ARRAY + dir_id;
@@ -652,11 +652,16 @@ u64 kernel_directory_get_files(u64 dir_id, u64* buf, u64 buf_size)
                     {     // otherwise we keep it
                         imaginary->subitems[insert_index] = imaginary->subitems[i];
                         insert_index++;
-                        if(found_count < buf_size)
+                        if(!start_index)
                         {
-                            buf[found_count] = file;
+                            if(found_count < buf_size)
+                            {
+                                buf[found_count] = file;
+                            }
+                            found_count++;
                         }
-                        found_count++;
+                        else
+                        { start_index--; }
                     }
                 }
                 else // is a directory
@@ -685,6 +690,7 @@ u64 kernel_directory_get_files(u64 dir_id, u64* buf, u64 buf_size)
 
         return found_count + kernel_directory_get_files(
             imaginary->continue_directory & ~0x8000000000000000ull,
+            start_index,
             buf + put_count,
             buf_size - put_count
         );
@@ -865,9 +871,9 @@ void debug_print_directory_tree(u64 dir_id, char* prefix)
     kernel_directory_get_name(dir_id, dir_name, dir_name_len);
     printf("%s> %s\n", prefix, dir_name);
 
-    u64 file_count = kernel_directory_get_files(dir_id, 0, 0);
+    u64 file_count = kernel_directory_get_files(dir_id, 0, 0, 0);
     u64 files[file_count];
-    kernel_directory_get_files(dir_id, files, file_count);
+    kernel_directory_get_files(dir_id, 0, files, file_count);
     u64 longest_name = 0;
     for(u64 i = 0; i < file_count; i++)
     {

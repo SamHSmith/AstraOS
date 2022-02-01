@@ -2,6 +2,8 @@
 #define MACHINE_TIMER_SECOND 10000000
 #define KERNEL_MAX_HART_COUNT 64
 
+#include "../userland/aos_syscalls.h"
+
 #include "../common/types.h"
 #include "../common/maths.h"
 #include "../common/spinlock.h"
@@ -108,7 +110,6 @@ u64 wait_time_print_time[KERNEL_MAX_HART_COUNT];
 
 #include "process_run.c"
 
-#include "../userland/aos_syscalls.h"
 #include "syscall.c"
 
 
@@ -272,6 +273,16 @@ void kmain()
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     kernel_file_free(file_id);
     printf("Post file testing: "); mem_debug_dump_table_counts(1);
+
+    for(s64 i = 63; i >= 0; i--)
+    {
+        //u64 val = (1llu << i) - i;
+        //printf("%llu < %llu\n", val, NEXT_POWER_OF_2(val));
+        printf("                            (x > POW2LLU(%llu)) ? POW2LLU(%llu) : ( \\\n", i, i+1);
+    }
+    for(s64 i = 0; i < 64; i++)
+    { printf(")"); }
+    printf("\n");
 
     load_drive_partitions();
     debug_print_directory_tree(drive1_partition_directory, "");

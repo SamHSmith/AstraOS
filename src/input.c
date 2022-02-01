@@ -1,16 +1,4 @@
 
-typedef struct
-{
-    u64 keys_down[4];
-} KeyboardState;
-
-typedef struct
-{
-    u8 event;
-    u8 scancode;
-    KeyboardState current_state;
-} KeyboardEvent;
-
 // Nothing implies there are no events
 #define KEYBOARD_EVENT_NOTHING 0
 #define KEYBOARD_EVENT_PRESSED 1
@@ -19,9 +7,9 @@ typedef struct
 #define KEYBOARD_EVENT_QUEUE_LEN 454
 typedef struct
 {
-    KeyboardState current_state;
+    AOS_KeyboardState current_state;
     u64 count;
-    KeyboardEvent new_events[KEYBOARD_EVENT_QUEUE_LEN];
+    AOS_KeyboardEvent new_events[KEYBOARD_EVENT_QUEUE_LEN];
 } KeyboardEventQueue;
 
 void keyboard_put_new_rolling_event(KeyboardEventQueue* queue, u8 event, u8 scancode)
@@ -46,7 +34,7 @@ void keyboard_put_new_rolling_event(KeyboardEventQueue* queue, u8 event, u8 scan
     }
 }
 
-u64 keyboard_poll_events(KeyboardEventQueue* queue, KeyboardEvent* events, u64 len)
+u64 keyboard_poll_events(KeyboardEventQueue* queue, AOS_KeyboardEvent* events, u64 len)
 {
     if(len > queue->count) { len = queue->count; }
     if(queue->count > 0 && len)

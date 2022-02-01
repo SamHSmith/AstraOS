@@ -395,9 +395,9 @@ void syscall_get_keyboard_events(u64 hart)
 
     if(user_buf != 0)
     {
-        KeyboardEvent* buf;
+        AOS_KeyboardEvent* buf;
         assert(
-            mmu_virt_to_phys(process->mmu_table, user_buf + sizeof(KeyboardEvent)*len, (u64*)&buf) == 0,
+            mmu_virt_to_phys(process->mmu_table, user_buf + sizeof(AOS_KeyboardEvent)*len, (u64*)&buf) == 0,
             "you didn't do a memory bad"
         );
         assert(
@@ -834,49 +834,44 @@ void syscall_directory_get_files(u64 hart)
     TrapFrame* frame = &current_thread->frame;
 
     u64 dir_id = frame->regs[11];
-    u64 user_buf = frame->regs[12];
-    u64 buf_size = frame->regs[13];
+    u64 user_buffer = frame->regs[12];
+    u64 user_buffer_size = frame->regs[13];
 
-    assert(user_buf % 8 == 0, "buffer passed to syscall_directory_get_files is 8 byte aligned");
+    assert(user_buffer % 8 == 0, "buffer passed to syscall_directory_get_files is 8 byte aligned");
 
-    u64 buf = 0;
-    if(buf_size != 0)
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_buffer, user_buffer_size * sizeof(u64))
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
     {
-        if(!(mmu_virt_to_phys(process->mmu_table, user_buf, (u64*)&buf) == 0))
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        u64 user_index = 0;
+        u64 user_buffer_space_left = user_buffer_size;
+        // TODO LOCK FILESYSTEM
+        u64 temp_buf[512];
+        u64 ret = kernel_directory_get_files(dir_id, 0, temp_buf, 512);
+        u64 file_count_beyond_start = ret;
+        while(1)
         {
-            frame->regs[10] = 0;
-            current_thread->program_counter += 4;
-            rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-            return;
-        }
-
-        {
-            u64 num_pages = (buf_size*8 + PAGE_SIZE) / PAGE_SIZE;
-            u64 ptr = user_buf + PAGE_SIZE;
-            u64 temp;
-            for(u64 i = 1; i < num_pages; i++)
+            for(u64 i = 0; i < 512 && file_count_beyond_start && user_buffer_space_left; i++)
             {
-                if(!(mmu_virt_to_phys(process->mmu_table, ptr, (u64*)&temp) == 0))
-                {
-                    frame->regs[10] = 0;
-                    current_thread->program_counter += 4;
-                    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-                    return;
-                }
-                ptr += PAGE_SIZE;
+                *((u64*)mmu_virt_to_phys_buffer_get_address(my_buffer, sizeof(u64)*user_index)) =
+                    process_new_file_access(kernel_current_threads[hart].process_pid, temp_buf[i], FILE_ACCESS_PERMISSION_READ_WRITE_BIT);
+                user_index++;
+                user_buffer_space_left--;
+                file_count_beyond_start--;
             }
+            if(!user_buffer_space_left || !file_count_beyond_start)
+            { break; }
+
+            file_count_beyond_start = kernel_directory_get_files(dir_id, user_index, temp_buf, 512);
         }
+        // TODO UNLOCK FILESYSTEM
+        frame->regs[10] = ret;
     }
 
-    u64 temp_buf[buf_size];
-    u64 ret = kernel_directory_get_files(dir_id, temp_buf, buf_size);
-    u64 count = ret;
-    if(buf_size < count) { count = buf_size; }
-    u64* array = buf;
-    for(u64 i = 0; i < count; i++)
-  { array[i] = process_new_file_access(kernel_current_threads[hart].process_pid, temp_buf[i], FILE_ACCESS_PERMISSION_READ_WRITE_BIT); }
-
-    frame->regs[10] = ret;
     current_thread->program_counter += 4;
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
@@ -902,12 +897,13 @@ void syscall_create_process_from_file(u64 hart)
     u64 user_file_id = frame->regs[11];
     u64 user_pid_ptr = frame->regs[12];
 
+    assert(user_pid_ptr % 8 == 0, "pid pointer passed to create_process_from_file is 8 byte aligned");
+
     u64 file_id = 0;
     u64 ret = process_get_read_access(process, user_file_id, &file_id);
  
     u64* pid_ptr = 0;
-    if(!ret && !(mmu_virt_to_phys(process->mmu_table, user_pid_ptr + sizeof(u64), (u64*)&pid_ptr) == 0) ||
-               !(mmu_virt_to_phys(process->mmu_table, user_pid_ptr, (u64*)&pid_ptr) == 0))
+    if(mmu_virt_to_phys(process->mmu_table, user_pid_ptr, (u64*)&pid_ptr) || !ret)
     {
         frame->regs[10] = 0;
         current_thread->program_counter += 4;
@@ -915,6 +911,7 @@ void syscall_create_process_from_file(u64 hart)
         rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
+
     // ret is true
     u64 parent_count = process->parent_count + 1;
     u64 parents[parent_count];
@@ -967,9 +964,11 @@ void syscall_surface_consumer_create(u64 hart)
     u64 user_consumer_ptr = frame->regs[12];
     u64 user_surface_ptr = frame->regs[13];
 
+    assert(user_consumer_ptr % 8 == 0, "consumer pointer passed to surface_consumer_create is 8 byte aligned");
+    assert(user_surface_ptr % 8 == 0, "surface pointer passed to surface_consumer_create is 8 byte aligned");
+
     u64* consumer_ptr = 0;
-    if(!(mmu_virt_to_phys(process->mmu_table, user_consumer_ptr + sizeof(u64), (u64*)&consumer_ptr) == 0) ||
-       !(mmu_virt_to_phys(process->mmu_table, user_consumer_ptr, (u64*)&consumer_ptr) == 0))
+    if(!(mmu_virt_to_phys(process->mmu_table, user_consumer_ptr, (u64*)&consumer_ptr) == 0))
     {
         frame->regs[10] = 0;
         current_thread->program_counter += 4;
@@ -979,8 +978,7 @@ void syscall_surface_consumer_create(u64 hart)
     }
 
     u64* surface_ptr = 0;
-    if(!(mmu_virt_to_phys(process->mmu_table, user_surface_ptr + sizeof(u64), (u64*)&surface_ptr) == 0) ||
-       !(mmu_virt_to_phys(process->mmu_table, user_surface_ptr, (u64*)&surface_ptr) == 0))
+    if(!(mmu_virt_to_phys(process->mmu_table, user_surface_ptr, (u64*)&surface_ptr) == 0))
     {
         frame->regs[10] = 0;
         current_thread->program_counter += 4;
@@ -1121,9 +1119,9 @@ void syscall_forward_keyboard_events(u64 hart)
 
     rwlock_acquire_read(&process_orig->process_lock);
 
-    u64 user_buf = frame->regs[11];
-    u64 user_len = frame->regs[12];
-    if(user_len > AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT) { user_len = AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT; }
+    u64 user_buffer = frame->regs[11];
+    u64 user_buffer_length = frame->regs[12];
+    if(user_buffer_length > AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT) { user_buffer_length = AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT; }
     u64 user_proxy_pid = frame->regs[13];
 
     OwnedProcess* ops = process_orig->owned_process_alloc.memory;
@@ -1139,25 +1137,22 @@ void syscall_forward_keyboard_events(u64 hart)
     }
     u64 user_pid = ops[user_proxy_pid].pid;
 
-    u64 page_count = (user_len * sizeof(KeyboardEvent) + PAGE_SIZE - 1) / PAGE_SIZE;
-    u64 user_ptr = user_buf + page_count * PAGE_SIZE;
-    KeyboardEvent* ptr;
+    assert(user_buffer % sizeof(AOS_KeyboardEvent) == 0, "user_buffer passed to forward_keyboard_events is aligned to the size of a KeyboardEvent");
 
-    for(u64 i = 0; i < page_count; i++)
+    mmu_virt_to_phys_buffer(my_buffer, process_orig->mmu_table, user_buffer, user_buffer_length * sizeof(AOS_KeyboardEvent))
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
     {
-        user_ptr -= PAGE_SIZE;
-        if(mmu_virt_to_phys(process_orig->mmu_table, user_ptr, (u64*)&ptr) != 0)
-        {
-            frame->regs[10] = 0;
-            current_thread->program_counter += 4;
-            rwlock_release_read(&process_orig->process_lock);
-            rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
-            return;
-        }
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_read(&process_orig->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
     }
-    KeyboardEvent kbd_events[AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT];
-    for(u64 i = 0; i < user_len; i++)
-    { kbd_events[i] = ptr[i]; }
+
+    AOS_KeyboardEvent kbd_events[AOS_FORWARD_KEYBOARD_EVENTS_MAX_COUNT];
+    for(u64 i = 0; i < user_buffer_length; i++)
+    { kbd_events[i] = *((AOS_KeyboardEvent*)mmu_virt_to_phys_buffer_get_address(my_buffer, sizeof(AOS_KeyboardEvent) * i)); }
     rwlock_release_read(&process_orig->process_lock);
 
     // TODO: do proper security to only allow sending keystrokes to *owned* processes.
@@ -1172,10 +1167,10 @@ void syscall_forward_keyboard_events(u64 hart)
         return;
     }
 
-    if(user_len + process_other->kbd_event_queue.count > KEYBOARD_EVENT_QUEUE_LEN)
-    { user_len = KEYBOARD_EVENT_QUEUE_LEN - process_other->kbd_event_queue.count; }
+    if(user_buffer_length + process_other->kbd_event_queue.count > KEYBOARD_EVENT_QUEUE_LEN)
+    { user_buffer_length = KEYBOARD_EVENT_QUEUE_LEN - process_other->kbd_event_queue.count; }
 
-    if(!user_len)
+    if(!user_buffer_length)
     {
         frame->regs[10] = 0;
         current_thread->program_counter += 4;
@@ -1184,14 +1179,14 @@ void syscall_forward_keyboard_events(u64 hart)
         return;
     }
 
-    KeyboardEvent* event_buf = kbd_events;
+    AOS_KeyboardEvent* event_buf = kbd_events;
     u64 start_index = process_other->kbd_event_queue.count;
-    process_other->kbd_event_queue.count += user_len;
-    for(u64 i = 0; i < user_len; i++)
+    process_other->kbd_event_queue.count += user_buffer_length;
+    for(u64 i = 0; i < user_buffer_length; i++)
     {
         process_other->kbd_event_queue.new_events[i+start_index] = event_buf[i];
     }
-    frame->regs[10] = user_len;
+    frame->regs[10] = user_buffer_length;
 
     current_thread->program_counter += 4;
     rwlock_release_write(&process_other->process_lock);

@@ -1,4 +1,4 @@
-void append_scancode_to_string(u8 c, KeyboardState ks, char* s)
+void append_scancode_to_string(u8 c, AOS_KeyboardState ks, char* s)
 {
     char to_add = 0;
     if(ks.keys_down[0] & ( (((u64)1) << 1) | (((u64)1) << 2) )) //shift
