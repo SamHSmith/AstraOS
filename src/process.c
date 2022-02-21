@@ -261,6 +261,7 @@ u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64* out_runtime_
             KERNEL_PROCESS_ARRAY[pid]->reference_count_for_threads++;
             tid = i;
             has_been_allocated = 1;
+            break;
         }
     }
     if(!has_been_allocated)
