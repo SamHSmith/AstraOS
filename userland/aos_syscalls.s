@@ -382,3 +382,21 @@ AOS_get_cpu_timer_frequency:
     ecall
     ret
 
+.global AOS_directory_get_subdirectories
+AOS_directory_get_subdirectories:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 55
+    ecall
+    ret
+
+.global AOS_directory_get_name
+AOS_directory_get_name:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 56
+    ecall
+    ret
+

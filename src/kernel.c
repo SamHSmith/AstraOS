@@ -274,17 +274,12 @@ void kmain()
     kernel_file_free(file_id);
     printf("Post file testing: "); mem_debug_dump_table_counts(1);
 
-    for(s64 i = 63; i >= 0; i--)
-    {
-        //u64 val = (1llu << i) - i;
-        //printf("%llu < %llu\n", val, NEXT_POWER_OF_2(val));
-        printf("                            (x > POW2LLU(%llu)) ? POW2LLU(%llu) : ( \\\n", i, i+1);
-    }
-    for(s64 i = 0; i < 64; i++)
-    { printf(")"); }
-    printf("\n");
-
     load_drive_partitions();
+
+    // temp
+    kernel_directory_add_subdirectory(drive1_partition_directory, kernel_directory_create_imaginary("secret dir 1"));
+    kernel_directory_add_subdirectory(drive1_partition_directory, kernel_directory_create_imaginary("the other secret dir"));
+
     debug_print_directory_tree(drive1_partition_directory, "");
 
 /*

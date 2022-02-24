@@ -785,7 +785,7 @@ void syscall_file_get_name(u64 hart)
     u64 user_buffer_size = frame->regs[13];
 
     u64 file_id;
-    if(!process_get_read_access(process, user_file_id, &file_id))
+    if(!process_get_file_read_access(process, user_file_id, &file_id))
     {
         frame->regs[10] = 0;
         current_thread->program_counter += 4;
@@ -817,6 +817,59 @@ void syscall_file_get_name(u64 hart)
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_directory_get_name(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_dir_id = frame->regs[11];
+    u64 user_buffer = frame->regs[12];
+    u64 user_buffer_size = frame->regs[13];
+
+    u64 dir_id;
+    if(!process_get_directory_read_access(process, user_dir_id, &dir_id))
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    u64 actual_count = user_buffer_size;
+    u8 temp_buf[KERNEL_FILE_MAX_NAME_LEN];
+    if(actual_count > KERNEL_FILE_MAX_NAME_LEN)
+    { actual_count = KERNEL_FILE_MAX_NAME_LEN; }
+
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_buffer, actual_count)
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
+    { // failed
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        u64 copy_count = kernel_directory_get_name(dir_id, temp_buf, actual_count);
+
+        for(u64 i = 0; i < copy_count; i++)
+        { *((u8*)mmu_virt_to_phys_buffer_get_address(my_buffer, i)) = temp_buf[i]; }
+        frame->regs[10] = copy_count;
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void syscall_directory_get_files(u64 hart)
 {
     {
@@ -833,15 +886,20 @@ void syscall_directory_get_files(u64 hart)
     Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
     TrapFrame* frame = &current_thread->frame;
 
-    u64 dir_id = frame->regs[11];
+    u64 local_dir_id = frame->regs[11];
     u64 user_buffer = frame->regs[12];
     u64 user_buffer_size = frame->regs[13];
+
+    // TODO lock around file access array
+    u64 dir_id;
+    u8 has_read_access = process_get_directory_read_access(process, local_dir_id, &dir_id);
+    u8 has_write_access = process_get_directory_write_access(process, local_dir_id, &dir_id);
 
     assert(user_buffer % 8 == 0, "buffer passed to syscall_directory_get_files is 8 byte aligned");
 
     mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_buffer, user_buffer_size * sizeof(u64))
 
-    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer) || !has_read_access)
     {
         frame->regs[10] = 0;
     }
@@ -853,12 +911,15 @@ void syscall_directory_get_files(u64 hart)
         u64 temp_buf[512];
         u64 ret = kernel_directory_get_files(dir_id, 0, temp_buf, 512);
         u64 file_count_beyond_start = ret;
+
+        u8 access_bits = FILE_ACCESS_PERMISSION_READ_BIT;
+        if(has_write_access) { access_bits = FILE_ACCESS_PERMISSION_READ_WRITE_BIT; }
         while(1)
         {
             for(u64 i = 0; i < 512 && file_count_beyond_start && user_buffer_space_left; i++)
             {
                 *((u64*)mmu_virt_to_phys_buffer_get_address(my_buffer, sizeof(u64)*user_index)) =
-                    process_new_file_access(kernel_current_threads[hart].process_pid, temp_buf[i], FILE_ACCESS_PERMISSION_READ_WRITE_BIT);
+                    process_new_filesystem_access(kernel_current_threads[hart].process_pid, temp_buf[i], access_bits);
                 user_index++;
                 user_buffer_space_left--;
                 file_count_beyond_start--;
@@ -867,6 +928,73 @@ void syscall_directory_get_files(u64 hart)
             { break; }
 
             file_count_beyond_start = kernel_directory_get_files(dir_id, user_index, temp_buf, 512);
+        }
+        // TODO UNLOCK FILESYSTEM
+        frame->regs[10] = ret;
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_directory_get_subdirectories(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 local_dir_id = frame->regs[11];
+    u64 user_buffer = frame->regs[12];
+    u64 user_buffer_size = frame->regs[13];
+
+    // TODO lock around file access array
+    u64 dir_id;
+    u8 has_read_access = process_get_directory_read_access(process, local_dir_id, &dir_id);
+    u8 has_write_access = process_get_directory_write_access(process, local_dir_id, &dir_id);
+
+    assert(user_buffer % 8 == 0, "buffer passed to syscall_directory_get_files is 8 byte aligned");
+
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_buffer, user_buffer_size * sizeof(u64))
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer) || !has_read_access)
+    {
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        u64 user_index = 0;
+        u64 user_buffer_space_left = user_buffer_size;
+        // TODO LOCK FILESYSTEM
+        u64 temp_buf[512];
+        u64 ret = kernel_directory_get_subdirectories(dir_id, 0, temp_buf, 512);
+        u64 file_count_beyond_start = ret;
+
+        u8 access_bits = FILE_ACCESS_PERMISSION_READ_BIT | FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT;
+        if(has_write_access) { access_bits = FILE_ACCESS_PERMISSION_READ_WRITE_BIT | FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT; }
+        while(1)
+        {
+            for(u64 i = 0; i < 512 && file_count_beyond_start && user_buffer_space_left; i++)
+            {
+                *((u64*)mmu_virt_to_phys_buffer_get_address(my_buffer, sizeof(u64)*user_index)) =
+                    process_new_filesystem_access(kernel_current_threads[hart].process_pid, temp_buf[i], access_bits);
+                user_index++;
+                user_buffer_space_left--;
+                file_count_beyond_start--;
+            }
+            if(!user_buffer_space_left || !file_count_beyond_start)
+            { break; }
+
+            file_count_beyond_start = kernel_directory_get_subdirectories(dir_id, user_index, temp_buf, 512);
         }
         // TODO UNLOCK FILESYSTEM
         frame->regs[10] = ret;
@@ -900,7 +1028,7 @@ void syscall_create_process_from_file(u64 hart)
     assert(user_pid_ptr % 8 == 0, "pid pointer passed to create_process_from_file is 8 byte aligned");
 
     u64 file_id = 0;
-    u64 ret = process_get_read_access(process, user_file_id, &file_id);
+    u64 ret = process_get_file_read_access(process, user_file_id, &file_id);
  
     u64* pid_ptr = 0;
     if(mmu_virt_to_phys(process->mmu_table, user_pid_ptr, (u64*)&pid_ptr) || !ret)
@@ -2375,6 +2503,10 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_IPFC_return(hart, mtime); }
     else if(call_num == 54)
     { syscall_get_cpu_timer_frequency(hart, mtime); }
+    else if(call_num == 55)
+    { syscall_directory_get_subdirectories(hart); }
+    else if(call_num == 56)
+    { syscall_directory_get_name(hart); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

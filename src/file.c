@@ -562,7 +562,7 @@ u64 kernel_directory_get_name(u64 dir_id, u8* buf, u64 buf_size)
     }
 }
 
-u64 kernel_directory_get_subdirectories(u64 dir_id, u64* buf, u64 buf_size)
+u64 kernel_directory_get_subdirectories(u64 dir_id, u64 start_index, u64* buf, u64 buf_size)
 {
     if(!is_valid_dir_id(dir_id)) { return 0; }
     KernelDirectory* dir = KERNEL_DIRECTORY_ARRAY + dir_id;
@@ -596,11 +596,16 @@ u64 kernel_directory_get_subdirectories(u64 dir_id, u64* buf, u64 buf_size)
                     {     // otherwise we keep it
                         imaginary->subitems[insert_index] = imaginary->subitems[i];
                         insert_index++;
-                        if(found_count < buf_size)
+                        if(!start_index)
                         {
-                            buf[found_count] = direct;
+                            if(found_count < buf_size)
+                            {
+                                buf[found_count] = direct;
+                            }
+                            found_count++;
                         }
-                        found_count++;
+                        else
+                        { start_index--; }
                     }
                 }
             }
@@ -618,6 +623,7 @@ u64 kernel_directory_get_subdirectories(u64 dir_id, u64* buf, u64 buf_size)
 
         return found_count + kernel_directory_get_subdirectories(
             imaginary->continue_directory & ~0x8000000000000000ull,
+            start_index,
             buf + put_count,
             buf_size - put_count
         );
@@ -908,9 +914,9 @@ void debug_print_directory_tree(u64 dir_id, char* prefix)
         }
     }
 
-    u64 sub_dir_count = kernel_directory_get_subdirectories(dir_id, 0, 0);
+    u64 sub_dir_count = kernel_directory_get_subdirectories(dir_id, 0, 0, 0);
     u64 sub_dirs[sub_dir_count];
-    kernel_directory_get_subdirectories(dir_id, sub_dirs, sub_dir_count);
+    kernel_directory_get_subdirectories(dir_id, 0, sub_dirs, sub_dir_count);
     for(u64 i = 0; i < sub_dir_count; i++)
     {
         debug_print_directory_tree(sub_dirs[i], sub_prefix);

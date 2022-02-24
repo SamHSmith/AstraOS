@@ -296,7 +296,12 @@ void process_init()
         );
 
     tarr[thread1].program_counter = (u64)program_loader_program;
+
+    // give pid0 access to the root directory
     tarr[thread1].frame.regs[10] = drive1_partition_directory;
+    process_new_filesystem_access(pid, drive1_partition_directory,
+                                  FILE_ACCESS_PERMISSION_READ_WRITE_BIT |
+                                  FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT);
 
     tarr[thread1].is_running = 1;
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);

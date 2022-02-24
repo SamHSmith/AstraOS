@@ -598,6 +598,18 @@ void program_loader_program(u64 drive1_partitions_directory)
     }
     slot_index = 0;
 
+    {
+        AOS_H_printf("the temporary program loader is now going to look for *secret* directories...\n");
+        u64 dirs[64];
+        u64 dir_count = AOS_directory_get_subdirectories(drive1_partitions_directory, dirs, 64);
+        u8 name_buf[64];
+        for(u64 i = 0; i < dir_count; i++)
+        {
+            AOS_directory_get_name(dirs[i], name_buf, 64);
+            AOS_H_printf("  \"I have found %s!\"\n", name_buf);
+        }
+    }
+
     // setting up twa interface
     {
         u64 handler_name_len = strlen(TWA_IPFC_API_NAME);
