@@ -149,6 +149,12 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
 
     process->threads[thread1].program_counter = header->entry_addr;
 
+    // give pid0 access to the root directory
+    process->threads[thread1].frame.regs[10] = drive1_partition_directory;
+    process_new_filesystem_access(pid, drive1_partition_directory,
+                                  FILE_ACCESS_PERMISSION_READ_WRITE_BIT |
+                                  FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT);
+
     *pid_ret = pid;
     kfree_pages(elf_alloc);
     return 1;
