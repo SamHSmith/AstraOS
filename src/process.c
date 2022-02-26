@@ -444,12 +444,21 @@ void process_destroy(Process* process)
         rwlock_release_write(&process->process_lock);
         return;
     }
+
     // individually locking on processes was way to scary
     // instead we lock globally and go about our business.
     rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
     rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 
+    process_destroy_actual_destroying_with_global_lock(process);
+
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+    rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void process_destroy_actual_destroying_with_global_lock(Process* process)
+{
     u64* parents = process->parent_alloc.memory;
     for(u64 i = 0; i < process->parent_count; i++)
     {
@@ -459,11 +468,10 @@ void process_destroy(Process* process)
         { continue; }
         OwnedProcess* ops = pa->owned_process_alloc.memory;
         ops[owned_index].is_alive = 0;
+        assert(pa->reference_count_for_processes--, "not underflowing reference count");
+        if(!pa->reference_count_for_processes)
+        { process_destroy_actual_destroying_with_global_lock(pa); }
     }
-
-    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
-    rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
-    rwlock_acquire_write(&process->process_lock);
 
     mmu_unmap_table(process->mmu_table);
     kfree_single_page(process->mmu_table);
@@ -506,7 +514,6 @@ void process_destroy(Process* process)
 
     kfree_pages(process->proc_alloc);
 }
-
 
 // we assume write lock on process
 void process_destroy_with_children(Process* process)
@@ -933,6 +940,7 @@ u64 process_create_owned_process(Process* process, u64 child_pid)
     ops[i].is_initialized = 1;
     ops[i].is_alive = 1;
     ops[i].pid = child_pid;
+    process->reference_count_for_processes++;
     return i;
 }
 
