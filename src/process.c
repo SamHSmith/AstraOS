@@ -654,6 +654,8 @@ Kallocation process_shrink_allocation(Process* process, u64 vaddr, u64 new_page_
 #define FILE_ACCESS_PERMISSION_READ_WRITE_BIT 2
 #define FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT 4
 
+// read bit and read/write bit should never be set at the same time
+
 u64 process_new_filesystem_access(u64 pid, u64 redirect, u8 permission) // TODO: optimize beyond singular
 {
     assert(permission != 0, "permission is not zero");
@@ -721,9 +723,8 @@ u64 process_get_file_write_access(Process* process, u64 local_file_id, u64* file
 {
     if(local_file_id >= process->file_access_count) { return 0; }
     u64* redirects = process->file_access_redirects_alloc.memory;
-    u64* permissions = process->file_access_permissions_alloc.memory;
-    if(permissions[local_file_id] & (FILE_ACCESS_PERMISSION_READ_WRITE_BIT | FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT) !=
-                                     FILE_ACCESS_PERMISSION_READ_WRITE_BIT)
+    u8* permissions = process->file_access_permissions_alloc.memory;
+    if(permissions[local_file_id] != FILE_ACCESS_PERMISSION_READ_WRITE_BIT)
     { return 0; }
     if(file_id) { *file_id = redirects[local_file_id]; }
     return 1;
@@ -733,8 +734,8 @@ u64 process_get_file_read_access(Process* process, u64 local_file_id, u64* file_
 {
     if(local_file_id >= process->file_access_count) { return 0; }
     u64* redirects = process->file_access_redirects_alloc.memory;
-    u64* permissions = process->file_access_permissions_alloc.memory;
-    if((permissions[local_file_id] & (FILE_ACCESS_PERMISSION_READ_BIT | FILE_ACCESS_PERMISSION_READ_WRITE_BIT) == 0) ||
+    u8* permissions = process->file_access_permissions_alloc.memory;
+    if((permissions[local_file_id] & (FILE_ACCESS_PERMISSION_READ_BIT | FILE_ACCESS_PERMISSION_READ_WRITE_BIT)) == 0 ||
        (permissions[local_file_id] & FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT))
     { return 0; }
     if(file_id) { *file_id = redirects[local_file_id]; }
@@ -745,9 +746,8 @@ u64 process_get_directory_write_access(Process* process, u64 local_file_id, u64*
 {
     if(local_file_id >= process->file_access_count) { return 0; }
     u64* redirects = process->file_access_redirects_alloc.memory;
-    u64* permissions = process->file_access_permissions_alloc.memory;
-    if(permissions[local_file_id] & (FILE_ACCESS_PERMISSION_READ_WRITE_BIT | FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT) !=
-                                    (FILE_ACCESS_PERMISSION_READ_WRITE_BIT | FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT))
+    u8* permissions = process->file_access_permissions_alloc.memory;
+    if(permissions[local_file_id] == (FILE_ACCESS_PERMISSION_READ_WRITE_BIT | FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT))
     { return 0; }
     if(file_id) { *file_id = redirects[local_file_id]; }
     return 1;
@@ -757,9 +757,9 @@ u64 process_get_directory_read_access(Process* process, u64 local_file_id, u64* 
 {
     if(local_file_id >= process->file_access_count) { return 0; }
     u64* redirects = process->file_access_redirects_alloc.memory;
-    u64* permissions = process->file_access_permissions_alloc.memory;
-    if((permissions[local_file_id] & (FILE_ACCESS_PERMISSION_READ_BIT | FILE_ACCESS_PERMISSION_READ_WRITE_BIT) == 0) ||
-       (permissions[local_file_id] & FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT == 0))
+    u8* permissions = process->file_access_permissions_alloc.memory;
+    if((permissions[local_file_id] & (FILE_ACCESS_PERMISSION_READ_BIT | FILE_ACCESS_PERMISSION_READ_WRITE_BIT)) == 0 ||
+       (permissions[local_file_id] & FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT) == 0)
     { return 0; }
     if(file_id) { *file_id = redirects[local_file_id]; }
     return 1;

@@ -606,7 +606,7 @@ void program_loader_program(u64 drive1_partitions_directory)
         for(u64 i = 0; i < dir_count; i++)
         {
             AOS_directory_get_name(dirs[i], name_buf, 64);
-            AOS_H_printf("  \"I have found %s!\"\n", name_buf);
+            AOS_H_printf("  \"I have found id=%llu, %s!\"\n", dirs[i], name_buf);
         }
     }
 
