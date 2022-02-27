@@ -20,6 +20,15 @@ typedef struct
     s64 end_index;
 } TextLine;
 
+u64 dir_id_stack[64];
+u64 dir_id_stack_index = 0;
+
+u8* text_buffer = 0x30405000;
+u64 text_len = 0;
+
+u8* pre_send_to_stdin = 0x30404000;
+u64 pre_send_to_stdin_len = 0;
+
 #define MAX_PARTITION_COUNT 64
 u64 partitions[MAX_PARTITION_COUNT];
 u8 partition_names[MAX_PARTITION_COUNT][64];
@@ -73,12 +82,74 @@ void embedded_gui_application_ipfc_api_entry(u64 source_pid, u16 function_index,
     AOS_IPFC_return(0);
 }
 
-void _start()
+void dave_term_printf(const char* format, ...)
+{
+  va_list va;
+  va_start(va, format);
+  s32 ret = AOS_H_vsnprintf(text_buffer + text_len, (12 * 0x1000) - text_len, format, va);
+  va_end(va);
+  text_len += ret;
+
+  if(ret < 0)
+  {
+      u64* nullptr = 0;
+      *nullptr = 5;
+  }
+}
+
+u64 match_pre_send_to_stdin(u8* str)
+{
+    u64 str_len = strlen(str);
+    if(str_len != pre_send_to_stdin_len)
+    { return 0; }
+
+    for(u64 i = 0; i < str_len; i++)
+    {
+        if(str[i] != pre_send_to_stdin[i])
+        { return 0; }
+    }
+    return 1;
+}
+
+u64 match_pre_send_to_stdin_for_str(u8* str)
+{
+    u64 str_len = strlen(str);
+
+    for(u64 i = 0; i < str_len; i++)
+    {
+        if(str[i] != pre_send_to_stdin[i])
+        { return 0; }
+    }
+    return 1;
+}
+
+int strncmp( const char * s1, const char * s2, u64 n )
+{
+    while ( n && *s1 && ( *s1 == *s2 ) )
+    {
+        ++s1;
+        ++s2;
+        --n;
+    }
+    if ( n == 0 )
+    {
+        return 0;
+    }
+    else
+    {
+        return ( *(unsigned char *)s1 - *(unsigned char *)s2 );
+    }
+}
+
+void _start(u64 drive1_partitions_directory)
 {
     // this enables the use of global variables
     __asm__(".option norelax");
     __asm__("la gp, __global_pointer$");
     __asm__(".option relax");
+
+    dir_id_stack_index = 0;
+    dir_id_stack[dir_id_stack_index] = drive1_partitions_directory;
 
     AOS_H_printf("Welcome to dave's terminal, not-emulator\n");
 
@@ -96,7 +167,6 @@ void _start()
         { AOS_H_printf("failed to init ega ipfc handler. Something is very wrong.\n"); }
     }
 
-    u64 drive1_partitions_directory = 0;
     u64 partition_count = AOS_directory_get_files(drive1_partitions_directory, 0, 0);
     if(partition_count > MAX_PARTITION_COUNT)
     { partition_count = MAX_PARTITION_COUNT; }
@@ -109,18 +179,18 @@ void _start()
         AOS_H_printf("dave's terminal loader has found %.*s\n", partition_name_lens[i], partition_names[i]);
     }
 
-    u8* text_buffer = 0x30405000;
+    text_buffer = 0x30405000;
     AOS_alloc_pages(text_buffer, 12);
-    u64 text_len = 0;
+    text_len = 0;
 
     text_buffer[text_len + 0] = ')';
     text_buffer[text_len + 1] = '>';
     text_buffer[text_len + 2] = ' ';
     text_len += 3;
 
-    u8* pre_send_to_stdin = 0x30404000;
+    pre_send_to_stdin = 0x30404000;
     AOS_alloc_pages(pre_send_to_stdin, 1);
-    u64 pre_send_to_stdin_len = 0;
+    pre_send_to_stdin_len = 0;
 
     u8 is_running_as_twa = 0;
     u64 twa_session_id;
@@ -261,23 +331,11 @@ void _start()
                     {
                         if(!AOS_process_kill(process_pid))
                         {
-                            s32 written_count = AOS_H_sprintf(text_buffer + text_len, "KILL FAILED.\n");
-                            if(written_count < 0)
-                            {
-                                u64* nullptr = 0;
-                                *nullptr = 5;
-                            }
-                            text_len += written_count;
+                            dave_term_printf("KILL FAILED\n");
                         }
                         else
                         {
-                            s32 written_count = AOS_H_sprintf(text_buffer + text_len, "KILLED PROCESS\n");
-                            if(written_count < 0)
-                            {
-                                u64* nullptr = 0;
-                                *nullptr = 5;
-                            }
-                            text_len += written_count;
+                            dave_term_printf("KILLED PROCESS\n");
                         }
                     }
                     else if(!is_forwarding_input && scancode == 35)
@@ -292,38 +350,96 @@ void _start()
                         }
                         else
                         {
+                            if(match_pre_send_to_stdin("exit"))
                             {
-                                u64 should_exit_by_exit_command = 1;
-                                u8* exit_text = "exit";
-                                u64 exit_len = strlen(exit_text);
-                                if(exit_len == pre_send_to_stdin_len)
+                                AOS_process_exit();
+                            }
+                            else if(match_pre_send_to_stdin("ls"))
+                            {
+                                u8 name_buffer[64];
+                                u64 dir_id = dir_id_stack[dir_id_stack_index];
                                 {
-                                    u64 matched = 1;
-                                    for(u64 i = 0; i < exit_len; i++)
+                                    u64 file_count = AOS_directory_get_files(dir_id, 0, 0);
+                                    u64 files[file_count];
+                                    file_count = AOS_directory_get_files(dir_id, files, file_count);
+                                    for(u64 i = 0; i < file_count; i++)
                                     {
-                                        if(exit_text[i] != pre_send_to_stdin[i])
-                                        { should_exit_by_exit_command = 0; break; }
+                                        AOS_file_get_name(files[i], name_buffer, 64);
+                                        dave_term_printf("F: %s\n", name_buffer);
                                     }
                                 }
-                                else
-                                { should_exit_by_exit_command = 0; }
-                                if(should_exit_by_exit_command)
+
                                 {
-                                    AOS_process_exit();
+                                    u64 dir_count = AOS_directory_get_subdirectories(dir_id, 0, 0);
+                                    u64 dirs[dir_count];
+                                    dir_count = AOS_directory_get_subdirectories(dir_id, dirs, dir_count);
+
+                                    for(u64 i = 0; i < dir_count; i++)
+                                    {
+                                        AOS_directory_get_name(dirs[i], name_buffer, 64);
+                                        dave_term_printf("D: %s\n", name_buffer);
+                                    }
                                 }
                             }
+                            else if(match_pre_send_to_stdin("pwd"))
+                            {
+                                u8 name_buffer[64];
+                                for(u64 i = 0; i <= dir_id_stack_index; i++)
+                                {
+                                    if(i != 0)
+                                    { dave_term_printf("/"); }
+                                    AOS_directory_get_name(dir_id_stack[i], name_buffer, 64);
+                                    dave_term_printf("%s", name_buffer);
+                                }
+                                dave_term_printf("\n");
+                            }
+                            else if(match_pre_send_to_stdin_for_str("cd "))
+                            {
+                                if(pre_send_to_stdin_len - strlen("cd ") == 0)
+                                { dave_term_printf("usage: cd %%directory_to_change_into%%\n"); }
+                                else
+                                {
+                                    u8* arg = pre_send_to_stdin + strlen("cd ");
+                                    u64 arg_len = pre_send_to_stdin_len - strlen("cd ");
+                                    if(strncmp(arg, "..", arg_len) == 0)
+                                    {
+                                        if(dir_id_stack_index)
+                                        { dir_id_stack_index--; }
+                                        else
+                                        { dave_term_printf("Already in root directory\n"); }
+                                    }
+                                    else
+                                    {
+                                        u8 name_buffer[64];
+                                        u64 dir_id = dir_id_stack[dir_id_stack_index];
+                                        u64 dir_count = AOS_directory_get_subdirectories(dir_id, 0, 0);
+                                        u64 dirs[dir_count];
+                                        dir_count = AOS_directory_get_subdirectories(dir_id, dirs, dir_count);
 
+                                        u8 found_directory = 0;
+                                        for(u64 i = 0; i < dir_count; i++)
+                                        {
+                                            AOS_directory_get_name(dirs[i], name_buffer, 64);
+                                            if(strncmp(name_buffer, arg, arg_len) == 0)
+                                            {
+                                                found_directory = 1;
+                                                dir_id_stack_index++;
+                                                dir_id_stack[dir_id_stack_index] = dirs[i];
+                                                break;
+                                            }
+                                        }
+                                        if(!found_directory)
+                                        { dave_term_printf("\"%s\", no such directory\n"); }
+                                    }
+                                }
+                            }
+                            else
+                            {
                             for(u64 i = 0; i < partition_count + 1; i++)
                             {
                                 if(i == partition_count)
                                 {
-                                    s32 written_count = AOS_H_sprintf(text_buffer + text_len, "Program does not exist\n");
-                                    if(written_count < 0)
-                                    {
-                                        u64* nullptr = 0;
-                                        *nullptr = 5;
-                                    }
-                                    text_len += (u64)written_count;
+                                    dave_term_printf("Program does not exist\n");
                                     break;
                                 }
                                 u64 is_equal = pre_send_to_stdin_len == partition_name_lens[i];
@@ -337,13 +453,7 @@ void _start()
                                 }
                                 if(is_equal)
                                 {
-                                    s32 written_count = AOS_H_sprintf(text_buffer + text_len, "Starting %.*s...", partition_name_lens[i], partition_names[i]);
-                                    if(written_count < 0)
-                                    {
-                                        u64* nullptr = 0;
-                                        *nullptr = 5;
-                                    }
-                                    text_len += (u64)written_count;
+                                    dave_term_printf("Starting %.*s...", partition_name_lens[i], partition_names[i]);
                                     u64 pid;
                                     if(AOS_create_process_from_file(partitions[i], &pid))
                                     {
@@ -353,13 +463,7 @@ void _start()
                                         AOS_process_create_out_stream(pid, 0, &process_stdout);
                                         AOS_process_start(pid);
                                         {
-                                            written_count = AOS_H_sprintf(text_buffer + text_len, "SUCCESS\n");
-                                            if(written_count < 0)
-                                            {
-                                                u64* nullptr = 0;
-                                                *nullptr = 5;
-                                            }
-                                            text_len += (u64)written_count;
+                                            dave_term_printf("SUCCESS\n");
                                         }
                                         u64 con, surface_slot;
                                         if(AOS_surface_consumer_create(pid, &con, &surface_slot))
@@ -372,16 +476,11 @@ void _start()
                                     }
                                     else
                                     {
-                                        written_count = AOS_H_sprintf(text_buffer + text_len, "FAILED\n");
-                                        if(written_count < 0)
-                                        {
-                                            u64* nullptr = 0;
-                                            *nullptr = 5;
-                                        }
-                                        text_len += (u64)written_count;
+                                        dave_term_printf("FAILED.\n");
                                     }
                                     break;
                                 }
+                            }
                             }
                         }
                         pre_send_to_stdin_len = 0;
