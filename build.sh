@@ -18,6 +18,8 @@ KERNEL_SOURCES="src/*.s src/kernel.c src/printf.c src/cyclone_crypto/hash/sha512
 
 SQUARE_SOURCES="square_src/elf.c userland/aos_syscalls.s"
 
+TREE_SOURCES="tree/tree.c userland/aos_syscalls.s"
+
 RAY2D_SOURCES="ray2d/ray2d.c userland/aos_syscalls.s"
 
 DAVE_TERMINAL_SOURCES="dave_terminal/dave.c userland/aos_syscalls.s common/spinlock.s"
@@ -56,6 +58,7 @@ cp fsread/bin/* bin
 
 $RCC $CFLAGS -T virt.lds -o bin/kernel.bin $KERNEL_SOURCES
 $RCC $CFLAGS -o bin/square $SQUARE_SOURCES
+$RCC $CFLAGS -o bin/tree $TREE_SOURCES
 $RCC $CFLAGS -o bin/ray2d $RAY2D_SOURCES
 $RCC $CFLAGS -o bin/dave_terminal $DAVE_TERMINAL_SOURCES
 $RCC $CFLAGS -o bin/vrms $VRMS_SOURCES
@@ -65,6 +68,7 @@ cp bin/square disk_dir/partitions/super_cool_square
 cp bin/ray2d disk_dir/partitions/ray2d
 cp bin/dave_terminal disk_dir/partitions/dave_terminal
 cp bin/vrms disk_dir/partitions/vrms
+cp bin/tree disk_dir/partitions/tree
 rm -f drive1.dsk
 bin/fsmake drive1.dsk disk_dir/
 

@@ -167,8 +167,14 @@ u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
 
         u64 cpy_len = name_len; if(cpy_len > buf_size) { cpy_len = buf_size; }
         strncpy(buf, imaginary->name, cpy_len);
-        if(buf_size > KERNEL_FILE_IMAGINARY_NAME_LEN) { buf[KERNEL_FILE_IMAGINARY_NAME_LEN] = 0; }
-        else if(buf_size > 0) { buf[buf_size-1] = 0; }
+
+        if(buf_size != 0)
+        {
+            if(buf_size - cpy_len == 0)
+            { buf[buf_size-1] = 0; }
+            else
+            { buf[cpy_len] = 0; }
+        }
         return name_len + 1;
     }
     else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
@@ -179,8 +185,14 @@ u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
  
         u64 cpy_len = name_len; if(cpy_len + 1 > buf_size) { cpy_len = buf_size - 1; }
         strncpy(buf, part->name, cpy_len);
-        if(buf_size > cpy_len) { buf[cpy_len] = 0; }
-        else { buf[buf_size-1] = 0; }
+
+        if(buf_size != 0)
+        {
+            if(buf_size - cpy_len == 0)
+            { buf[buf_size-1] = 0; }
+            else
+            { buf[cpy_len] = 0; }
+        }
         return name_len + 1;
     }
     else
@@ -551,8 +563,14 @@ u64 kernel_directory_get_name(u64 dir_id, u8* buf, u64 buf_size)
 
         u64 cpy_len = name_len; if(cpy_len > buf_size) { cpy_len = buf_size; }
         strncpy(buf, imaginary->name, cpy_len);
-        if(buf_size > KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN) { buf[KERNEL_DIRECTORY_IMAGINARY_NAME_BUF_LEN] = 0; }
-        else if(buf_size > 0) { buf[buf_size-1] = 0; }
+
+        if(buf_size != 0)
+        {
+            if(buf_size - cpy_len == 0)
+            { buf[buf_size-1] = 0; }
+            else
+            { buf[cpy_len] = 0; }
+        }
         return name_len + 1;
     }
     else
@@ -862,8 +880,9 @@ void kernel_directory_free(u64 dir_id)
 
 
 
-void debug_print_directory_tree(u64 dir_id, char* prefix)
+void debug_print_directory_tree(u64 dir_id, char* prefix, u64 depth)
 {
+    if(!depth) { printf("%s>] MAX DEPTH REACHED\n"); return; }
     if(!is_valid_dir_id(dir_id)) { printf("%s>] NOT VALID DIR\n", prefix); return; }
 
     u64 sub_prefix_len = strlen(prefix) + strlen("--") + 1;
@@ -919,7 +938,7 @@ void debug_print_directory_tree(u64 dir_id, char* prefix)
     kernel_directory_get_subdirectories(dir_id, 0, sub_dirs, sub_dir_count);
     for(u64 i = 0; i < sub_dir_count; i++)
     {
-        debug_print_directory_tree(sub_dirs[i], sub_prefix);
+        debug_print_directory_tree(sub_dirs[i], sub_prefix, depth - 1);
     }
 }
 
