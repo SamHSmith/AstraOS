@@ -542,6 +542,7 @@ void process_destroy_with_children(Process* process)
 }
 
 // we assume no exclusive write lock to process
+// you are not allowed to have any lock on THREAD_RUNTIME_ARRAY_LOCK when calling
 void process_destroy_thread(Process* process, u32 tid)
 {
     rwlock_acquire_write(&process->process_lock);

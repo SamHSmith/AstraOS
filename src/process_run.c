@@ -111,11 +111,18 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
                             ->threads[runtime_array[i].tid];
         if(thread->should_be_destroyed)
         {
+            u64 pid = runtime_array[i].pid;
+            u32 tid = runtime_array[i].tid;
             ThreadGroup* groups = THREAD_GROUP_ARRAY_ALLOC.memory;
             atomic_s64_decrement(&groups[runtime_array[i].thread_group_index].counts[hart]);
             runtime_array[i].is_initialized = 0;
-            process_destroy_thread(KERNEL_PROCESS_ARRAY[runtime_array[i].pid], runtime_array[i].tid);
             spinlock_release(&runtime_array[i].lock);
+
+            rwlock_release_read(&THREAD_RUNTIME_ARRAY_LOCK);
+            process_destroy_thread(KERNEL_PROCESS_ARRAY[pid], tid);
+            rwlock_acquire_read(&THREAD_RUNTIME_ARRAY_LOCK);
+            runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
+
             continue;
         }
 
