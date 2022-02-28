@@ -401,7 +401,7 @@ void _start(u64 drive1_partitions_directory)
                                 {
                                     u8* arg = pre_send_to_stdin + strlen("cd ");
                                     u64 arg_len = pre_send_to_stdin_len - strlen("cd ");
-                                    if(strncmp(arg, "..", arg_len) == 0)
+                                    if(arg_len == strlen("..") && strncmp(arg, "..", arg_len) == 0)
                                     {
                                         if(dir_id_stack_index)
                                         { dir_id_stack_index--; }
@@ -429,7 +429,7 @@ void _start(u64 drive1_partitions_directory)
                                             }
                                         }
                                         if(!found_directory)
-                                        { dave_term_printf("\"%s\", no such directory\n"); }
+                                        { dave_term_printf("\"%.*s\", no such directory\n", arg_len, arg); }
                                     }
                                 }
                             }
