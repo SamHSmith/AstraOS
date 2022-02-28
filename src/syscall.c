@@ -2597,6 +2597,7 @@ void syscall_process_add_program_argument_string(hart)
     }
 
     u64 string_index = foreign_process->string_argument_buffer_length;
+    foreign_process->string_argument_buffer_length += user_string_length;
     for(u64 i = 0; i < user_string_length; i++)
     {
         u8* dest_ptr = foreign_process->string_argument_buffer_alloc.memory + string_index + i;

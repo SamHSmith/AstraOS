@@ -6,6 +6,7 @@
 
 #include "font8_16.h"
 #include "sv_qwerty.h"
+#include "parsing.c"
 
 u64 strlen(char* str)
 {
@@ -97,32 +98,6 @@ void dave_term_printf(const char* format, ...)
   }
 }
 
-u64 match_pre_send_to_stdin(u8* str)
-{
-    u64 str_len = strlen(str);
-    if(str_len != pre_send_to_stdin_len)
-    { return 0; }
-
-    for(u64 i = 0; i < str_len; i++)
-    {
-        if(str[i] != pre_send_to_stdin[i])
-        { return 0; }
-    }
-    return 1;
-}
-
-u64 match_pre_send_to_stdin_for_str(u8* str)
-{
-    u64 str_len = strlen(str);
-
-    for(u64 i = 0; i < str_len; i++)
-    {
-        if(str[i] != pre_send_to_stdin[i])
-        { return 0; }
-    }
-    return 1;
-}
-
 int strncmp( const char * s1, const char * s2, u64 n )
 {
     while ( n && *s1 && ( *s1 == *s2 ) )
@@ -139,6 +114,16 @@ int strncmp( const char * s1, const char * s2, u64 n )
     {
         return ( *(unsigned char *)s1 - *(unsigned char *)s2 );
     }
+}
+
+u64 strn_str_match(u8* a, u8* b, u64 n)
+{
+    while(n && *b && (*a == *b))
+    {
+        a++; b++;
+        n--;
+    }
+    return !n && *b == 0;
 }
 
 void _start()
@@ -351,11 +336,19 @@ void _start()
                         }
                         else
                         {
-                            if(match_pre_send_to_stdin("exit"))
+                            Expression expressions[64];
+                            u64 expression_count = parse_string_into_expressions(pre_send_to_stdin, pre_send_to_stdin_len, expressions, 64);
+
+                            for(u64 i = 0; i < expression_count; i++)
+                            {
+                                dave_term_printf("Exp: \"%.*s\"\n", expressions[i].text_len, expressions[i].text);
+                            }
+
+                            if(expression_count && strn_str_match(expressions[0].text, "exit", expressions[0].text_len))
                             {
                                 AOS_process_exit();
                             }
-                            else if(match_pre_send_to_stdin("ls"))
+                            else if(expression_count && strn_str_match(expressions[0].text, "ls", expressions[0].text_len))
                             {
                                 u8 name_buffer[64];
                                 u64 dir_id = dir_id_stack[dir_id_stack_index];
@@ -382,7 +375,7 @@ void _start()
                                     }
                                 }
                             }
-                            else if(match_pre_send_to_stdin("pwd"))
+                            else if(expression_count && strn_str_match(expressions[0].text, "pwd", expressions[0].text_len))
                             {
                                 u8 name_buffer[64];
                                 for(u64 i = 0; i <= dir_id_stack_index; i++)
@@ -394,15 +387,13 @@ void _start()
                                 }
                                 dave_term_printf("\n");
                             }
-                            else if(match_pre_send_to_stdin_for_str("cd "))
+                            else if(expression_count && strn_str_match(expressions[0].text, "cd", expressions[0].text_len))
                             {
-                                if(pre_send_to_stdin_len - strlen("cd ") == 0)
+                                if(expression_count != 2)
                                 { dave_term_printf("usage: cd %%directory_to_change_into%%\n"); }
                                 else
                                 {
-                                    u8* arg = pre_send_to_stdin + strlen("cd ");
-                                    u64 arg_len = pre_send_to_stdin_len - strlen("cd ");
-                                    if(arg_len == strlen("..") && strncmp(arg, "..", arg_len) == 0)
+                                    if(strn_str_match(expressions[1].text, "..", expressions[1].text_len))
                                     {
                                         if(dir_id_stack_index)
                                         { dir_id_stack_index--; }
@@ -421,7 +412,7 @@ void _start()
                                         for(u64 i = 0; i < dir_count; i++)
                                         {
                                             AOS_directory_get_name(dirs[i], name_buffer, 64);
-                                            if(strncmp(name_buffer, arg, arg_len) == 0)
+                                            if(strn_str_match(expressions[1].text, name_buffer, expressions[1].text_len))
                                             {
                                                 found_directory = 1;
                                                 dir_id_stack_index++;
@@ -430,11 +421,11 @@ void _start()
                                             }
                                         }
                                         if(!found_directory)
-                                        { dave_term_printf("\"%.*s\", no such directory\n", arg_len, arg); }
+                                        { dave_term_printf("\"%.*s\", no such directory\n", expressions[1].text_len, expressions[1].text); }
                                     }
                                 }
                             }
-                            else
+                            else if(expression_count)
                             {
                             for(u64 i = 0; i < partition_count + 1; i++)
                             {
@@ -443,12 +434,12 @@ void _start()
                                     dave_term_printf("Program does not exist\n");
                                     break;
                                 }
-                                u64 is_equal = pre_send_to_stdin_len == partition_name_lens[i];
+                                u64 is_equal = expressions[0].text_len == partition_name_lens[i];
                                 if(is_equal)
                                 {
                                 for(u64 j = 0; j < partition_name_lens[i]; j++)
                                 {
-                                    if(pre_send_to_stdin[j] != partition_names[i][j])
+                                    if(expressions[0].text[j] != partition_names[i][j])
                                     { is_equal = 0; break; }
                                 }
                                 }
@@ -466,6 +457,10 @@ void _start()
                                             u64 foriegn_dir_id;
                                             AOS_directory_give(pid, &dir_id_stack[dir_id_stack_index], &foriegn_dir_id, 1, 1);
                                             AOS_H_printf("dave terminal is giving access to working directory via handle = %llu.\n", foriegn_dir_id);
+                                        }
+                                        { // program arguments as strings
+                                            for(u64 i = 1; i < expression_count; i++)
+                                            { AOS_process_add_program_argument_string(pid, expressions[i].text, expressions[i].text_len); }
                                         }
                                         AOS_process_start(pid);
                                         dave_term_printf("SUCCESS\n");
