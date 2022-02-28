@@ -374,24 +374,24 @@ u64 mmu_virt_to_phys_pages(u64* root, u64 start_page_vaddr, u64* paddrs, u64 pag
 }
 
 #define mmu_virt_to_phys_buffer(name, table, start_address, byte_length) \
-u64 name_buf_start = start_address; \
-u64 name_page_offset = name_buf_start & 0xfffllu; \
-u64 name_total_byte_size = byte_length + name_page_offset; \
-u64 name_total_page_count = (name_total_byte_size + PAGE_SIZE - 1) / PAGE_SIZE; \
-u64 name_pages[name_total_page_count]; \
-u64 name_return_value = mmu_virt_to_phys_pages(table, name_buf_start & (~0xfffllu), name_pages, name_total_page_count);
+u64 name##_buf_start = start_address; \
+u64 name##_page_offset = name##_buf_start & 0xfffllu; \
+u64 name##_total_byte_size = byte_length + name##_page_offset; \
+u64 name##_total_page_count = (name##_total_byte_size + PAGE_SIZE - 1) / PAGE_SIZE; \
+u64 name##_pages[name##_total_page_count]; \
+u64 name##_return_value = mmu_virt_to_phys_pages(table, name##_buf_start & (~0xfffllu), name##_pages, name##_total_page_count);
 
 #define mmu_virt_to_phys_buffer_get_address(name, byte_index) \
-    (name_pages[(byte_index + name_page_offset) / PAGE_SIZE] + (byte_index + name_page_offset) % PAGE_SIZE)
+    (name##_pages[(byte_index + name##_page_offset) / PAGE_SIZE] + (byte_index + name##_page_offset) % PAGE_SIZE)
 
 #define mmu_virt_to_phys_buffer_page_count(name) \
-    (name_total_page_count)
+    (name##_total_page_count)
 
 #define mmu_virt_to_phys_buffer_pages(name) \
-    (name_pages)
+    (name##_pages)
 
 #define mmu_virt_to_phys_buffer_return_value(name) \
-    (name_return_value)
+    (name##_return_value)
 
 
 u64* mem_init()
