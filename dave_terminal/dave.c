@@ -141,15 +141,16 @@ int strncmp( const char * s1, const char * s2, u64 n )
     }
 }
 
-void _start(u64 drive1_partitions_directory)
+void _start()
 {
+    u64 root_directory_id = 0;
     // this enables the use of global variables
     __asm__(".option norelax");
     __asm__("la gp, __global_pointer$");
     __asm__(".option relax");
 
     dir_id_stack_index = 0;
-    dir_id_stack[dir_id_stack_index] = drive1_partitions_directory;
+    dir_id_stack[dir_id_stack_index] = root_directory_id;
 
     AOS_H_printf("Welcome to dave's terminal, not-emulator\n");
 
@@ -167,10 +168,10 @@ void _start(u64 drive1_partitions_directory)
         { AOS_H_printf("failed to init ega ipfc handler. Something is very wrong.\n"); }
     }
 
-    u64 partition_count = AOS_directory_get_files(drive1_partitions_directory, 0, 0);
+    u64 partition_count = AOS_directory_get_files(root_directory_id, 0, 0);
     if(partition_count > MAX_PARTITION_COUNT)
     { partition_count = MAX_PARTITION_COUNT; }
-    partition_count = AOS_directory_get_files(drive1_partitions_directory, partitions, partition_count);
+    partition_count = AOS_directory_get_files(root_directory_id, partitions, partition_count);
     for(u64 i = 0; i < partition_count; i++)
     {
         partition_names[i][0] = 0;
@@ -461,10 +462,14 @@ void _start(u64 drive1_partitions_directory)
                                         process_pid = pid;
                                         AOS_process_create_in_stream(pid, &process_stdin, 0);
                                         AOS_process_create_out_stream(pid, 0, &process_stdout);
-                                        AOS_process_start(pid);
                                         {
-                                            dave_term_printf("SUCCESS\n");
+                                            u64 foriegn_dir_id;
+                                            AOS_directory_give(pid, &dir_id_stack[dir_id_stack_index], &foriegn_dir_id, 1, 1);
+                                            AOS_H_printf("dave terminal is giving access to working directory via handle = %llu.\n", foriegn_dir_id);
                                         }
+                                        AOS_process_start(pid);
+                                        dave_term_printf("SUCCESS\n");
+
                                         u64 con, surface_slot;
                                         if(AOS_surface_consumer_create(pid, &con, &surface_slot))
                                         {

@@ -1465,7 +1465,7 @@ void syscall_process_create_out_stream(u64 hart)
 
     rwlock_acquire_write(&process->process_lock);
 
-    u64 user_proxy_process_handle = frame->regs[11]; // as of now just the pid, very insecure
+    u64 user_proxy_process_handle = frame->regs[11];
     u64 user_foreign_out_stream_ptr = frame->regs[12];
     u64 user_owned_in_stream_ptr = frame->regs[13];
     current_thread->program_counter += 4;
@@ -1640,7 +1640,7 @@ void syscall_process_start(u64 hart)
     Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
     TrapFrame* frame = &current_thread->frame;
 
-    rwlock_acquire_read(&process->process_lock);
+    rwlock_acquire_write(&process->process_lock);
 
     current_thread->program_counter += 4;
     u64 user_proxy_process_handle = frame->regs[11];
@@ -1652,7 +1652,7 @@ void syscall_process_start(u64 hart)
     {
         frame->regs[10] = 0;
         current_thread->program_counter += 4;
-        rwlock_release_read(&process->process_lock);
+        rwlock_release_write(&process->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
@@ -1661,7 +1661,7 @@ void syscall_process_start(u64 hart)
     if(user_process_handle >= KERNEL_PROCESS_ARRAY_LEN ||
         KERNEL_PROCESS_ARRAY[user_process_handle]->mmu_table == 0)
     {
-        rwlock_release_read(&process->process_lock);
+        rwlock_release_write(&process->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
@@ -1669,13 +1669,15 @@ void syscall_process_start(u64 hart)
 
     if(foreign->thread_count == 0 || foreign->threads[0].is_initialized == 0)
     {
-        rwlock_release_read(&process->process_lock);
+        rwlock_release_write(&process->process_lock);
         rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
         return;
     }
 
+    foreign->has_started = 1;
+
     foreign->threads[0].is_running = 1;
-    rwlock_release_read(&process->process_lock);
+    rwlock_release_write(&process->process_lock);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
@@ -2458,6 +2460,218 @@ void syscall_directory_get_absolute_ids(hart)
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_directory_give(hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_foriegn_process_handle = frame->regs[11];
+    u64 user_local_id_buffer = frame->regs[12];
+    u64 user_foriegn_id_buffer = frame->regs[13];
+    u64 user_count = frame->regs[14];
+    u64 user_give_write_access = frame->regs[15];
+
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    if(user_foriegn_process_handle >= process->owned_process_count ||
+       !ops[user_foriegn_process_handle].is_initialized ||
+       !ops[user_foriegn_process_handle].is_alive)
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+    u64 foriegn_pid = ops[user_foriegn_process_handle].pid;
+
+    assert(user_local_id_buffer % sizeof(u64) == 0, "user_local_id_buffer is aligned");
+    assert(user_foriegn_id_buffer % sizeof(u64) == 0, "user_foriegn_id_buffer is aligned");
+
+    mmu_virt_to_phys_buffer(mmu_local_id_buffer, process->mmu_table, user_local_id_buffer, user_count * sizeof(u64))
+    mmu_virt_to_phys_buffer(mmu_foriegn_id_buffer, process->mmu_table, user_foriegn_id_buffer, user_count * sizeof(u64))
+
+    if( mmu_virt_to_phys_buffer_return_value(mmu_local_id_buffer) ||
+        mmu_virt_to_phys_buffer_return_value(mmu_foriegn_id_buffer)) // buffer is not mapped
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    for(u64 i = 0; i < user_count; i++)
+    {
+        u64* local_id = mmu_virt_to_phys_buffer_get_address(mmu_local_id_buffer, i * sizeof(u64));
+        u64* foriegn_id = mmu_virt_to_phys_buffer_get_address(mmu_foriegn_id_buffer, i * sizeof(u64));
+
+        u64 dir_id;
+        if(!user_give_write_access && process_get_directory_read_access(process, *local_id, &dir_id))
+        {
+            u64 access = process_new_filesystem_access(
+                                    foriegn_pid,
+                                    dir_id,
+                                    FILE_ACCESS_PERMISSION_READ_BIT |
+                                    FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT
+            );
+            *foriegn_id = access;
+        }
+        else if(process_get_directory_write_access(process, *local_id, &dir_id))
+        {
+            u64 access = process_new_filesystem_access(
+                                    foriegn_pid,
+                                    dir_id,
+                                    FILE_ACCESS_PERMISSION_READ_WRITE_BIT |
+                                    FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT
+            );
+            *foriegn_id = access;
+        }
+        else
+        { printf("%llu\n", *local_id); *foriegn_id = U64_MAX; }
+    }
+
+    frame->regs[10] = 1;
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_process_add_program_argument_string(hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_foriegn_process_handle = frame->regs[11];
+    u64 user_string_buffer = frame->regs[12];
+    u64 user_string_length = frame->regs[13];
+
+    OwnedProcess* ops = process->owned_process_alloc.memory;
+    if(user_foriegn_process_handle >= process->owned_process_count ||
+       !ops[user_foriegn_process_handle].is_initialized ||
+       !ops[user_foriegn_process_handle].is_alive)
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+    u64 foriegn_pid = ops[user_foriegn_process_handle].pid;
+    Process* foreign_process = KERNEL_PROCESS_ARRAY[foriegn_pid];
+
+    mmu_virt_to_phys_buffer(mmu_string_buffer, process->mmu_table, user_string_buffer, user_string_length)
+
+    if(mmu_virt_to_phys_buffer_return_value(mmu_string_buffer) || foreign_process->has_started) // buffer is not mapped or process started already
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    if(foreign_process->string_argument_buffer_length + user_string_length >
+        foreign_process->string_argument_buffer_alloc.page_count * PAGE_SIZE)
+    {
+        Kallocation new_alloc = kalloc_pages(foreign_process->string_argument_buffer_alloc.page_count + 1);
+        memcpy(new_alloc.memory, foreign_process->string_argument_buffer_alloc.memory, foreign_process->string_argument_buffer_length);
+        kfree_pages(foreign_process->string_argument_buffer_alloc);
+        foreign_process->string_argument_buffer_alloc = new_alloc;
+    }
+
+    u64 string_index = foreign_process->string_argument_buffer_length;
+    for(u64 i = 0; i < user_string_length; i++)
+    {
+        u8* dest_ptr = foreign_process->string_argument_buffer_alloc.memory + string_index + i;
+        *dest_ptr = *((u8*)mmu_virt_to_phys_buffer_get_address(mmu_string_buffer, i));
+    }
+
+    ProgramArgument arg;
+    arg.type = PROGRAM_ARGUMENT_TYPE_STRING;
+    arg.string_offset = string_index;
+    arg.string_length = user_string_length;
+
+    process_add_program_argument(foreign_process, arg);
+
+    frame->regs[10] = 1;
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_process_get_program_argument_string(hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    rwlock_acquire_read(&process->process_lock);
+
+    u64 user_argument_index = frame->regs[11];
+    u64 user_string_buffer = frame->regs[12];
+    u64 user_buffer_size = frame->regs[13];
+
+    mmu_virt_to_phys_buffer(mmu_string_buffer, process->mmu_table, user_string_buffer, user_buffer_size)
+
+    if(mmu_virt_to_phys_buffer_return_value(mmu_string_buffer)) // buffer is not mapped
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_read(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    ProgramArgument* arg = ((ProgramArgument*)process->program_argument_alloc.memory) + user_argument_index;
+    if(user_argument_index >= process->program_argument_count || arg->type != PROGRAM_ARGUMENT_TYPE_STRING)
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_read(&process->process_lock);
+        rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    u64 copy_amount = arg->string_length;
+    if(copy_amount > user_buffer_size) { copy_amount = user_buffer_size; }
+    for(u64 i = 0; i < copy_amount; i++)
+    {
+        u8* src_ptr = process->string_argument_buffer_alloc.memory + arg->string_offset + i;
+        *((u8*)mmu_virt_to_phys_buffer_get_address(mmu_string_buffer, i)) = *src_ptr;
+    }
+
+    frame->regs[10] = arg->string_length;
+    current_thread->program_counter += 4;
+    rwlock_release_read(&process->process_lock);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
 {
     u64 call_num = frame->regs[10];
@@ -2559,6 +2773,12 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_directory_get_name(hart); }
     else if(call_num == 57)
     { syscall_directory_get_absolute_ids(hart); }
+    else if(call_num == 58)
+    { syscall_directory_give(hart); }
+    else if(call_num == 59)
+    { syscall_process_add_program_argument_string(hart); }
+    else if(call_num == 60)
+    { syscall_process_get_program_argument_string(hart); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

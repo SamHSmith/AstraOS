@@ -310,6 +310,8 @@ void process_init()
                                   FILE_ACCESS_PERMISSION_READ_WRITE_BIT |
                                   FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT);
 
+    KERNEL_PROCESS_ARRAY[pid]->has_started = 1;
+
     tarr[thread1].is_running = 1;
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }

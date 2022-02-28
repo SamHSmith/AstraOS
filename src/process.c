@@ -86,6 +86,23 @@ typedef struct
     u8 is_initialized;
 } IPFCSession;
 
+
+#define PROGRAM_ARGUMENT_TYPE_STRING 0
+#define PROGRAM_ARGUMENT_TYPE_DIRECTORY 1
+typedef struct
+{
+    u32 type;
+    union
+    {
+        struct
+        {
+            u64 string_offset;
+            u64 string_length;
+        };
+        u64 directory_id;
+    }
+} ProgramArgument;
+
 typedef struct
 {
     Kallocation proc_alloc;
@@ -126,6 +143,14 @@ typedef struct
 
     Kallocation ipfc_session_alloc; // IPFCSession array
     u64 ipfc_session_count;
+
+    Kallocation string_argument_buffer_alloc; // buffer for program argument strings
+    u64 string_argument_buffer_length;
+
+    Kallocation program_argument_alloc; // ProgramArgument array
+    u64 program_argument_count;
+
+    u8 has_started;
 
     KeyboardEventQueue kbd_event_queue;
     RawMouseEventQueue mouse_event_queue;
@@ -755,7 +780,7 @@ u64 process_get_directory_write_access(Process* process, u64 local_file_id, u64*
     if(local_file_id >= process->file_access_count) { return 0; }
     u64* redirects = process->file_access_redirects_alloc.memory;
     u8* permissions = process->file_access_permissions_alloc.memory;
-    if(permissions[local_file_id] == (FILE_ACCESS_PERMISSION_READ_WRITE_BIT | FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT))
+    if(permissions[local_file_id] != (FILE_ACCESS_PERMISSION_READ_WRITE_BIT | FILE_ACCESS_PERMISSION_IS_DIRECTORY_BIT))
     { return 0; }
     if(file_id) { *file_id = redirects[local_file_id]; }
     return 1;
@@ -1116,3 +1141,26 @@ u64 process_ipfc_session_init(Process* process, u8* name, u64 name_len, u64* ses
     return 0;
 }
 
+void process_add_program_argument(Process* process, ProgramArgument argument)
+{
+    if((process->program_argument_count + 1) * sizeof(ProgramArgument) > process->program_argument_alloc.page_count * PAGE_SIZE)
+    {
+        Kallocation new_alloc = kalloc_pages(process->program_argument_alloc.page_count + 1);
+        ProgramArgument* new_array = new_alloc.memory;
+        ProgramArgument* old_array = process->program_argument_alloc.memory;
+        for(u64 i = 0; i < process->program_argument_count; i++)
+        {
+            new_array[i] = old_array[i];
+        }
+        if(process->program_argument_alloc.page_count)
+        {
+            kfree_pages(process->program_argument_alloc);
+        }
+        process->program_argument_alloc = new_alloc;
+    }
+
+    u64 index = process->program_argument_count++;
+
+    ProgramArgument* argument_array = process->program_argument_alloc.memory;
+    argument_array[index] = argument;
+}

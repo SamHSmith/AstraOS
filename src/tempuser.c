@@ -5,6 +5,16 @@
 
 #include "font8_16.c"
 
+void user_assert(u64 condition, u8* message)
+{
+    if(condition) { return; }
+
+    AOS_H_printf("User assertion failed: \"%s\"\n", message);
+    for(u64 i = 0; i < 100000000; i++) { __asm__("nop"); }
+    u64* ptr = 0;
+    *ptr = 5;
+}
+
 #define BORDER_SIZE 3
 
 typedef struct
@@ -373,7 +383,7 @@ void render_thread_entry(u64 thread_number)
 {
     while(1)
     {
-        assert(AOS_thread_awake_on_semaphore(render_work_semaphore), "actually awaking the semaphore");
+        user_assert(AOS_thread_awake_on_semaphore(render_work_semaphore), "actually awaking the semaphore");
         AOS_thread_sleep();
         while(1) {
             s64 jobid = atomic_s64_increment(&render_work_started);
@@ -873,6 +883,15 @@ while(1) {
                         {
                             AOS_process_create_out_stream(pid, 0, &programs[program_count].owned_in_stream);
                             AOS_process_create_in_stream(pid, &programs[program_count].owned_out_stream, 0);
+
+                            // give access to root directory
+                            u64 foriegn_root_directory_id;
+                            user_assert(AOS_directory_give(pid, &drive1_partitions_directory, &foriegn_root_directory_id, 1, 1), "I can give directory");
+                            AOS_H_printf("Giving process access to root directory via handle = %llu.\n", foriegn_root_directory_id);
+
+                            // add dumb program argument
+                            user_assert(AOS_process_add_program_argument_string(pid, "How ya doin bro?", strlen("How ya doin bro?")), "I can add string argument");
+
                             AOS_process_start(pid);
                             program_count++;
                         }
@@ -963,7 +982,7 @@ while(1) {
         atomic_s64_set(&render_work_started, 0);
         AOS_semaphore_release(render_work_semaphore, THREAD_COUNT * JOBS_PER_THREAD, 0);
 
-        assert(AOS_thread_awake_on_semaphore(render_work_done_semaphore), "actually awaking semaphore");
+        user_assert(AOS_thread_awake_on_semaphore(render_work_done_semaphore), "actually awaking semaphore");
         AOS_thread_sleep();
 #else
         for(u64 y = 0; y < fb->height; y++)
@@ -1176,7 +1195,7 @@ while(1) {
                 fb->data[i*4 + 3] = 1.0;
             }
         }
-        assert(AOS_surface_commit(0), "commited successfully");
+        user_assert(AOS_surface_commit(0), "commited successfully");
 
         // move windows and resize them
         {

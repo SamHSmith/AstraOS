@@ -409,3 +409,31 @@ AOS_directory_get_absolute_ids:
     ecall
     ret
 
+.global AOS_directory_give
+AOS_directory_give:
+    mv a5, a4
+    mv a4, a3
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 58
+    ecall
+    ret
+
+.global AOS_process_add_program_argument_string
+AOS_process_add_program_argument_string:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    add a0, x0, 59
+    ecall
+    ret
+
+.global AOS_process_get_program_argument_string
+AOS_process_get_program_argument_string:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    add a0, x0, 60
+    ecall
+    ret

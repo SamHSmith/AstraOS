@@ -220,6 +220,7 @@ void print_directory(u64 dir_id, u8* prefix, u64 stack_index)
                 AOS_H_printf("%s ^] %s:\n", prefix, name_buffer);
                 continue;
             }
+            absolute_dir_id_stack[stack_index + 1] = dir_absolute_ids[i];
             print_directory(dirs[i], new_prefix, stack_index + 1);
         }
     }
@@ -229,8 +230,16 @@ void print_directory(u64 dir_id, u8* prefix, u64 stack_index)
     }
 }
 
-void _start(u64 root_dir_id)
+void _start()
 {
+    //temp
+    u64 arg_len = AOS_process_get_program_argument_string(0, 0, 0);
+    u8 arg_buf[arg_len];
+    AOS_process_get_program_argument_string(0, arg_buf, arg_len);
+    AOS_H_printf("%.*s\n", arg_len, arg_buf);
+
+
+    u64 directory_to_tree = 0;
     // this enables the use of global variables
     __asm__(".option norelax");
     __asm__("la gp, __global_pointer$");
@@ -238,7 +247,8 @@ void _start(u64 root_dir_id)
 
     AOS_H_printf("Starting tree on root directory.\n");
 
-    print_directory(root_dir_id, "", 8);
+    AOS_directory_get_absolute_ids(&directory_to_tree, absolute_dir_id_stack, 1);
+    print_directory(directory_to_tree, "", 0);
 
     AOS_process_exit();
 }

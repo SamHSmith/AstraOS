@@ -85,6 +85,10 @@ u64 AOS_directory_add_file(u64 dir_id, u64 file_id); // not done
 u64 AOS_create_process_from_file(u64 file_id, volatile u64* pid);
 
 void AOS_directory_get_absolute_ids(u64* local_id_buffer, u64* absolute_id_buffer, u64 count);
+
+// returns true if the foriegn pid is owned by you and the buffers you passed were mapped
+// if a local id handle is invalid or you don't have permission then the corresponding foriegn id is set to U64_MAX
+u64 AOS_directory_give(u64 foriegn_pid, u64* local_id_buffer, u64* foriegn_id_buffer, u64 count, u64 give_write_access);
  
 u64 AOS_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer, u64* surface_slot);
 u64 AOS_surface_consumer_fire(u64 consumer_slot);
@@ -169,9 +173,10 @@ u64 AOS_IPFC_call(  u64 session_id,
 // END CALLER
 // END IPFC's
 
+u64 AOS_process_add_program_argument_string(u64 process_handle, u8* string_buffer, u64 string_length);
+u64 AOS_process_get_program_argument_string(u64 argument_index, u8* string_buffer, u64 buffer_size);
 
 // give file to proccess
-// give directory to proccess
  
 // create file
 // create directory
