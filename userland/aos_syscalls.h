@@ -83,6 +83,8 @@ u64 AOS_directory_add_subdirectory(u64 dir_id, u64 subdirectory); // not done
 u64 AOS_directory_add_file(u64 dir_id, u64 file_id); // not done
  
 u64 AOS_create_process_from_file(u64 file_id, volatile u64* pid);
+
+void AOS_directory_get_absolute_ids(u64* local_id_buffer, u64* absolute_id_buffer, u64 count);
  
 u64 AOS_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer, u64* surface_slot);
 u64 AOS_surface_consumer_fire(u64 consumer_slot);

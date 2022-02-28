@@ -879,10 +879,10 @@ void kernel_directory_free(u64 dir_id)
 }
 
 
-
-void debug_print_directory_tree(u64 dir_id, char* prefix, u64 depth)
+#define DEBUG_PRINT_DIRECTORY_TREE_STACK_SIZE 128
+void _debug_print_directory_tree(u64 dir_id, char* prefix, u64* stack, u64 stack_index)
 {
-    if(!depth) { printf("%s>] MAX DEPTH REACHED\n"); return; }
+    if(stack_index >= DEBUG_PRINT_DIRECTORY_TREE_STACK_SIZE) { printf("%s>] DIR_ID_STACK ran out. Tree too deep.\n", prefix); return; }
     if(!is_valid_dir_id(dir_id)) { printf("%s>] NOT VALID DIR\n", prefix); return; }
 
     u64 sub_prefix_len = strlen(prefix) + strlen("--") + 1;
@@ -894,6 +894,17 @@ void debug_print_directory_tree(u64 dir_id, char* prefix, u64 depth)
     u64 dir_name_len = kernel_directory_get_name(dir_id, 0, 0);
     char dir_name[dir_name_len];
     kernel_directory_get_name(dir_id, dir_name, dir_name_len);
+
+    for(u64 i = 0; i < stack_index; i++)
+    {
+        if(stack[i] == dir_id)
+        {
+            // we are inside ourselves
+            printf("%s^ %s\n", prefix, dir_name);
+            return;
+        }
+    }
+
     printf("%s> %s\n", prefix, dir_name);
 
     u64 file_count = kernel_directory_get_files(dir_id, 0, 0, 0);
@@ -938,9 +949,15 @@ void debug_print_directory_tree(u64 dir_id, char* prefix, u64 depth)
     kernel_directory_get_subdirectories(dir_id, 0, sub_dirs, sub_dir_count);
     for(u64 i = 0; i < sub_dir_count; i++)
     {
-        debug_print_directory_tree(sub_dirs[i], sub_prefix, depth - 1);
+        _debug_print_directory_tree(sub_dirs[i], sub_prefix, stack, stack_index + 1);
     }
 }
+void debug_print_directory_tree(u64 dir_id)
+{
+    u64 stack[DEBUG_PRINT_DIRECTORY_TREE_STACK_SIZE];
+    _debug_print_directory_tree(dir_id, "", stack, 0);
+}
+
 
 void load_drive_partitions()
 {

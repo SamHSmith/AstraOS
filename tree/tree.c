@@ -175,7 +175,9 @@ void strcat(char* dest, char* src)
 
 u8 name_buffer[64];
 
-void print_directory(u64 dir_id, u8* prefix, u64 levels_left)
+u64 absolute_dir_id_stack[64];
+
+void print_directory(u64 dir_id, u8* prefix, u64 stack_index)
 {
     AOS_directory_get_name(dir_id, name_buffer, 64);
     AOS_H_printf("%s%s:\n", prefix, name_buffer);
@@ -191,11 +193,14 @@ void print_directory(u64 dir_id, u8* prefix, u64 levels_left)
         }
     }
 
-    if(levels_left)
+    if(stack_index < 64)
     {
         u64 dir_count = AOS_directory_get_subdirectories(dir_id, 0, 0);
         u64 dirs[dir_count];
         dir_count = AOS_directory_get_subdirectories(dir_id, dirs, dir_count);
+
+        u64 dir_absolute_ids[dir_count];
+        AOS_directory_get_absolute_ids(dirs, dir_absolute_ids, dir_count);
 
         u8 new_prefix[strlen(prefix) + strlen(" \\- ") + 1];
         memset(new_prefix, 0, strlen(prefix) + strlen(" \\- ") + 1);
@@ -203,7 +208,19 @@ void print_directory(u64 dir_id, u8* prefix, u64 levels_left)
         strcat(new_prefix, " \\- ");
         for(u64 i = 0; i < dir_count; i++)
         {
-            print_directory(dirs[i], new_prefix, levels_left - 1);
+            u8 is_inside_itself = 0;
+            for(u64 j = 0; j <= stack_index; j++)
+            {
+                if(absolute_dir_id_stack[j] == dir_absolute_ids[i])
+                { is_inside_itself = 1; break; }
+            }
+            if(is_inside_itself)
+            {
+                AOS_directory_get_name(dirs[i], name_buffer, 64);
+                AOS_H_printf("%s ^] %s:\n", prefix, name_buffer);
+                continue;
+            }
+            print_directory(dirs[i], new_prefix, stack_index + 1);
         }
     }
     else
@@ -214,6 +231,11 @@ void print_directory(u64 dir_id, u8* prefix, u64 levels_left)
 
 void _start(u64 root_dir_id)
 {
+    // this enables the use of global variables
+    __asm__(".option norelax");
+    __asm__("la gp, __global_pointer$");
+    __asm__(".option relax");
+
     AOS_H_printf("Starting tree on root directory.\n");
 
     print_directory(root_dir_id, "", 8);

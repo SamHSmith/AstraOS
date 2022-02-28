@@ -2408,6 +2408,56 @@ void syscall_IPFC_return(u64 hart, u64 mtime)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_directory_get_absolute_ids(hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_local_id_buffer = frame->regs[11];
+    u64 user_absolute_id_buffer = frame->regs[12];
+    u64 user_count = frame->regs[13];
+
+    assert(user_local_id_buffer % sizeof(u64) == 0, "user_local_id_buffer is aligned");
+    assert(user_absolute_id_buffer % sizeof(u64) == 0, "user_absolute_id_buffer is aligned");
+
+    mmu_virt_to_phys_buffer(mmu_local_id_buffer, process->mmu_table, user_local_id_buffer, user_count * sizeof(u64))
+    mmu_virt_to_phys_buffer(mmu_absolute_id_buffer, process->mmu_table, user_absolute_id_buffer, user_count * sizeof(u64))
+
+    if( mmu_virt_to_phys_buffer_return_value(mmu_local_id_buffer) ||
+        mmu_virt_to_phys_buffer_return_value(mmu_absolute_id_buffer)) // buffer is not mapped
+    {
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    for(u64 i = 0; i < user_count; i++)
+    {
+        u64* local_id = mmu_virt_to_phys_buffer_get_address(mmu_local_id_buffer, i * sizeof(u64));
+        u64* absolute_id = mmu_virt_to_phys_buffer_get_address(mmu_absolute_id_buffer, i * sizeof(u64));
+
+        u64 dir_id;
+        if(process_get_directory_read_access(process, *local_id, &dir_id))
+        { *absolute_id = dir_id; }
+        else
+        { *absolute_id = U64_MAX; }
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
 {
     u64 call_num = frame->regs[10];
@@ -2507,6 +2557,8 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_directory_get_subdirectories(hart); }
     else if(call_num == 56)
     { syscall_directory_get_name(hart); }
+    else if(call_num == 57)
+    { syscall_directory_get_absolute_ids(hart); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

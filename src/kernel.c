@@ -232,11 +232,11 @@ void kmain()
         }
     }
 
-    debug_print_directory_tree(dir_id, "", 10);
+    debug_print_directory_tree(dir_id);
     kernel_directory_free(dir_id);
 
     kernel_file_imaginary_destroy(file_to_remove);
-    debug_print_directory_tree(full_dir_id, "", 10);
+    debug_print_directory_tree(full_dir_id);
     kernel_directory_free(full_dir_id);
 
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
@@ -283,7 +283,7 @@ void kmain()
     kernel_directory_add_subdirectory(drive1_partition_directory, secret_dir);
     kernel_directory_add_subdirectory(drive1_partition_directory, kernel_directory_create_imaginary("the other secret dir"));
 
-    debug_print_directory_tree(drive1_partition_directory, "", 10);
+    debug_print_directory_tree(drive1_partition_directory);
 
 /*
     for(u64 b = 0; b < K_TABLE_COUNT; b++)
