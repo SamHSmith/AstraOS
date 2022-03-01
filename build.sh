@@ -20,6 +20,8 @@ SQUARE_SOURCES="square_src/elf.c userland/aos_syscalls.s"
 
 TREE_SOURCES="tree/tree.c userland/aos_syscalls.s"
 
+CAT_SOURCES="cat/cat.c userland/aos_syscalls.s"
+
 ECHO_SLOWLY_SOURCES="echo_slowly/echo_slowly.c userland/aos_syscalls.s"
 
 RAY2D_SOURCES="ray2d/ray2d.c userland/aos_syscalls.s"
@@ -62,6 +64,7 @@ $RCC $CFLAGS -T virt.lds -o bin/kernel.bin $KERNEL_SOURCES
 $RCC $CFLAGS -o bin/square $SQUARE_SOURCES
 $RCC $CFLAGS -o bin/tree $TREE_SOURCES
 $RCC $CFLAGS -o bin/echo_slowly $ECHO_SLOWLY_SOURCES
+$RCC $CFLAGS -o bin/cat $CAT_SOURCES
 $RCC $CFLAGS -o bin/ray2d $RAY2D_SOURCES
 $RCC $CFLAGS -o bin/dave_terminal $DAVE_TERMINAL_SOURCES
 $RCC $CFLAGS -o bin/vrms $VRMS_SOURCES
@@ -73,6 +76,7 @@ cp bin/dave_terminal disk_dir/partitions/dave_terminal
 cp bin/vrms disk_dir/partitions/vrms
 cp bin/tree disk_dir/partitions/tree
 cp bin/echo_slowly disk_dir/partitions/echo_slowly
+cp bin/cat disk_dir/partitions/cat
 rm -f drive1.dsk
 bin/fsmake drive1.dsk disk_dir/
 

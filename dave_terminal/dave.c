@@ -6,7 +6,6 @@
 
 #include "font8_16.h"
 #include "sv_qwerty.h"
-#include "parsing.c"
 
 u64 strlen(char* str)
 {
@@ -14,6 +13,48 @@ u64 strlen(char* str)
     while(str[i] != 0) { i++; }
     return i;
 }
+
+
+int strncmp( const char * s1, const char * s2, u64 n )
+{
+    while ( n && *s1 && ( *s1 == *s2 ) )
+    {
+        ++s1;
+        ++s2;
+        --n;
+    }
+    if ( n == 0 )
+    {
+        return 0;
+    }
+    else
+    {
+        return ( *(unsigned char *)s1 - *(unsigned char *)s2 );
+    }
+}
+
+u64 strn_str_match(u8* a, u8* b, u64 n)
+{
+    while(n && *b && (*a == *b))
+    {
+        a++; b++;
+        n--;
+    }
+    return !n && *b == 0;
+}
+
+u64 strn_strn_match(u8* a, u8* b, u64 n, u64 n2)
+{
+    if(n != n2) { return 0; }
+    while(n && (*a == *b))
+    {
+        a++; b++;
+        n--;
+    }
+    return !n;
+}
+
+#include "parsing.c"
 
 typedef struct
 {
@@ -98,34 +139,6 @@ void dave_term_printf(const char* format, ...)
       u64* nullptr = 0;
       *nullptr = 5;
   }
-}
-
-int strncmp( const char * s1, const char * s2, u64 n )
-{
-    while ( n && *s1 && ( *s1 == *s2 ) )
-    {
-        ++s1;
-        ++s2;
-        --n;
-    }
-    if ( n == 0 )
-    {
-        return 0;
-    }
-    else
-    {
-        return ( *(unsigned char *)s1 - *(unsigned char *)s2 );
-    }
-}
-
-u64 strn_str_match(u8* a, u8* b, u64 n)
-{
-    while(n && *b && (*a == *b))
-    {
-        a++; b++;
-        n--;
-    }
-    return !n && *b == 0;
 }
 
 void _start()
@@ -339,11 +352,15 @@ void _start()
                         else
                         {
                             Expression expressions[64];
-                            u64 expression_count = parse_string_into_expressions(pre_send_to_stdin, pre_send_to_stdin_len, expressions, 64);
+                            u64 expression_count = parse_string_into_expressions(pre_send_to_stdin, pre_send_to_stdin_len, expressions, 64, dir_id_stack[dir_id_stack_index]);
 
                             for(u64 i = 0; i < expression_count; i++)
                             {
-                                dave_term_printf("Exp: \"%.*s\"\n", expressions[i].text_len, expressions[i].text);
+                                dave_term_printf("Exp: \"%.*s\" : ", expressions[i].text_len, expressions[i].text);
+                                if(expressions[i].is_file)
+                                { dave_term_printf("file\n"); }
+                                else
+                                { dave_term_printf("string\n"); }
                             }
 
                             if(expression_count && strn_str_match(expressions[0].text, "exit", expressions[0].text_len))
@@ -572,9 +589,21 @@ void _start()
                                             AOS_directory_give(pid, &dir_id_stack[dir_id_stack_index], &foriegn_dir_id, 1, 1);
                                             AOS_H_printf("dave terminal is giving access to working directory via handle = %llu.\n", foriegn_dir_id);
                                         }
-                                        { // program arguments as strings
+                                        { // program arguments
                                             for(u64 i = 1; i < expression_count; i++)
-                                            { AOS_process_add_program_argument_string(pid, expressions[i].text, expressions[i].text_len); }
+                                            {
+                                                if(expressions[i].is_file)
+                                                {
+                                                    u64 foreign_file_id;
+                                                    AOS_file_give(pid, &expressions[i].file_id, &foreign_file_id, 1, 1);
+                                                    AOS_H_printf("dave terminal is giving the program access a file via handle %llu.\n", foreign_file_id);
+                                                    AOS_process_add_program_argument_file(pid, foreign_file_id);
+                                                }
+                                                else
+                                                {
+                                                    AOS_process_add_program_argument_string(pid, expressions[i].text, expressions[i].text_len);
+                                                }
+                                            }
                                         }
                                         AOS_process_start(pid);
                                         dave_term_printf("SUCCESS\n");

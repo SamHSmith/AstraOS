@@ -89,6 +89,7 @@ typedef struct
 
 #define PROGRAM_ARGUMENT_TYPE_STRING 0
 #define PROGRAM_ARGUMENT_TYPE_DIRECTORY 1
+#define PROGRAM_ARGUMENT_TYPE_FILE 2
 typedef struct
 {
     u32 type;
@@ -100,6 +101,7 @@ typedef struct
             u64 string_length;
         };
         u64 directory_id;
+        u64 file_id;
     }
 } ProgramArgument;
 

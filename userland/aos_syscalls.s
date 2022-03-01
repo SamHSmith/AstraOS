@@ -470,3 +470,30 @@ AOS_file_write_blocks:
     addi a0, x0, 64
     ecall
     ret
+
+.global AOS_file_give
+AOS_file_give:
+    mv a5, a4
+    mv a4, a3
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 65
+    ecall
+    ret
+
+.global AOS_process_add_program_argument_file
+AOS_process_add_program_argument_file:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 66
+    ecall
+    ret
+
+
+.global AOS_process_get_program_argument_file
+AOS_process_get_program_argument_file:
+    mv a1, a0
+    addi a0, x0, 67
+    ecall
+    ret
