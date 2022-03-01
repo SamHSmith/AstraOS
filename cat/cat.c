@@ -31,11 +31,7 @@ void _start()
         bytes_left -= write_amount;
 
         AOS_stream_put(AOS_STREAM_STDOUT, scratch, write_amount);
-        AOS_thread_awake_after_time(400000);
-        AOS_thread_sleep();
     }
-
-    AOS_H_printf("\nThat was slowed down for cinematic effect.\n");
 
     AOS_process_exit();
 }

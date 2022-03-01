@@ -278,13 +278,13 @@ void kmain()
     load_drive_partitions();
 
     // temp
-    u64 secret_dir = kernel_directory_create_imaginary("secret dir 1");
+    u64 secret_dir = kernel_directory_create_imaginary("testdir");
     { // test file
         u64 test_file;
         kernel_file_imaginary_create(&test_file, 1);
         kernel_file_set_name(test_file, "testfile");
         kernel_directory_add_files(secret_dir, &test_file, 1);
-        u64 file_size = 1000;
+        u64 file_size = 20;
         kernel_file_set_size(test_file, file_size);
         u64 op[2];
         op[0] = 0;

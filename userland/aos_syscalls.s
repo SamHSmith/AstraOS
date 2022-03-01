@@ -497,3 +497,11 @@ AOS_process_get_program_argument_file:
     addi a0, x0, 67
     ecall
     ret
+
+.global AOS_file_set_size
+AOS_file_set_size:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 68
+    ecall
+    ret

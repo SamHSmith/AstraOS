@@ -3044,6 +3044,39 @@ void syscall_process_get_program_argument_file(hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_file_set_size(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_file_id = frame->regs[11];
+    u64 user_new_size = frame->regs[12];
+
+    u64 file_id;
+    if(!process_get_file_write_access(process, user_file_id, &file_id))
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    frame->regs[10] = kernel_file_set_size(file_id, user_new_size);
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
 {
     u64 call_num = frame->regs[10];
@@ -3165,6 +3198,8 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_process_add_program_argument_file(hart); }
     else if(call_num == 67)
     { syscall_process_get_program_argument_file(hart); }
+    else if(call_num == 68)
+    { syscall_file_set_size(hart); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

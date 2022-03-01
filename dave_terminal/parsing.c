@@ -57,6 +57,12 @@ u64 parse_string_into_expressions(u8* source_text, u64 source_text_len, Expressi
                 was_backslash = 0;
                 goto write_char;
             }
+            else if(*current_char == 'n')
+            {
+                *current_char = '\n';
+                was_backslash = 0;
+                goto write_char;
+            }
             was_backslash = 0;
         }
         else
