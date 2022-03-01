@@ -505,3 +505,20 @@ AOS_file_set_size:
     addi a0, x0, 68
     ecall
     ret
+
+.global AOS_directory_create_file
+AOS_directory_create_file:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 69
+    ecall
+    ret
+
+.global AOS_file_set_name
+AOS_file_set_name:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 70
+    ecall
+    ret

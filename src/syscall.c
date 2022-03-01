@@ -3077,6 +3077,99 @@ void syscall_file_set_size(u64 hart)
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_directory_create_file(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 local_dir_id = frame->regs[11];
+    u64 user_out_file_id = frame->regs[12];
+
+    // TODO lock around file access array
+    u64 dir_id;
+    u8 has_write_access = process_get_directory_write_access(process, local_dir_id, &dir_id);
+
+    assert(user_out_file_id % 8 == 0, "out_file_id is 8 byte aligned");
+
+    u64* out_file_id;
+    if(mmu_virt_to_phys(process->mmu_table, user_out_file_id, &out_file_id) || !has_write_access)
+    {
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        u64 temp_id;
+        frame->regs[10] = kernel_directory_create_file(dir_id, &temp_id);
+        *out_file_id = process_new_filesystem_access(process->pid, temp_id, FILE_ACCESS_PERMISSION_READ_WRITE_BIT);
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_file_set_name(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_file_id = frame->regs[11];
+    u64 user_buffer = frame->regs[12];
+    u64 user_buffer_size = frame->regs[13];
+
+    u64 file_id;
+    if(!process_get_file_write_access(process, user_file_id, &file_id))
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    u64 actual_count = user_buffer_size;
+    u8 temp_buf[KERNEL_FILE_MAX_NAME_LEN + 1];
+    if(actual_count > KERNEL_FILE_MAX_NAME_LEN)
+    { actual_count = KERNEL_FILE_MAX_NAME_LEN; }
+
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_buffer, actual_count)
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
+    { // failed
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        for(u64 i = 0; i < actual_count; i++)
+        { temp_buf[i] = *((u8*)mmu_virt_to_phys_buffer_get_address(my_buffer, i)); }
+        temp_buf[actual_count] = 0;
+        frame->regs[10] = kernel_file_set_name(file_id, temp_buf);
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
 {
     u64 call_num = frame->regs[10];
@@ -3200,6 +3293,10 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_process_get_program_argument_file(hart); }
     else if(call_num == 68)
     { syscall_file_set_size(hart); }
+    else if(call_num == 69)
+    { syscall_directory_create_file(hart); }
+    else if(call_num == 70)
+    { syscall_file_set_name(hart); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

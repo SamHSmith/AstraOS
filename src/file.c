@@ -140,12 +140,18 @@ u64 kernel_file_set_name(u64 file_id, u8* new_name)
     {
         KernelFileImaginary* imaginary = &file->imaginary;
         strncpy(imaginary->name, new_name, KERNEL_FILE_IMAGINARY_NAME_LEN);
+        u64 name_len = strlen(new_name);
+        if(name_len < KERNEL_FILE_IMAGINARY_NAME_LEN)
+        { imaginary->name[name_len] = 0; }
         return 1;
     }
     else if(file->type == KERNEL_FILE_TYPE_DRIVE_PARTITION)
     {
         KernelFileDrivePartition* part = &file->drive_partition;
         strncpy(part->name, new_name, KERNEL_FILE_DRIVE_PARTITION_NAME_LEN);
+        u64 name_len = strlen(new_name);
+        if(name_len < KERNEL_FILE_DRIVE_PARTITION_NAME_LEN)
+        { part->name[name_len] = 0; }
         return 1;
     }
     else
@@ -829,6 +835,34 @@ u64 kernel_directory_add_files(u64 dir_id, u64* files, u64 file_count)
             u64 continue_directory = imaginary->continue_directory & (~0x8000000000000000ull);
             return kernel_directory_add_files(continue_directory, files, file_count);
         }
+        return 1;
+    }
+    else
+    {
+        printf("kernel_directory_add_file: Unknown directory type: %llu\n", dir->type);
+        return 0;
+    }
+}
+
+// returns false if it was not possible to create a file of the same type as the parent
+// directory in the directory
+u64 kernel_directory_create_file(u64 dir_id, u64* out_file)
+{
+    assert(is_valid_dir_id(dir_id), "you passed a valid directory id to kernel_directory_add_files");
+    KernelDirectory* dir = KERNEL_DIRECTORY_ARRAY + dir_id;
+    if(dir->type == KERNEL_DIRECTORY_TYPE_IMAGINARY)
+    {
+        KernelDirectoryImaginary* imaginary = &dir->imaginary;
+
+        u64 new_file_id;
+        kernel_file_imaginary_create(&new_file_id, 1);
+
+        if(!kernel_directory_add_files(dir_id, &new_file_id, 1))
+        {
+            kernel_file_free(new_file_id);
+            return 0;
+        }
+        *out_file = new_file_id;
         return 1;
     }
     else

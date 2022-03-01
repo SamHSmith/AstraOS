@@ -394,6 +394,24 @@ void _start()
                                     }
                                 }
                             }
+                            else if(expression_count && strn_str_match(expressions[0].text, "new_file", expressions[0].text_len))
+                            {
+                                if(expression_count != 2)
+                                { dave_term_printf("usage: new_file %%file_name%%\n"); }
+                                else
+                                {
+                                    u64 dir_id = dir_id_stack[dir_id_stack_index];
+                                    u64 file_id;
+                                    if(!AOS_directory_create_file(dir_id, &file_id))
+                                    { dave_term_printf("Failed to create new file.\n"); }
+                                    else
+                                    {
+                                        AOS_H_printf("file id %llu\n", file_id);
+                                        if(!AOS_file_set_name(file_id, expressions[1].text, expressions[1].text_len))
+                                        { AOS_H_printf("Managed to create a file but not name it.\n"); }
+                                    }
+                                }
+                            }
                             else if(expression_count && strn_str_match(expressions[0].text, "pwd", expressions[0].text_len))
                             {
                                 u8 name_buffer[64];
