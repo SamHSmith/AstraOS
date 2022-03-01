@@ -257,13 +257,13 @@ void _start()
                 AOS_stream_take(process_stdout, 0, 0, &byte_count);
                 u8 scratch[byte_count];
                 u64 taken_count = AOS_stream_take(process_stdout, scratch, byte_count, &byte_count);
-                if(text_len + taken_count >= 4096 * 12)
+                if(text_len + taken_count + 3 >= 4096 * 12)
                 {
-                    for(u64 i = 0; i < text_len - taken_count; i++)
+                    for(u64 i = 0; i < text_len - taken_count - 3; i++)
                     {
-                        text_buffer[i] = text_buffer[i + taken_count];
+                        text_buffer[i] = text_buffer[i + taken_count + 3];
                     }
-                    text_len -= taken_count;
+                    text_len -= taken_count + 3;
                 }
                 for(u64 i = 0; i < taken_count; i++)
                 {

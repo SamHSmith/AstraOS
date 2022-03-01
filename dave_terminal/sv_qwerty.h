@@ -1,6 +1,5 @@
 u8 scancode_to_u8(u8 c, AOS_KeyboardState ks)
 {
-AOS_H_printf("%u\n", c);
     u8 to_add = 0;
 
 if(ks.keys_down[0] & (1llu << 4)) // Altgr
