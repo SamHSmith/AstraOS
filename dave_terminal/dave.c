@@ -30,6 +30,8 @@ u64 text_len = 0;
 u8* pre_send_to_stdin = 0x30404000;
 u64 pre_send_to_stdin_len = 0;
 
+u8* catting_and_zeroing_buffer = 0x30403000;
+
 #define MAX_PARTITION_COUNT 64
 u64 partitions[MAX_PARTITION_COUNT];
 u8 partition_names[MAX_PARTITION_COUNT][64];
@@ -165,7 +167,6 @@ void _start()
         AOS_H_printf("dave's terminal loader has found %.*s\n", partition_name_lens[i], partition_names[i]);
     }
 
-    text_buffer = 0x30405000;
     AOS_alloc_pages(text_buffer, 12);
     text_len = 0;
 
@@ -174,9 +175,10 @@ void _start()
     text_buffer[text_len + 2] = ' ';
     text_len += 3;
 
-    pre_send_to_stdin = 0x30404000;
     AOS_alloc_pages(pre_send_to_stdin, 1);
     pre_send_to_stdin_len = 0;
+
+    AOS_alloc_pages(catting_and_zeroing_buffer, 1);
 
     u8 is_running_as_twa = 0;
     u64 twa_session_id;
@@ -421,7 +423,119 @@ void _start()
                                             }
                                         }
                                         if(!found_directory)
-                                        { dave_term_printf("\"%.*s\", no such directory\n", expressions[1].text_len, expressions[1].text); }
+                                        { dave_term_printf("\"%.*s\", no such directory.\n", expressions[1].text_len, expressions[1].text); }
+                                    }
+                                }
+                            }
+                            else if(expression_count && strn_str_match(expressions[0].text, "cat_intrin", expressions[0].text_len))
+                            {
+                                if(expression_count != 2)
+                                { dave_term_printf("usage: cat_intrin %%file%%\n"); }
+                                else
+                                {
+                                    {
+                                        u8 name_buffer[64];
+                                        u64 dir_id = dir_id_stack[dir_id_stack_index];
+                                        u64 file_count = AOS_directory_get_files(dir_id, 0, 0);
+                                        u64 files[file_count];
+                                        file_count = AOS_directory_get_files(dir_id, files, file_count);
+
+                                        u8 found_file = 0;
+                                        u64 file_id;
+                                        for(u64 i = 0; i < file_count; i++)
+                                        {
+                                            AOS_file_get_name(files[i], name_buffer, 64);
+                                            if(strn_str_match(expressions[1].text, name_buffer, expressions[1].text_len))
+                                            {
+                                                found_file = 1;
+                                                file_id = files[i];
+                                                break;
+                                            }
+                                        }
+                                        if(!found_file)
+                                        { dave_term_printf("\"%.*s\", no such file.\n", expressions[1].text_len, expressions[1].text); }
+                                        else
+                                        {
+                                            u64 bytes_left = AOS_file_get_size(file_id);
+                                            u64 block_count = AOS_file_get_block_count(file_id);
+
+                                            u64 op[2];
+                                            op[1] = catting_and_zeroing_buffer;
+                                            dave_term_printf("##FILE START##\n");
+                                            u8 failed = 0;
+                                            for(u64 i = 0; i < block_count; i++)
+                                            {
+                                                op[0] = i;
+                                                if(AOS_file_read_blocks(file_id, op, 1))
+                                                {
+                                                    u64 copy_count = PAGE_SIZE;
+                                                    if(copy_count > bytes_left) { copy_count = bytes_left; }
+                                                    bytes_left -= copy_count;
+
+                                                    if(text_len + copy_count >= 4096 * 12)
+                                                    {
+                                                        for(u64 i = 0; i < text_len - copy_count; i++)
+                                                        { text_buffer[i] = text_buffer[i + copy_count]; }
+                                                        text_len -= copy_count;
+                                                    }
+
+                                                    for(u64 j = 0; j < copy_count; j++)
+                                                    { text_buffer[text_len++] = catting_and_zeroing_buffer[j]; }
+                                                }
+                                                else
+                                                { dave_term_printf("Failed to read file...\n"); failed = 1; break; }
+                                            }
+                                            if(!failed) { dave_term_printf("\n##FILE END##\n"); }
+                                            dave_term_printf("File Size: %llu B, Block Count: %llu\n", AOS_file_get_size(file_id), block_count);
+                                        }
+                                    }
+                                }
+                            }
+                            else if(expression_count && strn_str_match(expressions[0].text, "zero_file", expressions[0].text_len))
+                            {
+                                if(expression_count != 2)
+                                { dave_term_printf("usage: zero_file %%file%%\n"); }
+                                else
+                                {
+                                    {
+                                        u8 name_buffer[64];
+                                        u64 dir_id = dir_id_stack[dir_id_stack_index];
+                                        u64 file_count = AOS_directory_get_files(dir_id, 0, 0);
+                                        u64 files[file_count];
+                                        file_count = AOS_directory_get_files(dir_id, files, file_count);
+
+                                        u8 found_file = 0;
+                                        u64 file_id;
+                                        for(u64 i = 0; i < file_count; i++)
+                                        {
+                                            AOS_file_get_name(files[i], name_buffer, 64);
+                                            if(strn_str_match(expressions[1].text, name_buffer, expressions[1].text_len))
+                                            {
+                                                found_file = 1;
+                                                file_id = files[i];
+                                                break;
+                                            }
+                                        }
+                                        if(!found_file)
+                                        { dave_term_printf("\"%.*s\", no such file.\n", expressions[1].text_len, expressions[1].text); }
+                                        else
+                                        {
+                                            u64 bytes_left = AOS_file_get_size(file_id);
+                                            u64 block_count = AOS_file_get_block_count(file_id);
+
+                                            u64 op[2];
+                                            op[1] = catting_and_zeroing_buffer;
+                                            for(u64 i = 0; i < PAGE_SIZE; i++)
+                                            { catting_and_zeroing_buffer[i] = 0; }
+                                            u8 failed = 0;
+                                            for(u64 i = 0; i < block_count; i++)
+                                            {
+                                                op[0] = i;
+                                                if(!AOS_file_write_blocks(file_id, op, 1))
+                                                { dave_term_printf("Failed to zero file...\n"); failed = 1; break; }
+                                            }
+                                            dave_term_printf("File Size: %llu B, Block Count: %llu\n", AOS_file_get_size(file_id), block_count);
+                                        }
                                     }
                                 }
                             }

@@ -323,6 +323,7 @@ u64 kernel_file_read_blocks(u64 file_id, u64* op_array, u64 op_count)
         {
             u64 block_num = op_array[i];
             void* destination = op_array[i+1];
+            assert((u64)destination % PAGE_SIZE == 0, "destination address is page_aligned");
             if(block_num >= imaginary->page_array_len)
             { continue; }
             memcpy(destination, page_array[block_num], PAGE_SIZE);
@@ -377,6 +378,7 @@ u64 kernel_file_write_blocks(u64 file_id, u64* op_array, u64 op_count)
         {
             u64 block_num = op_array[i];
             void* src = op_array[i+1];
+            assert((u64)src % PAGE_SIZE == 0, "source address is page_aligned");
             if(block_num >= imaginary->page_array_len)
             { continue; }
             memcpy(page_array[block_num], src, PAGE_SIZE);

@@ -425,7 +425,7 @@ AOS_process_add_program_argument_string:
     mv a3, a2
     mv a2, a1
     mv a1, a0
-    add a0, x0, 59
+    addi a0, x0, 59
     ecall
     ret
 
@@ -434,6 +434,39 @@ AOS_process_get_program_argument_string:
     mv a3, a2
     mv a2, a1
     mv a1, a0
-    add a0, x0, 60
+    addi a0, x0, 60
+    ecall
+    ret
+
+
+.global AOS_file_read_blocks
+AOS_file_read_blocks:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 61
+    ecall
+    ret
+
+.global AOS_file_get_size
+AOS_file_get_size:
+    mv a1, a0
+    addi a0, x0, 62
+    ecall
+    ret
+
+.global AOS_file_get_block_count
+AOS_file_get_block_count:
+    mv a1, a0
+    addi a0, x0, 63
+    ecall
+    ret
+
+.global AOS_file_write_blocks
+AOS_file_write_blocks:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 64
     ecall
     ret

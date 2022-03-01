@@ -2,6 +2,8 @@
 #ifndef __AOS_SYSCALLS_H
 #define __AOS_SYSCALLS_H
 
+#define PAGE_SIZE 4096
+
 #include "../common/types.h"
 
 typedef struct
@@ -70,11 +72,11 @@ u64 AOS_is_valid_file_id(u64 file_id);
 u64 AOS_is_valid_dir_id(u64 directory_id);
  
 u64 AOS_file_get_name(u64 file_id, volatile u8* buf, u64 buf_size);
-u64 AOS_file_get_size(u64 file_id); // not done
-u64 AOS_file_get_block_count(u64 file_id); // not done
+u64 AOS_file_get_size(u64 file_id);
+u64 AOS_file_get_block_count(u64 file_id);
 u64 AOS_file_set_size(u64 file_id, u64 new_size); // not done
-u64 AOS_file_read_blocks(u64 file_id, volatile u64* op_array, u64 op_count); // not done
-u64 AOS_file_write_blocks(u64 file_id, volatile u64* op_array, u64 op_count); // not done
+u64 AOS_file_read_blocks(u64 file_id, volatile u64* op_array, u64 op_count);
+u64 AOS_file_write_blocks(u64 file_id, volatile u64* op_array, u64 op_count);
  
 u64 AOS_directory_get_name(u64 dir_id, volatile u8* buf, u64 buf_size);
 u64 AOS_directory_get_subdirectories(u64 dir_id, volatile u64* buf, u64 buf_size);

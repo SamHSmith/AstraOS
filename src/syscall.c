@@ -2673,6 +2673,208 @@ void syscall_process_get_program_argument_string(hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_file_read_blocks(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_file_id = frame->regs[11];
+    u64 user_op_array = frame->regs[12];
+    u64 user_op_count = frame->regs[13];
+
+    u64 file_id;
+    if(!process_get_file_read_access(process, user_file_id, &file_id))
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_op_array, user_op_count*2*sizeof(u64))
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
+    { // failed
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        Kallocation memory_op_temp_buf_alloc = kalloc_pages(((user_op_count*2*sizeof(u64)) + PAGE_SIZE - 1) / PAGE_SIZE);
+        u64* op_ptr = memory_op_temp_buf_alloc.memory;
+
+        for(u64 i = 0; i < user_op_count; i++)
+        {
+            u64* block_num = mmu_virt_to_phys_buffer_get_address(my_buffer, sizeof(u64)  *(i*2 + 0));
+            u64* dest_memory = mmu_virt_to_phys_buffer_get_address(my_buffer, sizeof(u64)*(i*2 + 1));
+
+            u64 actual_dest_memory;
+            if(mmu_virt_to_phys(process->mmu_table, *dest_memory, &actual_dest_memory) || actual_dest_memory % PAGE_SIZE != 0)
+            {
+                kfree_pages(memory_op_temp_buf_alloc);
+                frame->regs[10] = 0;
+                current_thread->program_counter += 4;
+                rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+                return;
+            }
+            *(op_ptr++) = *block_num;
+            *(op_ptr++) = actual_dest_memory;
+        }
+
+        kernel_file_read_blocks(file_id, memory_op_temp_buf_alloc.memory, user_op_count);
+
+        kfree_pages(memory_op_temp_buf_alloc);
+
+        frame->regs[10] = 1;
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_file_write_blocks(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_file_id = frame->regs[11];
+    u64 user_op_array = frame->regs[12];
+    u64 user_op_count = frame->regs[13];
+
+    u64 file_id;
+    if(!process_get_file_write_access(process, user_file_id, &file_id))
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_op_array, user_op_count*2*sizeof(u64))
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer))
+    { // failed
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        Kallocation memory_op_temp_buf_alloc = kalloc_pages(((user_op_count*2*sizeof(u64)) + PAGE_SIZE - 1) / PAGE_SIZE);
+        u64* op_ptr = memory_op_temp_buf_alloc.memory;
+
+        for(u64 i = 0; i < user_op_count; i++)
+        {
+            u64* block_num = mmu_virt_to_phys_buffer_get_address(my_buffer, sizeof(u64)  *(i*2 + 0));
+            u64* dest_memory = mmu_virt_to_phys_buffer_get_address(my_buffer, sizeof(u64)*(i*2 + 1));
+
+            u64 actual_dest_memory;
+            if(mmu_virt_to_phys(process->mmu_table, *dest_memory, &actual_dest_memory) || actual_dest_memory % PAGE_SIZE != 0)
+            {
+                kfree_pages(memory_op_temp_buf_alloc);
+                frame->regs[10] = 0;
+                current_thread->program_counter += 4;
+                rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+                return;
+            }
+            *(op_ptr++) = *block_num;
+            *(op_ptr++) = actual_dest_memory;
+        }
+
+        kernel_file_write_blocks(file_id, memory_op_temp_buf_alloc.memory, user_op_count);
+
+        kfree_pages(memory_op_temp_buf_alloc);
+
+        frame->regs[10] = 1;
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_file_get_size(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_file_id = frame->regs[11];
+
+    u64 file_id;
+    if(!process_get_file_read_access(process, user_file_id, &file_id))
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    frame->regs[10] = kernel_file_get_size(file_id);
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_file_get_block_count(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_file_id = frame->regs[11];
+
+    u64 file_id;
+    if(!process_get_file_read_access(process, user_file_id, &file_id))
+    {
+        frame->regs[10] = 0;
+        current_thread->program_counter += 4;
+        rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        return;
+    }
+
+    frame->regs[10] = kernel_file_get_block_count(file_id);
+    current_thread->program_counter += 4;
+    rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
 {
     u64 call_num = frame->regs[10];
@@ -2780,6 +2982,14 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_process_add_program_argument_string(hart); }
     else if(call_num == 60)
     { syscall_process_get_program_argument_string(hart); }
+    else if(call_num == 61)
+    { syscall_file_read_blocks(hart); }
+    else if(call_num == 62)
+    { syscall_file_get_size(hart); }
+    else if(call_num == 63)
+    { syscall_file_get_block_count(hart); }
+    else if(call_num == 64)
+    { syscall_file_write_blocks(hart); }
     else
     { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

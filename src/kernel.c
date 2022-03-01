@@ -253,7 +253,8 @@ void kmain()
     kernel_file_set_size(file_id, 100000);
     printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     mem_debug_dump_table_counts(1);
-    u8 block[PAGE_SIZE];
+    u8 _block[PAGE_SIZE*2];
+    u8* block = (((u64)_block + PAGE_SIZE) / PAGE_SIZE) * PAGE_SIZE;
     u64 op_arr[2];
     op_arr[0] = 0;
     op_arr[1] = block;
@@ -278,6 +279,27 @@ void kmain()
 
     // temp
     u64 secret_dir = kernel_directory_create_imaginary("secret dir 1");
+    { // test file
+        u64 test_file;
+        kernel_file_imaginary_create(&test_file, 1);
+        kernel_file_set_name(test_file, "testfile");
+        kernel_directory_add_files(secret_dir, &test_file, 1);
+        u64 file_size = 1000;
+        kernel_file_set_size(test_file, file_size);
+        u64 op[2];
+        op[0] = 0;
+        op[1] = ((u64)"This is a string" / PAGE_SIZE) * PAGE_SIZE;
+        kernel_file_write_blocks(test_file, op, 1);
+        u8 _block[PAGE_SIZE*2];
+        u8* block = (((u64)_block + PAGE_SIZE) / PAGE_SIZE) * PAGE_SIZE;
+        op[0] = 0;
+        op[1] = block;
+        kernel_file_read_blocks(test_file, op, 1);
+        printf("Start print testfile\n");
+        for(u64 i = 0; i < file_size; i++)
+        { printf("%c", block[i]); }
+        printf("\nAbove is testfile\n");
+    }
     kernel_directory_add_subdirectory(secret_dir, drive1_partition_directory);
     kernel_directory_add_subdirectory(secret_dir, kernel_directory_create_imaginary("dave directory"));
     kernel_directory_add_subdirectory(drive1_partition_directory, secret_dir);
