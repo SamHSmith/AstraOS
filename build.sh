@@ -32,6 +32,8 @@ VRMS_SOURCES="vrms/vrms.c userland/aos_syscalls.s"
 
 APPEND_SOURCES="append/append.c userland/aos_syscalls.s"
 
+TE_SOURCES="te/te.c userland/aos_syscalls.s"
+
 if [ "$1" = "clean" ]
 then
 rm -drf bin
@@ -71,6 +73,8 @@ $RCC $CFLAGS -o bin/ray2d $RAY2D_SOURCES
 $RCC $CFLAGS -o bin/dave_terminal $DAVE_TERMINAL_SOURCES
 $RCC $CFLAGS -o bin/vrms $VRMS_SOURCES
 $RCC $CFLAGS -o bin/append $APPEND_SOURCES
+$RCC $CFLAGS -o bin/te $TE_SOURCES
+
 
 mkdir -p disk_dir/partitions
 cp bin/square disk_dir/partitions/super_cool_square
@@ -81,6 +85,7 @@ cp bin/tree disk_dir/partitions/tree
 cp bin/echo_slowly disk_dir/partitions/echo_slowly
 cp bin/cat disk_dir/partitions/cat
 cp bin/append disk_dir/partitions/append
+cp bin/te disk_dir/partitions/te
 rm -f drive1.dsk
 bin/fsmake drive1.dsk disk_dir/
 

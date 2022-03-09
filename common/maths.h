@@ -610,4 +610,24 @@ f32 moduloF32(f32 x, f32 y) {
 	return x - y * floorF32(x / y);
 }
 
+f64 sign(f64 x)
+{
+	return 1.0 - 2.0 * (f64)((s64)(x<0.0));
+}
+
+f32 signF32(f32 x)
+{
+	return 1.0 - 2.0 * (f32)((s32)(x<0.0));
+}
+
+f64 abs(f64 x)
+{
+	return x * sign(x);
+}
+
+f32 absF32(f32 x)
+{
+	return x * signF32(x);
+}
+
 #endif

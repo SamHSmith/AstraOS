@@ -189,6 +189,8 @@ while(1)
                     { input = input | 8; }
                     else if(scancode == 60)
                     { lock_square_to_cursor = !lock_square_to_cursor; }
+                    else if(scancode == 8)
+                    { AOS_process_exit(); }
                 }
                 else
                 {
