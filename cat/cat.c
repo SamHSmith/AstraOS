@@ -30,8 +30,15 @@ void _start()
         if(write_amount > bytes_left) { write_amount = bytes_left; }
         bytes_left -= write_amount;
 
-        AOS_stream_put(AOS_STREAM_STDOUT, scratch, write_amount);
+        void* temp_scratch = scratch;
+        do {
+            u64 amount_put = AOS_stream_put(AOS_STREAM_STDOUT, temp_scratch, write_amount);
+            temp_scratch += amount_put;
+            write_amount -= amount_put;
+        } while(write_amount);
+
     }
+    AOS_H_printf("\n");
 
     AOS_process_exit();
 }
