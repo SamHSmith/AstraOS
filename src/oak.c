@@ -149,7 +149,7 @@ void oak_send_block_fetch(u8 write, u64* block_address_pairs, u64 pair_count)
 
 void oak_recieve_block_fetch_complete(OakPacketBlockFetchComplete* packet)
 {
-    printf("the block fetch #%lu is complete\n", packet->transaction_number);
+    uart_printf("the block fetch #%lu is complete\n", packet->transaction_number);
 }
 
 void recieve_oak_packet()

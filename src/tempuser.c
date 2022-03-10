@@ -838,14 +838,14 @@ while(1) {
         kbd_event_count = AOS_get_keyboard_events(kbd_events, kbd_event_count);
         for(u64 i = 0; i < kbd_event_count; i++)
         {
-            if(kbd_events[i].event == KEYBOARD_EVENT_NOTHING)
+            if(kbd_events[i].event == AOS_KEYBOARD_EVENT_NOTHING)
             { continue; }
 
             if(kbd_events[i].current_state.keys_down[0] & 0x20)
             {
                 u8 key_consumed = 1;
 
-                if(kbd_events[i].event == KEYBOARD_EVENT_PRESSED)
+                if(kbd_events[i].event == AOS_KEYBOARD_EVENT_PRESSED)
                 {
                     u64 scancode = kbd_events[i].scancode;
 
@@ -922,7 +922,7 @@ while(1) {
     rwlock_acquire_read(&thunder_lock);
 //AOS_H_printf("temp slept for %lf seconds\n", AOS_H_time_get_seconds() - pre_sleep);
 
-    Framebuffer* fb = 0x54000;
+    AOS_Framebuffer* fb = 0x54000;
     u64 fb_page_count = AOS_surface_acquire(0, 0, 0);
     if(AOS_surface_acquire(0, fb, fb_page_count))
     {

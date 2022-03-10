@@ -156,7 +156,7 @@ u64 kernel_file_set_name(u64 file_id, u8* new_name)
     }
     else
     {
-        printf("kernel_file_get_name: Unknown file type: %llu\n", file->type);
+        uart_printf("kernel_file_get_name: Unknown file type: %llu\n", file->type);
         return 0;
     }
 }
@@ -203,7 +203,7 @@ u64 kernel_file_get_name(u64 file_id, u8* buf, u64 buf_size)
     }
     else
     {
-        printf("kernel_file_get_name: Unknown file type: %llu\n", file->type);
+        uart_printf("kernel_file_get_name: Unknown file type: %llu\n", file->type);
         return 0;
     }
 }
@@ -224,7 +224,7 @@ u64 kernel_file_get_size(u64 file_id)
     }
     else
     {
-        printf("kernel_file_get_size: Unknown file type: %llu\n", file->type);
+        uart_printf("kernel_file_get_size: Unknown file type: %llu\n", file->type);
         return 0;
     }
 }
@@ -245,7 +245,7 @@ u64 kernel_file_get_block_count(u64 file_id)
     }
     else
     {
-        printf("kernel_file_get_block_count: Unknown file type: %llu\n", file->type);
+        uart_printf("kernel_file_get_block_count: Unknown file type: %llu\n", file->type);
         return 0;
     }
 }
@@ -308,7 +308,7 @@ u64 kernel_file_set_size(u64 file_id, u64 new_size)
     { return 0; }
     else
     {
-        printf("kernel_file_set_size: Unknown file type: %llu\n", file->type);
+        uart_printf("kernel_file_set_size: Unknown file type: %llu\n", file->type);
         return 0;
     }
 }
@@ -367,7 +367,7 @@ u64 kernel_file_read_blocks(u64 file_id, u64* op_array, u64 op_count)
     }
     else
     {
-        printf("kernel_file_read_blocks: Unknown file type: %llu\n", file->type);
+        uart_printf("kernel_file_read_blocks: Unknown file type: %llu\n", file->type);
         return 0;
     }
 }
@@ -422,7 +422,7 @@ u64 kernel_file_write_blocks(u64 file_id, u64* op_array, u64 op_count)
     }
     else
     {
-        printf("kernel_file_write_blocks: Unknown file type: %llu\n", file->type);
+        uart_printf("kernel_file_write_blocks: Unknown file type: %llu\n", file->type);
         return 0;
     }
 }
@@ -458,7 +458,7 @@ void kernel_file_free(u64 file_id)
     }
     else
     {
-        printf("kernel_file_free: Unknown file type: %llu\n", file->type);
+        uart_printf("kernel_file_free: Unknown file type: %llu\n", file->type);
     }
 }
 
@@ -583,7 +583,7 @@ u64 kernel_directory_get_name(u64 dir_id, u8* buf, u64 buf_size)
     }
     else
     {
-        printf("kernel_directory_get_name: Unknown directory type: %llu\n", dir->type);
+        uart_printf("kernel_directory_get_name: Unknown directory type: %llu\n", dir->type);
         return 0;
     }
 }
@@ -656,7 +656,7 @@ u64 kernel_directory_get_subdirectories(u64 dir_id, u64 start_index, u64* buf, u
     }
     else
     {
-        printf("kernel_directory_get_subdirectories: Unknown directory type: %llu\n", dir->type);
+        uart_printf("kernel_directory_get_subdirectories: Unknown directory type: %llu\n", dir->type);
         return 0;
     }
 }
@@ -729,7 +729,7 @@ u64 kernel_directory_get_files(u64 dir_id, u64 start_index, u64* buf, u64 buf_si
     }
     else
     {
-        printf("kernel_directory_get_subdirectories: Unknown directory type: %llu\n", dir->type);
+        uart_printf("kernel_directory_get_subdirectories: Unknown directory type: %llu\n", dir->type);
         return 0;
     }
 }
@@ -765,7 +765,7 @@ u64 kernel_directory_add_subdirectory(u64 dir_id, u64 subdirectory)
     }
     else
     {
-        printf("kernel_directory_add_subdirectory: Unknown directory type: %llu\n", dir->type);
+        uart_printf("kernel_directory_add_subdirectory: Unknown directory type: %llu\n", dir->type);
         return 0;
     }
 }
@@ -839,7 +839,7 @@ u64 kernel_directory_add_files(u64 dir_id, u64* files, u64 file_count)
     }
     else
     {
-        printf("kernel_directory_add_file: Unknown directory type: %llu\n", dir->type);
+        uart_printf("kernel_directory_add_file: Unknown directory type: %llu\n", dir->type);
         return 0;
     }
 }
@@ -867,7 +867,7 @@ u64 kernel_directory_create_file(u64 dir_id, u64* out_file)
     }
     else
     {
-        printf("kernel_directory_add_file: Unknown directory type: %llu\n", dir->type);
+        uart_printf("kernel_directory_add_file: Unknown directory type: %llu\n", dir->type);
         return 0;
     }
 }
@@ -910,7 +910,7 @@ void kernel_directory_free(u64 dir_id)
     }
     else
     {
-        printf("kernel_directory_free: Unknown directory type: %llu\n", dir->type);
+        uart_printf("kernel_directory_free: Unknown directory type: %llu\n", dir->type);
     }
 }
 
@@ -918,8 +918,8 @@ void kernel_directory_free(u64 dir_id)
 #define DEBUG_PRINT_DIRECTORY_TREE_STACK_SIZE 128
 void _debug_print_directory_tree(u64 dir_id, char* prefix, u64* stack, u64 stack_index)
 {
-    if(stack_index >= DEBUG_PRINT_DIRECTORY_TREE_STACK_SIZE) { printf("%s>] DIR_ID_STACK ran out. Tree too deep.\n", prefix); return; }
-    if(!is_valid_dir_id(dir_id)) { printf("%s>] NOT VALID DIR\n", prefix); return; }
+    if(stack_index >= DEBUG_PRINT_DIRECTORY_TREE_STACK_SIZE) { uart_printf("%s>] DIR_ID_STACK ran out. Tree too deep.\n", prefix); return; }
+    if(!is_valid_dir_id(dir_id)) { uart_printf("%s>] NOT VALID DIR\n", prefix); return; }
 
     u64 sub_prefix_len = strlen(prefix) + strlen("--") + 1;
     char sub_prefix[sub_prefix_len];
@@ -936,12 +936,12 @@ void _debug_print_directory_tree(u64 dir_id, char* prefix, u64* stack, u64 stack
         if(stack[i] == dir_id)
         {
             // we are inside ourselves
-            printf("%s^ %s\n", prefix, dir_name);
+            uart_printf("%s^ %s\n", prefix, dir_name);
             return;
         }
     }
 
-    printf("%s> %s\n", prefix, dir_name);
+    uart_printf("%s> %s\n", prefix, dir_name);
 
     u64 file_count = kernel_directory_get_files(dir_id, 0, 0, 0);
     u64 files[file_count];
@@ -966,7 +966,7 @@ void _debug_print_directory_tree(u64 dir_id, char* prefix, u64* stack, u64 stack
         pad[pad_len] = 0;
         if(is_valid_file_id(files[i]))
         {
-            printf("%s|+ file: \"%s\",%s block_count: %llu, file_size: %llu B\n",
+            uart_printf("%s|+ file: \"%s\",%s block_count: %llu, file_size: %llu B\n",
                 sub_prefix,
                 filename,
                 pad,
@@ -976,7 +976,7 @@ void _debug_print_directory_tree(u64 dir_id, char* prefix, u64* stack, u64 stack
         }
         else
         {
-            printf("%s!+ invalid file!\n", sub_prefix);
+            uart_printf("%s!+ invalid file!\n", sub_prefix);
         }
     }
 
@@ -998,7 +998,7 @@ void debug_print_directory_tree(u64 dir_id)
 void load_drive_partitions()
 {
     if(has_loaded_drive1_partitions)
-    { printf("drive1 partitions are already loaded!\n"); return; }
+    { uart_printf("drive1 partitions are already loaded!\n"); return; }
 
     assert(sizeof(RAD_PartitionTable) == PAGE_SIZE*2, "partition table struct is the right size");
 
@@ -1019,22 +1019,22 @@ void load_drive_partitions()
 
         if(!is_valid)
         {
-            printf("Table#%ld is not valid\n", i);
+            uart_printf("Table#%ld is not valid\n", i);
         }
         else
         {
-            printf("Table#%ld is valid \n", i);
+            uart_printf("Table#%ld is valid \n", i);
             reference_table = i;
         }
     }
     if(reference_table == U64_MAX)
     {
-        printf("There are no valid tables. Either the drive is not formatted or you are in a very unfortunate situation.\n");
+        uart_printf("There are no valid tables. Either the drive is not formatted or you are in a very unfortunate situation.\n");
         return;
     }
 
     read_blocks(reference_table*2, 2, table);
-    printf("Using table#%ld as reference\n", reference_table);
+    uart_printf("Using table#%ld as reference\n", reference_table);
 
     drive1_partition_directory = kernel_directory_create_imaginary("drive1");
     has_loaded_drive1_partitions = 1;
@@ -1046,7 +1046,7 @@ void load_drive_partitions()
 
         if(table->entries[i].partition_type != 0)
         {
-            printf("Partition, type = %u, start = %llu, size = %llu, name = %s\n",
+            uart_printf("Partition, type = %u, start = %llu, size = %llu, name = %s\n",
                     table->entries[i].partition_type,
                     table->entries[i].start_block,
                     next_partition_start - table->entries[i].start_block,

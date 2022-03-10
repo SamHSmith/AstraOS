@@ -3298,5 +3298,5 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     else if(call_num == 70)
     { syscall_file_set_name(hart); }
     else
-    { printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
+    { uart_printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

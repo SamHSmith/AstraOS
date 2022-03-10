@@ -62,11 +62,11 @@ u64 create_process_from_file(u64 file_id, u64* pid_ret, u64* parents, u64 parent
         header = block;
 
         if(header->magic != ELF_MAGIC)
-        { printf("NOT ELF\n"); return 0; }
+        { uart_printf("NOT ELF\n"); return 0; }
         if(header->machine != ELF_MACHINE_RISCV)
-        { printf("WRONG ARCH\n"); return 0; }
+        { uart_printf("WRONG ARCH\n"); return 0; }
         if(header->obj_type != ELF_TYPE_EXEC)
-        { printf("NOT AN EXECTUTABLE ELF\n"); return 0; }
+        { uart_printf("NOT AN EXECTUTABLE ELF\n"); return 0; }
     }
 
     u64 block_count = kernel_file_get_block_count(file_id);

@@ -20,27 +20,25 @@ RWLock KERNEL_TRAP_LOCK;
 
 #include "random.c"
 
+#include "stb_sprintf.h"
+
 #include "uart.c"
-#include "printf.h"
-void _putchar(char c)
-{
-    uart_write(&c, 1);
-}
+#include "uart_printf.c"
 
 void print_stacktrace(u64 start_frame, u64 program_counter, u64 return_address)
 {
     u64* fp = start_frame;
     u64* ra = return_address;
-    printf("Stacktrace:\n");
-    printf("0x%llx\n", program_counter);
-    printf("0x%llx\n", return_address - 4);
+    uart_printf("Stacktrace:\n");
+    uart_printf("0x%llx\n", program_counter);
+    uart_printf("0x%llx\n", return_address - 4);
     if(fp < 0x80000000 || fp > 0x10000000000) { return; }
     for(u64 i = 0; i < 128; i++)
     {
         ra = ((u64)*(fp-1)) - 4;
         fp = *(fp-2);
         if(fp < 0x80000000 || fp > 0x10000000000) { break; }
-        printf("0x%llx\n", ra);
+        uart_printf("0x%llx\n", ra);
     }
 }
 
@@ -48,9 +46,9 @@ void assert(u64 stat, char* error)
 {
     if(!stat)
     {
-        printf("assertion failed: \"");
-        printf(error);
-        printf("\"\n");
+        uart_printf("assertion failed: \"");
+        uart_printf(error);
+        uart_printf("\"\n");
         print_stacktrace(read_fp_register(), read_pc_register(), read_ra_register());
         u8 freeze = 1;
         while(freeze) {};
@@ -129,13 +127,13 @@ u64 kinit()
 {
     uart_init();
 
-    printf("Counting HARTS...");
+    uart_printf("Counting HARTS...");
     KERNEL_HART_COUNT.value = 0;
     atomic_s64_increment(&KERNEL_HART_COUNT);
     for(u64 i = 0; i < 2000000; i++) { __asm__("nop"); } // wait
     KERNEL_START_OTHER_HARTS = 0; // causes other harts to increment and get ready
     for(u64 i = 0; i < 4000000; i++) { __asm__("nop"); } // wait
-    printf("    There are %lld HARTS.\n", KERNEL_HART_COUNT.value);
+    uart_printf("    There are %lld HARTS.\n", KERNEL_HART_COUNT.value);
 
     KERNEL_MMU_TABLE = (u64)mem_init();
 
@@ -174,13 +172,13 @@ u64 kinit()
 
     KERNEL_SATP_VALUE = mmu_table_ptr_to_satp((u64*)KERNEL_MMU_TABLE);
 
-    printf("Entering supervisor mode...");
+    uart_printf("Entering supervisor mode...");
     return KERNEL_SATP_VALUE;
 }
 
 void kmain()
 {
-    printf("done.\n    Successfully entered kmain with supervisor mode enabled.\n\n");
+    uart_printf("done.\n    Successfully entered kmain with supervisor mode enabled.\n\n");
     uart_write_string("Hello there, welcome to the ROS operating system\nYou have no idea the pain I went through to make these characters you type appear on screen\n\n");
 
     // lock kernel
@@ -190,13 +188,13 @@ void kmain()
     spinlock_acquire(&KERNEL_SPINLOCK);
     KERNEL_START_OTHER_HARTS = 0;
 
-    printf("Pre file testing: "); mem_debug_dump_table_counts(1);
+    uart_printf("Pre file testing: "); mem_debug_dump_table_counts(1);
     /* TESTING */
     u64 dir_id = kernel_directory_create_imaginary("Über directory");
     u64 dir_name_len = kernel_directory_get_name(dir_id, 0, 0);
     char dir_name[dir_name_len];
     kernel_directory_get_name(dir_id, dir_name, dir_name_len);
-    printf("The directory created is called : %s\n", dir_name);
+    uart_printf("The directory created is called : %s\n", dir_name);
 
     u64 smol_dir = kernel_directory_create_imaginary("smõl directory");
     u64 file_id;// = kernel_file_imaginary_create("an imaginary file");
@@ -223,12 +221,12 @@ void kmain()
         for(u64 i = 0; i < file_count; i++)
         {
             char name[32];
-            sprintf(name, "file#%lld", i);
+            stbsp_sprintf(name, "file#%lld", i);
             kernel_file_set_name(files[i], name);
         }
         if(!kernel_directory_add_files(full_dir_id, files, file_count))
         {
-            printf("there was an error when adding to the directory\n");
+            uart_printf("there was an error when adding to the directory\n");
         }
     }
 
@@ -239,19 +237,19 @@ void kmain()
     debug_print_directory_tree(full_dir_id);
     kernel_directory_free(full_dir_id);
 
-    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    uart_printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     mem_debug_dump_table_counts(1);
     kernel_file_set_size(file_id, 100);
-    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    uart_printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     mem_debug_dump_table_counts(1);
     kernel_file_set_size(file_id, 10000);
-    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    uart_printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     mem_debug_dump_table_counts(1);
     kernel_file_set_size(file_id, 6100);
-    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    uart_printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     mem_debug_dump_table_counts(1);
     kernel_file_set_size(file_id, 100000);
-    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    uart_printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     mem_debug_dump_table_counts(1);
     u8 _block[PAGE_SIZE*2];
     u8* block = (((u64)_block + PAGE_SIZE) / PAGE_SIZE) * PAGE_SIZE;
@@ -271,9 +269,9 @@ void kmain()
     }
     kfree_single_page(compare);
     kernel_file_imaginary_destroy(file_id);
-    printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
+    uart_printf("file : %llu, %llu\n", kernel_file_get_block_count(file_id), kernel_file_get_size(file_id));
     kernel_file_free(file_id);
-    printf("Post file testing: "); mem_debug_dump_table_counts(1);
+    uart_printf("Post file testing: "); mem_debug_dump_table_counts(1);
 
     load_drive_partitions();
 
@@ -295,10 +293,10 @@ void kmain()
         op[0] = 0;
         op[1] = block;
         kernel_file_read_blocks(test_file, op, 1);
-        printf("Start print testfile\n");
+        uart_printf("Start print testfile\n");
         for(u64 i = 0; i < file_size; i++)
-        { printf("%c", block[i]); }
-        printf("\nAbove is testfile\n");
+        { uart_printf("%c", block[i]); }
+        uart_printf("\nAbove is testfile\n");
     }
     kernel_directory_add_subdirectory(secret_dir, drive1_partition_directory);
     kernel_directory_add_subdirectory(secret_dir, kernel_directory_create_imaginary("dave directory"));
@@ -355,7 +353,7 @@ void kmain()
 void kmain_hart(u64 hartid)
 {
     spinlock_acquire(&KERNEL_SPINLOCK);
-    printf("initialized hart#%llu\n", hartid);
+    uart_printf("initialized hart#%llu\n", hartid);
     spinlock_release(&KERNEL_SPINLOCK);
 
     u64* mtimecmp = ((u64*)0x02004000) + hartid;
@@ -376,24 +374,24 @@ void trap_hang_kernel(
 {
     atomic_s64_increment(&KERNEL_TRAP_LOCK.write);
     for(u64 i = 0; i < 1000000; i++) { __asm__("nop"); }
-    printf("args:\n  epc: %llx\n  tval: %llx\n  cause: %llx\n  hart: %llx\n  status: %llx\n  frame: %llx\n",
+    uart_printf("args:\n  epc: %llx\n  tval: %llx\n  cause: %llx\n  hart: %llx\n  status: %llx\n  frame: %llx\n",
             epc, tval, cause, hart, status, frame);
-    printf("frame:\n regs:\n");
-    for(u64 i = 0; i < 32; i++) { printf("  x%lld: %llx\n", i, frame->regs[i]); }
-    printf(" fregs:\n");
-    for(u64 i = 0; i < 32; i++) { printf("  f%lld: %llx\n", i, frame->fregs[i]); }
-    printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
-    printf("Kernel has hung.\n");
+    uart_printf("frame:\n regs:\n");
+    for(u64 i = 0; i < 32; i++) { uart_printf("  x%lld: %llx\n", i, frame->regs[i]); }
+    uart_printf(" fregs:\n");
+    for(u64 i = 0; i < 32; i++) { uart_printf("  f%lld: %llx\n", i, frame->fregs[i]); }
+    uart_printf(" satp: %lx, trap_stack: %lx\n", frame->satp, frame);
+    uart_printf("Kernel has hung.\n");
     u64 ptr = frame->regs[8];
     print_stacktrace(ptr, epc, frame->regs[1]);
-    printf("This is CPU#%llu\n", hart);
-    printf("Wide cpu status:\n");
+    uart_printf("This is CPU#%llu\n", hart);
+    uart_printf("Wide cpu status:\n");
     for(s64 i = 0; i < KERNEL_HART_COUNT.value; i++)
     {
         if(kernel_current_thread_has_thread[hart])
         {
             Process* p = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
-            printf("CPU#%llu is running (PID=%llu - TID#%llu)\n",
+            uart_printf("CPU#%llu is running (PID=%llu - TID#%llu)\n",
                    i,
                    kernel_current_threads[i].process_pid,
                    kernel_current_thread_tid[hart]
@@ -401,7 +399,7 @@ void trap_hang_kernel(
         }
         else
         {
-            printf("CPU#%llu is without a user thread to run\n", i);
+            uart_printf("CPU#%llu is without a user thread to run\n", i);
         }
     }
     while(1) {}
@@ -426,23 +424,23 @@ u64 m_trap(
     if(async)
     {
              if(cause_num == 0) {
-                printf("User software interrupt CPU%lld\n", hart);
+                uart_printf("User software interrupt CPU%lld\n", hart);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 1) {
-                printf("Supervisor software interrupt CPU%lld\n", hart);
+                uart_printf("Supervisor software interrupt CPU%lld\n", hart);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 3) {
-                printf("Machine software interrupt CPU%lld\n", hart);
+                uart_printf("Machine software interrupt CPU%lld\n", hart);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 4) {
-                printf("User timer interrupt CPU%lld\n", hart);
+                uart_printf("User timer interrupt CPU%lld\n", hart);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 5) {
-                printf("Supervisor timer interrupt CPU%lld\n", hart);
+                uart_printf("Supervisor timer interrupt CPU%lld\n", hart);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
@@ -525,7 +523,7 @@ u64 m_trap(
                     {
                         u8 buffer[32];
                         u64 count = stream_take(out_stream, buffer, 32, &byte_count);
-                        printf("%.*s", count, buffer);
+                        uart_printf("%.*s", count, buffer);
                     }
                 }
                 spinlock_release(&KERNEL_SPINLOCK);
@@ -539,9 +537,9 @@ u64 m_trap(
             if(*mtime >= wait_time_print_time[hart] && 1)
             {
                 spinlock_acquire(&KERNEL_SPINLOCK);
-                printf("average wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf μs\n", hart, ((f64)(wait_time_acc[hart]) / (f64)wait_time_times[hart]) / (f64)(MACHINE_TIMER_SECOND/1000000));
-                printf("total wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf ms\n", hart, (f64)wait_time_acc[hart] / (f64)(MACHINE_TIMER_SECOND/1000));
-                printf("percentage of time spent waiting on PROC_ARRAY_RWLOCK for hart%llu is %lf %%\n", hart, 100.0*((f64)wait_time_acc[hart] / (f64)(MACHINE_TIMER_SECOND*10)));
+                uart_printf("average wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf μs\n", hart, ((f64)(wait_time_acc[hart]) / (f64)wait_time_times[hart]) / (f64)(MACHINE_TIMER_SECOND/1000000));
+                uart_printf("total wait time on PROC_ARRAY_RWLOCK for hart%llu is %lf ms\n", hart, (f64)wait_time_acc[hart] / (f64)(MACHINE_TIMER_SECOND/1000));
+                uart_printf("percentage of time spent waiting on PROC_ARRAY_RWLOCK for hart%llu is %lf %%\n", hart, 100.0*((f64)wait_time_acc[hart] / (f64)(MACHINE_TIMER_SECOND*10)));
                 wait_time_acc[hart] = 0;
                 wait_time_times[hart] = 0;
                 wait_time_print_time[hart] = *mtime + (MACHINE_TIMER_SECOND*10);
@@ -581,11 +579,11 @@ u64 m_trap(
             }
         }
         else if(cause_num == 8) {
-                printf("User external interrupt CPU%lld\n", hart);
+                uart_printf("User external interrupt CPU%lld\n", hart);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 9) {
-                printf("Supervisor external interrupt CPU%lld\n", hart);
+                uart_printf("Supervisor external interrupt CPU%lld\n", hart);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 11)
@@ -624,7 +622,7 @@ u64 m_trap(
                     //TEMP
                     if(character == 'l')
                     {
-                        printf("Printing kernel event log:\n");
+                        uart_printf("Printing kernel event log:\n");
                         rwlock_acquire_write(&KERNEL_LOG_LOCK);
                         s64 log_len = KERNEL_LOG_SIZE;
                         s64 log_index = atomic_s64_read(&KERNEL_LOG_INDEX);
@@ -637,7 +635,7 @@ u64 m_trap(
                             KernelLogEntry entry = KERNEL_LOG[(log_index - i) % KERNEL_LOG_SIZE];
                             if(entry.is_kernel)
                             {
-                                printf("%4.4llu) H:%llu - T: %llu | %s:%llu - %s\n",
+                                uart_printf("%4.4llu) H:%llu - T: %llu | %s:%llu - %s\n",
                                        log_entry_counter++,
                                        entry.hart,
                                        entry.time,
@@ -647,7 +645,7 @@ u64 m_trap(
                             }
                             else
                             {
-                                printf("%4.4llu) H:%llu - T: %llu - PID:%llu - TID:%llu | %s:%llu - %s\n",
+                                uart_printf("%4.4llu) H:%llu - T: %llu - PID:%llu - TID:%llu | %s:%llu - %s\n",
                                        log_entry_counter++,
                                        entry.hart,
                                        entry.time,
@@ -694,39 +692,39 @@ u64 m_trap(
     else
     {
              if(cause_num == 0) {
-                printf("Interrupt: Instruction address misaligned CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Instruction address misaligned CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 1) {
-                printf("Interrupt: Instruction access fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Instruction access fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 2) {
-                printf("Interrupt: Illegal instruction CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Illegal instruction CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 3) {
-                printf("Interrupt: Breakpoint CPU%lld -> 0x%llx\n", hart, epc);
+                uart_printf("Interrupt: Breakpoint CPU%lld -> 0x%llx\n", hart, epc);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 4) {
-                printf("Interrupt: Load access misaligned CPU%lld -> 0x%llx: 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Load access misaligned CPU%lld -> 0x%llx: 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 5) {
-                printf("Interrupt: Load access fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Load access fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 6) {
-                printf("Interrupt: Store/AMO address misaligned CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Store/AMO address misaligned CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 7) {
-                printf("Interrupt: Store/AMO access fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Store/AMO access fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 8) {
-                printf("Interrupt: Environment call from U-mode CPU%lld -> 0x%llx\n", hart, epc);
+                uart_printf("Interrupt: Environment call from U-mode CPU%lld -> 0x%llx\n", hart, epc);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 9) {
@@ -778,19 +776,19 @@ u64 m_trap(
             }
         }
         else if(cause_num == 11) {
-                printf("Interrupt: Environment call from M-mode CPU%lld -> 0x%llx\n", hart, epc);
+                uart_printf("Interrupt: Environment call from M-mode CPU%lld -> 0x%llx\n", hart, epc);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 12) {
-                printf("Interrupt: Instruction page fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Instruction page fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 13) {
-                printf("Interrupt: Load page fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Load page fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 15) {
-                printf("Interrupt: Store/AMO page fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Store/AMO page fault CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
     }

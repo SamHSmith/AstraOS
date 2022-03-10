@@ -211,7 +211,7 @@ void mem_debug_dump_table_counts(u64 table_count)
                 total++;
             }
         }
-        printf("Memtable#%lld %lld/%lld used.\n", b, count, total);
+        uart_printf("Memtable#%lld %lld/%lld used.\n", b, count, total);
     }
 }
 
@@ -443,15 +443,15 @@ u64* mem_init()
         }
     }
 
-    printf("Memory has been initialized:\n\n");
-    printf("TEXT:        0x%x <-> 0x%x\n", TEXT_START, TEXT_END);
-    printf("RODATA:      0x%x <-> 0x%x\n", RODATA_START, RODATA_END);
-    printf("DATA:        0x%x <-> 0x%x\n", DATA_START, DATA_END);
-    printf("BSS:         0x%x <-> 0x%x\n", BSS_START, BSS_END);
-    printf("STACK:       0x%x <-> 0x%x\n", KERNEL_STACK_START, KERNEL_STACK_END);
-    printf("HEAP META:   0x%x <-> 0x%x\n", HEAP_START, K_HEAP_START);
-    printf("HEAP:        0x%x <-> 0x%x\n", K_HEAP_START, HEAP_START + HEAP_SIZE);
-    printf("\n\n");
+    uart_printf("Memory has been initialized:\n\n");
+    uart_printf("TEXT:        0x%x <-> 0x%x\n", TEXT_START, TEXT_END);
+    uart_printf("RODATA:      0x%x <-> 0x%x\n", RODATA_START, RODATA_END);
+    uart_printf("DATA:        0x%x <-> 0x%x\n", DATA_START, DATA_END);
+    uart_printf("BSS:         0x%x <-> 0x%x\n", BSS_START, BSS_END);
+    uart_printf("STACK:       0x%x <-> 0x%x\n", KERNEL_STACK_START, KERNEL_STACK_END);
+    uart_printf("HEAP META:   0x%x <-> 0x%x\n", HEAP_START, K_HEAP_START);
+    uart_printf("HEAP:        0x%x <-> 0x%x\n", K_HEAP_START, HEAP_START + HEAP_SIZE);
+    uart_printf("\n\n");
 
 
     // Initialize MMU table for the kernel
@@ -482,11 +482,11 @@ u64* mem_init()
             u64 res = mmu_virt_to_phys(table, test_addr, &result_addr);
             if(!res)
             {
-                printf("0x%llx -> 0x%llx\n", test_addr, result_addr);
+                uart_printf("0x%llx -> 0x%llx\n", test_addr, result_addr);
             }
             else
             {
-                printf("0x%llx is not mapped.\n", test_addr);
+                uart_printf("0x%llx is not mapped.\n", test_addr);
             }
         }
 
@@ -496,16 +496,16 @@ u64* mem_init()
         mmu_virt_to_phys_buffer(my_buffer_mapping, table, 0x10001800, element_size * element_count)
         u64 is_good = mmu_virt_to_phys_buffer_return_value(my_buffer_mapping);
 
-        printf("%llu\n", is_good);
+        uart_printf("%llu\n", is_good);
 
         for(u64 i = 0; i < mmu_virt_to_phys_buffer_page_count(my_buffer_mapping); i++)
         {
-            printf("page%llu is 0x%llx\n", i, mmu_virt_to_phys_buffer_pages(my_buffer_mapping)[i]);
+            uart_printf("page%llu is 0x%llx\n", i, mmu_virt_to_phys_buffer_pages(my_buffer_mapping)[i]);
         }
         for(u64 i = 0; i < element_count; i++)
         {
             u64 addr = mmu_virt_to_phys_buffer_get_address(my_buffer_mapping, i * element_size);
-            printf("%llu : 0x%llx\n", i, addr);
+            uart_printf("%llu : 0x%llx\n", i, addr);
         }
 
     }

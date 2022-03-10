@@ -46,7 +46,7 @@
 #define osStrtok_r(s, delim, last) strtok_r(s, delim, last)
  
 //Format string
-#define osSprintf(dest, ...) sprintf(dest, __VA_ARGS__)
+#define osSprintf(dest, ...) stbsp_sprintf(dest, __VA_ARGS__)
  
 //Format string
 #define osVsnprintf(dest, size, format, ap) vsnprintf(dest, size, format, ap)
