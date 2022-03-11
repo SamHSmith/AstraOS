@@ -4,7 +4,6 @@
 #define __TYPES_H
 
 #include <stdint.h>
-#include <float.h>
 
 typedef int8_t s8;
 typedef uint8_t u8;
