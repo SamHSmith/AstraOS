@@ -95,6 +95,7 @@ typedef struct Kallocation
     u64 page_count; // DO NOT TOUCH
 } Kallocation;
 
+// if the allocation fails Kallocation.memory will be zero.
 Kallocation kalloc_pages(u64 page_count)
 {
     spinlock_acquire(&KERNEL_MEMORY_SPINLOCK); // TODO maybe move this down so we don't lock local work?

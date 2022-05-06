@@ -191,4 +191,36 @@ u64 AOS_process_get_program_argument_file(u64 argument_index);
 // create file
 // create directory
 
+// operating system - systema operatorius
+// astri systema operatorius - The heaven's operating system
+
+// kernel - nucleus
+// linea - array
+
+u64 aso_charta_media_crea(u64 numerus_paginae, u64* index_ad_ansam_chartae);
+u64 aso_charta_media_omitte(u64 ansa_chartae);
+u64 aso_charta_media_magnitudem_disce(u64 ansa_chartae);
+u64 aso_charta_media_pone(void* index_ad_locum_ponendi, u64 ansa_chartae);
+u64 aso_charta_media_deme(void* index_ad_locum_charta_positus_est, u64 ansa_chartae);
+u64 aso_charta_media_da(u64 ansa_chartae, u64 ansa_processus_alieni, u64* index_ad_ansam_alienum);
+
+// elementa synchronizatoria, aka synchronization primitives
+
+// semaphorum, aka semaphore
+
+// Refert unum si actio felix est, si non refert zerum.
+u64 aso_semaphorum_crea(s64 pretium_primus, s64 pretium_maximum, u64* index_ad_ansam_semaphori);
+
+// index zerum esse potest
+// Refert unum si ansa recta est et pretium semaphori cum numerus_suscitandi est minor quam pretium maximum semaphori.
+// Si non refert zerum.
+u64 aso_semaphorum_suscita(u64 ansam_semaphori, s64 numerus_suscitandi, s64* index_ad_pretium_prius);
+
+// Refert unum si ansa recta alioqui refert zerum.
+u64 aso_semaphorum_expecta(u64 ansam_semaphori);
+
+// potestas suscitandi
+
+// potestas expectandi
+
 #endif

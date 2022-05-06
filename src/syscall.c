@@ -3170,6 +3170,41 @@ void syscall_file_set_name(u64 hart)
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_charta_media_crea(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_numerus_paginae = frame->regs[11];
+    u64 user_index_ad_ansam_chartae = frame->regs[12];
+
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_index_ad_ansam_chartae, sizeof(u64))
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer) || (user_index_ad_ansam_chartae % sizeof(u64)) != 0)
+    { // failed
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        // do stuff
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
 {
     u64 call_num = frame->regs[10];
@@ -3297,6 +3332,8 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_directory_create_file(hart); }
     else if(call_num == 70)
     { syscall_file_set_name(hart); }
+    else if(call_num == 71)
+    { syscall_charta_media_crea(hart); }
     else
     { uart_printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

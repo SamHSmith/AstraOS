@@ -4,6 +4,11 @@
 
 #include "atomics.h"
 
+// sera et legendi et scribendi - lock of both reading and writing
+// sera legendi scribendi
+// scribendi legendi sera
+// SLSERA
+
 typedef struct
 {
     atomic_s64 write;

@@ -117,24 +117,6 @@ AOS_get_cpu_time:
     ecall
     ret
 
-/*
-u64 AOS_file_get_name(u64 file_id, u8* buf, u64 buf_size); // done 15
-u64 AOS_file_git_size(u64 file_id); // not done 16
-u64 AOS_file_get_block_count(u64 file_id); // not done 17
-u64 AOS_file_set_size(u64 file_id, u64 new_size); // not done 18
-u64 AOS_file_read_blocks(u64 file_id, u64* op_array, u64 op_count); // not done 19
-u64 AOS_file_write_blocks(u64 file_id, u64* op_array, u64 op_count); // not done 20
- 
-u64 AOS_directory_get_name(u64 dir_id, u8* buf, u64 buf_size); // not done 21
-u64 AOS_directory_get_subdirectories(u64 dir_id, u64* buf, 64 buf_size); // not done 22
-u64 AOS_directory_get_files(u64 dir_id, u64* buf, u64 buf_size); // sorta done 23
-u64 AOS_directory_add_subdirectory(u64 dir_id, u64 subdirectory); // not done 24
-u64 AOS_directory_add_file(u64 dir_id, u64 file_id); // not done 25
-
-u64 AOS_create_process_from_file(u64 file_id, u64* pid); // done 26
-u64 AOS_surface_consumer_create(u64 foriegn_pid, u64* surface_consumer); // not done 27
-*/
-
 .global AOS_file_get_name
 AOS_file_get_name:
     mv a3, a2
@@ -522,3 +504,15 @@ AOS_file_set_name:
     addi a0, x0, 70
     ecall
     ret
+
+
+.global aso_charta_medii_crea
+aso_charta_medii_crea:
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 71
+    ecall
+    ret
+
+#u64 aso_charta_medii_omitte(u64 ansa_chartae);
+#u64 aso_charta_medii_magnitudem_disce(u64 ansa_chartae);
