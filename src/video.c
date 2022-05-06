@@ -4,12 +4,12 @@ typedef struct
     Kallocation alloc;
     u32 width;
     u32 height;
-    float data[];
+    u8 data[];
 } Framebuffer;
 
 Framebuffer* framebuffer_create(u32 width, u32 height)
 {
-    u64 byte_count = sizeof(Framebuffer) + (width*height*4*4);
+    u64 byte_count = sizeof(Framebuffer) + (width*height*3);
     Kallocation k = kalloc_pages((byte_count + PAGE_SIZE - 1) / PAGE_SIZE);
     assert(k.memory != 0, "the allocation for the framebuffer was successful");
     Framebuffer* fb = (Framebuffer*)k.memory;

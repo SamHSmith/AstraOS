@@ -38,7 +38,7 @@ void oak_send_video(Framebuffer* framebuffer)
     packet.base.size = sizeof(packet);
     packet.base.device = 9;
     packet.frame_ptr = framebuffer->data;
-    packet.frame_size = framebuffer->width * framebuffer->height * 4 * 4;
+    packet.frame_size = framebuffer->width * framebuffer->height * 3;
     send_oak_packet(&packet);
 
     u64 end_time = *mtime;

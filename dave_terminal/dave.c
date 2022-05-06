@@ -841,10 +841,9 @@ void _start()
                 for(u64 x = 0; x < fb->width; x++)
                 {
                     u64 pixel = x + y * fb->width;
-                    fb->data[pixel*4 + 0] = 80.0/255.0;
-                    fb->data[pixel*4 + 1] = 6.0/255.0;
-                    fb->data[pixel*4 + 2] = 96.0/255.0;
-                    fb->data[pixel*4 + 3] = 1.0;
+                    fb->data[pixel*3 + 0] = 80;
+                    fb->data[pixel*3 + 1] = 6;
+                    fb->data[pixel*3 + 2] = 96;
 
                     u64 column = x/8;
                     u64 row = (y + text_offset)/16;
@@ -858,10 +857,9 @@ void _start()
                         u8 character = draw_text_buffer[lines[row].start_index + (s64)column];
                         if(font8_16_pixel_filled(character, local_x, local_y))
                         {
-                            fb->data[pixel*4 + 0] = 240.0/255.0;
-                            fb->data[pixel*4 + 1] = 230.0/255.0;
-                            fb->data[pixel*4 + 2] = 230.0/255.0;
-                            fb->data[pixel*4 + 3] = 1.0;
+                            fb->data[pixel*3 + 0] = 240;
+                            fb->data[pixel*3 + 1] = 230;
+                            fb->data[pixel*3 + 2] = 230;
                         }
                     }
                 }

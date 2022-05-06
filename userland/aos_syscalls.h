@@ -11,7 +11,7 @@ typedef struct
     u64 _pad[2];
     u32 width;
     u32 height;
-    float data[];
+    u8 data[];
 } AOS_Framebuffer;
 
 u64 AOS_surface_commit(u64 surface_slot);

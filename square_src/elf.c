@@ -228,9 +228,9 @@ while(1)
             square_y = (-cursor_y + 0.5) * 2.0;
         }
 
-        f32 red = (sineF32((time*M_PI)/2.0) + 1.0) / 2.0;
-        f32 green = (sineF32((time*M_PI)/3.0) + 1.0) / 2.0;
-        f32 blue = (sineF32((time*M_PI)/5.0) + 1.0) / 2.0;
+        f32 red =   255.0 * (sineF32((time*M_PI)/2.0) + 1.0) / 2.0;
+        f32 green = 255.0 * (sineF32((time*M_PI)/3.0) + 1.0) / 2.0;
+        f32 blue =  255.0 * (sineF32((time*M_PI)/5.0) + 1.0) / 2.0;
 
         f32 s = cosineF32(time/10.0 * 2*M_PI);
         f32 c = sineF32(time/10.0 * 2*M_PI);
@@ -279,17 +279,15 @@ while(1)
                     f32 cover = cover1;
                     if(cover2 < cover1) { cover = cover2; }
 
-                    fb->data[i*4 + 0] = red * cover;
-                    fb->data[i*4 + 1] = green * cover;
-                    fb->data[i*4 + 2] = blue * cover;
-                    fb->data[i*4 + 3] = 0.6 * cover;
+                    fb->data[i*3 + 0] = red * cover;
+                    fb->data[i*3 + 1] = green * cover;
+                    fb->data[i*3 + 2] = blue * cover;
                 }
                 else
                 {
-                    fb->data[i*4 + 0] = 0.0;
-                    fb->data[i*4 + 1] = 0.0;
-                    fb->data[i*4 + 2] = 0.0;
-                    fb->data[i*4 + 3] = 0.0;
+                    fb->data[i*3 + 0] = 0.0;
+                    fb->data[i*3 + 1] = 0.0;
+                    fb->data[i*3 + 2] = 0.0;
                 }
                 pfx += dpfx;
             }

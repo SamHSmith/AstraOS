@@ -189,13 +189,13 @@ void render_function(u64 threadid, u64 total_threads)
                 { areas[i].canvas_end = start-1; }
             }
 
-            f32 red = 0.2;
-            f32 green = 0.2;
-            f32 blue = 70.0/255.0;
+            u8 red = 51;
+            u8 green = 51;
+            u8 blue = 70;
             if(i + 1 == window_count && (is_moving_window || is_resizing_window))
-            { blue = 180.0/255.0; }
+            { blue = 180; }
             else if(i + 1 == window_count)
-            { blue = 140.0/255.0; }
+            { blue = 140; }
 
             areas[insert_index].canvas_start = start;
             areas[insert_index].canvas_end = end;
@@ -292,27 +292,24 @@ void render_function(u64 threadid, u64 total_threads)
     {
         u64 i = x + (y * render_buffer->width);
 
-        render_buffer->data[i*4 + 0] = 17.0/255.0;
-        render_buffer->data[i*4 + 1] = 80.0/255.0;
-        render_buffer->data[i*4 + 2] = 128.0/255.0;
-        render_buffer->data[i*4 + 3] = 1.0;
+        render_buffer->data[i*3 + 0] = 17;
+        render_buffer->data[i*3 + 1] = 80;
+        render_buffer->data[i*3 + 2] = 128;
 
         u64 c = x / 8;
         u64 r = y / 16;
 
         if(r == slot_index)
         {
-            render_buffer->data[i*4 + 0] = 28.0/255.0;
-            render_buffer->data[i*4 + 1] = 133.0/255.0;
-            render_buffer->data[i*4 + 2] = 213.0/255.0;
-            render_buffer->data[i*4 + 3] = 1.0;
+            render_buffer->data[i*3 + 0] = 28;
+            render_buffer->data[i*3 + 1] = 133;
+            render_buffer->data[i*3 + 2] = 213;
         }
         else if(r < slot_count)
         {
-            render_buffer->data[i*4 + 0] = 8.0/255.0;
-            render_buffer->data[i*4 + 1] = 37.0/255.0;
-            render_buffer->data[i*4 + 2] = 57.0/255.0;
-            render_buffer->data[i*4 + 3] = 1.0;
+            render_buffer->data[i*3 + 0] = 8;
+            render_buffer->data[i*3 + 1] = 37;
+            render_buffer->data[i*3 + 2] = 57;
         }
 
         u64 here = 0;
@@ -330,10 +327,9 @@ void render_function(u64 threadid, u64 total_threads)
 
         if(here)
         {
-            render_buffer->data[i*4 + 0] = 0.909;
-            render_buffer->data[i*4 + 1] = 0.89;
-            render_buffer->data[i*4 + 2] = 0.772;
-            render_buffer->data[i*4 + 3] = 1.0;
+            render_buffer->data[i*3 + 0] = 232;
+            render_buffer->data[i*3 + 1] = 227;
+            render_buffer->data[i*3 + 2] = 197;
         }
 
         if(area_index < area_count && areas[area_index].canvas_end < x)
@@ -354,17 +350,16 @@ void render_function(u64 threadid, u64 total_threads)
             {
                 u64 local_x = (x - (u64)a.canvas_start) + a.xoffset;
                 u64 j = local_x + (a.y_index * a.buffer->width);
-                render_buffer->data[i*4 + 0] = a.buffer->data[j*4 + 0];
-                render_buffer->data[i*4 + 1] = a.buffer->data[j*4 + 1];
-                render_buffer->data[i*4 + 2] = a.buffer->data[j*4 + 2];
-                render_buffer->data[i*4 + 3] = 1.0;
+                render_buffer->data[i*3 + 0] = a.buffer->data[j*3 + 0];
+                render_buffer->data[i*3 + 1] = a.buffer->data[j*3 + 1];
+                render_buffer->data[i*3 + 2] = a.buffer->data[j*3 + 2];
             }
             else
             {
-                render_buffer->data[i*4 + 0] = a.red;
-                render_buffer->data[i*4 + 1] = a.green;
-                render_buffer->data[i*4 + 2] = a.blue;
-                render_buffer->data[i*4 + 3] = 1.0;
+                render_buffer->data[i*3 + 0] = a.red;
+                render_buffer->data[i*3 + 1] = a.green;
+                render_buffer->data[i*3 + 2] = a.blue;
+                render_buffer->data[i*3 + 3] = 1.0;
             }
         }
     }
@@ -375,7 +370,7 @@ void render_function(u64 threadid, u64 total_threads)
 }
 
 #define WORKER_THREAD_STACK_SIZE (8+((sizeof(RenderArea)*300*2)/4096))
-#define THREAD_COUNT 8
+#define THREAD_COUNT 4
 #define JOBS_PER_THREAD 8
 
 u64 render_work_semaphore;
@@ -990,27 +985,24 @@ while(1) {
         {
             u64 i = x + (y * fb->width);
 
-            fb->data[i*4 + 0] = 17.0/255.0;
-            fb->data[i*4 + 1] = 80.0/255.0;
-            fb->data[i*4 + 2] = 128.0/255.0;
-            fb->data[i*4 + 3] = 1.0;
+            fb->data[i*3 + 0] = 17;
+            fb->data[i*3 + 1] = 80;
+            fb->data[i*3 + 2] = 128;
 
             u64 c = x / 8;
             u64 r = y / 16;
 
             if(r == slot_index)
             {
-                fb->data[i*4 + 0] = 28.0/255.0;
-                fb->data[i*4 + 1] = 133.0/255.0;
-                fb->data[i*4 + 2] = 213.0/255.0;
-                fb->data[i*4 + 3] = 1.0;
+                fb->data[i*3 + 0] = 28;
+                fb->data[i*3 + 1] = 133;
+                fb->data[i*3 + 2] = 213;
             }
             else if(r < slot_count)
             {
-                fb->data[i*4 + 0] = 8.0/255.0;
-                fb->data[i*4 + 1] = 37.0/255.0;
-                fb->data[i*4 + 2] = 57.0/255.0;
-                fb->data[i*4 + 3] = 1.0;
+                fb->data[i*3 + 0] = 8;
+                fb->data[i*3 + 1] = 37;
+                fb->data[i*3 + 2] = 57;
             }
 
             u64 here = 0;
@@ -1028,10 +1020,9 @@ while(1) {
 
             if(here)
             {
-                fb->data[i*4 + 0] = 0.909;
-                fb->data[i*4 + 1] = 0.89;
-                fb->data[i*4 + 2] = 0.772;
-                fb->data[i*4 + 3] = 1.0;
+                fb->data[i*3 + 0] = 232;
+                fb->data[i*3 + 1] = 227;
+                fb->data[i*3 + 2] = 197;
             }
         }
 
@@ -1050,13 +1041,13 @@ while(1) {
             else if(windows[j].y + (s64)windows[j].height > fb->height)
             { end_y = (u64)((s64)fb->height - windows[j].y); }
 
-            f32 red = 0.2;
-            f32 green = 0.2;
-            f32 blue = 70.0/255.0;
+            u8 red = 51;
+            u8 green = 51;
+            u8 blue = 70;
             if(j + 1 == window_count && (is_moving_window || is_resizing_window))
-            { blue = 180.0/255.0; }
+            { blue = 180; }
             else if(j + 1 == window_count)
-            { blue = 140.0/255.0; }
+            { blue = 140.0; }
 
             if(!windows[j].we_have_frame ||
                 windows[j].width <= 2*BORDER_SIZE || windows[j].height <= 2*BORDER_SIZE)
@@ -1071,10 +1062,9 @@ while(1) {
                     u64 external_y = (u64)((s64)y + windows[j].y);
                     u64 i = external_x + (external_y * fb->width);
 
-                    fb->data[i*4 + 0] = red;
-                    fb->data[i*4 + 1] = green;
-                    fb->data[i*4 + 2] = blue;
-                    fb->data[i*4 + 3] = 1.0;
+                    fb->data[i*3 + 0] = red;
+                    fb->data[i*3 + 1] = green;
+                    fb->data[i*3 + 2] = blue;
                 }
                 continue;
             }
@@ -1099,23 +1089,21 @@ while(1) {
 #if 0
 // this is the good version with clamping and alpha
                     float cover = 1.0 - clamp_01(windows[j].fb->data[k*4 + 3]);
-        fb->data[i*4 + 0] = clamp_01(fb->data[i*4 + 0] * cover + clamp_01(windows[j].fb->data[k*4 + 0]));
-        fb->data[i*4 + 1] = clamp_01(fb->data[i*4 + 1] * cover + clamp_01(windows[j].fb->data[k*4 + 1]));
-        fb->data[i*4 + 2] = clamp_01(fb->data[i*4 + 2] * cover + clamp_01(windows[j].fb->data[k*4 + 2]));
+        fb->data[i*3 + 0] = clamp_01(fb->data[i*3 + 0] * cover + clamp_01(windows[j].fb->data[k*4 + 0]));
+        fb->data[i*3 + 1] = clamp_01(fb->data[i*3 + 1] * cover + clamp_01(windows[j].fb->data[k*4 + 1]));
+        fb->data[i*3 + 2] = clamp_01(fb->data[i*3 + 2] * cover + clamp_01(windows[j].fb->data[k*4 + 2]));
 #else
 // this is the trash version with no clamping and no alpha
-        fb->data[i*4 + 0] = windows[j].fb->data[k*4 + 0];
-        fb->data[i*4 + 1] = windows[j].fb->data[k*4 + 1];
-        fb->data[i*4 + 2] = windows[j].fb->data[k*4 + 2];
+        fb->data[i*3 + 0] = windows[j].fb->data[k*3 + 0];
+        fb->data[i*3 + 1] = windows[j].fb->data[k*3 + 1];
+        fb->data[i*3 + 2] = windows[j].fb->data[k*3 + 2];
 #endif
-        fb->data[i*4 + 3] = 1.0;
                 }
                 else
                 {
-                    fb->data[i*4 + 0] = red;
-                    fb->data[i*4 + 1] = green;
-                    fb->data[i*4 + 2] = blue;
-                    fb->data[i*4 + 3] = 1.0;
+                    fb->data[i*3 + 0] = red;
+                    fb->data[i*3 + 1] = green;
+                    fb->data[i*3 + 2] = blue;
                 }
             }
         }
@@ -1139,10 +1127,9 @@ while(1) {
                 if(x >= fb->width || y >= fb->height)
                 { continue; }
                 u64 i = x + (y * fb->width);
-                fb->data[i*4 + 0] = 1.0;
-                fb->data[i*4 + 1] = 1.0;
-                fb->data[i*4 + 2] = 1.0;
-                fb->data[i*4 + 3] = 1.0;
+                fb->data[i*3 + 0] = 255;
+                fb->data[i*3 + 1] = 255;
+                fb->data[i*3 + 2] = 255;
             }
         }
 
@@ -1162,10 +1149,9 @@ while(1) {
             if(font8_16_pixel_filled(font_id, x%8, y - bottom_banner_y))
             {
                 u64 i = (x + xoff) + (y * fb->width);
-                fb->data[i*4 + 0] = (f32) (fb->data[i*4 + 0] < 0.5);
-                fb->data[i*4 + 1] = (f32) (fb->data[i*4 + 1] < 0.5);
-                fb->data[i*4 + 2] = (f32) (fb->data[i*4 + 2] < 0.5);
-                fb->data[i*4 + 3] = 1.0;
+                fb->data[i*3 + 0] = 255 * (fb->data[i*3 + 0] < 127);
+                fb->data[i*3 + 1] = 255 * (fb->data[i*3 + 1] < 127);
+                fb->data[i*3 + 2] = 255 * (fb->data[i*3 + 2] < 127);
             }
         }
 
@@ -1189,10 +1175,9 @@ while(1) {
             if(font8_16_pixel_filled(font_id, x%8, y - bottom_banner_up))
             {
                 u64 i = (x+passed_xoff) + (y * fb->width);
-                fb->data[i*4 + 0] = (f32) (fb->data[i*4 + 0] < 0.5);
-                fb->data[i*4 + 1] = (f32) (fb->data[i*4 + 1] < 0.5);
-                fb->data[i*4 + 2] = (f32) (fb->data[i*4 + 2] < 0.5);
-                fb->data[i*4 + 3] = 1.0;
+                fb->data[i*3 + 0] = 255 * (fb->data[i*3 + 0] < 127);
+                fb->data[i*3 + 1] = 255 * (fb->data[i*3 + 1] < 127);
+                fb->data[i*3 + 2] = 255 * (fb->data[i*3 + 2] < 127);
             }
         }
         user_assert(AOS_surface_commit(0), "commited successfully");
