@@ -98,10 +98,8 @@ typedef struct Kallocation
 // if the allocation fails Kallocation.memory will be zero.
 Kallocation kalloc_pages(u64 page_count)
 {
-    spinlock_acquire(&KERNEL_MEMORY_SPINLOCK); // TODO maybe move this down so we don't lock local work?
     if(page_count == 0)
     {
-        spinlock_release(&KERNEL_MEMORY_SPINLOCK);
         Kallocation al = {0};
         return al;
     }
@@ -119,7 +117,6 @@ Kallocation kalloc_pages(u64 page_count)
 
     if(a_size < 0)
     {
-        spinlock_release(&KERNEL_MEMORY_SPINLOCK);
         Kallocation al = {0};
         return al;
     }
@@ -129,6 +126,9 @@ Kallocation kalloc_pages(u64 page_count)
     {
         if((K_TABLE_COUNT - a_size) > 1) { a_size += 1; allocation_splits++; }
     }
+
+
+    spinlock_acquire(&KERNEL_MEMORY_SPINLOCK);
     struct KmemTable* table = K_MEMTABLES[a_size];
     u64 local_size_shift = K_TABLE_COUNT -1 - a_size;
 
@@ -168,9 +168,12 @@ Kallocation kalloc_pages(u64 page_count)
         }
     }
     Kallocation al = {0};
-    // HEAP_START isn't always 4096 aligned so the first page will be smaller in some cases.
-    al.memory = (void*)((HEAP_START - (HEAP_START % PAGE_SIZE)) + (page_address * PAGE_SIZE));
-    al.page_count = page_count;
+    if(page_address)
+    {
+        // HEAP_START isn't always 4096 aligned so the first page will be smaller in some cases.
+        al.memory = (void*)((HEAP_START & (~0xfff)) + (page_address * PAGE_SIZE));
+        al.page_count = page_count;
+    }
     spinlock_release(&KERNEL_MEMORY_SPINLOCK);
     return al;
 }
