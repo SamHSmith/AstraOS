@@ -917,6 +917,14 @@ while(1) {
     rwlock_acquire_read(&thunder_lock);
 //AOS_H_printf("temp slept for %lf seconds\n", AOS_H_time_get_seconds() - pre_sleep);
 
+
+    /// TESTING
+
+    u64 ansa_chartae;
+    AOS_H_printf("%llu, ansa est %llu\n", aso_charta_media_crea(1000, &ansa_chartae), ansa_chartae);
+
+    /// END TESTING
+
     AOS_Framebuffer* fb = 0x54000;
     u64 fb_page_count = AOS_surface_acquire(0, 0, 0);
     if(AOS_surface_acquire(0, fb, fb_page_count))

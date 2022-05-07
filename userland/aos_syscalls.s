@@ -506,8 +506,8 @@ AOS_file_set_name:
     ret
 
 
-.global aso_charta_medii_crea
-aso_charta_medii_crea:
+.global aso_charta_media_crea
+aso_charta_media_crea:
     mv a2, a1
     mv a1, a0
     addi a0, x0, 71

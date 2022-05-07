@@ -3199,6 +3199,19 @@ void syscall_charta_media_crea(u64 hart)
     else
     {
         // do stuff
+        u64 ansa_universa;
+        if(!charta_media_crea(user_numerus_paginae, &ansa_universa))
+        {
+            frame->regs[10] = 0;
+        }
+        else
+        {
+            rwlock_acquire_write(&process->process_lock);
+            u64 ansa_processus = processus_chartam_mediam_crea(process, ansa_universa);
+            rwlock_release_write(&process->process_lock);
+            frame->regs[10] = 1;
+            *((u64*)mmu_virt_to_phys_buffer_get_address(my_buffer, 0)) = ansa_processus;
+        }
     }
 
     current_thread->program_counter += 4;

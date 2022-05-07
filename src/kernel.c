@@ -58,6 +58,8 @@ void assert(u64 stat, char* error)
 #include "libfuncs.c"
 
 #include "memory.c"
+#include "charta_media.c"
+
 #include "libfuncs2.c"
 #include "cyclone_crypto/hash/sha512.h"
 
@@ -188,8 +190,25 @@ void kmain()
     spinlock_acquire(&KERNEL_SPINLOCK);
     KERNEL_START_OTHER_HARTS = 0;
 
-    uart_printf("Pre file testing: "); mem_debug_dump_table_counts(1);
+    // initialize middle buffers array
+    nucleus_lineam_chartarum_mediarum_initia();
+
+    uart_printf("Pre testing: "); mem_debug_dump_table_counts(1);
     /* TESTING */
+
+    //test middle buffers
+
+    u64 ansa_chartae;
+    assert(charta_media_crea(1000, &ansa_chartae), "charta_media_crea succeeds");
+    uart_printf("post create : "); mem_debug_dump_table_counts(1);
+    uart_printf("allocation size is %llu\n", charta_media_calculum_possessorum_augmenta(ansa_chartae).page_count);
+    chartam_mediam_aliena(ansa_chartae);
+    uart_printf("post free : "); mem_debug_dump_table_counts(1);
+    chartam_mediam_aliena(ansa_chartae);
+    uart_printf("post second free : "); mem_debug_dump_table_counts(1);
+
+
+
     u64 dir_id = kernel_directory_create_imaginary("Über directory");
     u64 dir_name_len = kernel_directory_get_name(dir_id, 0, 0);
     char dir_name[dir_name_len];
