@@ -922,6 +922,9 @@ while(1) {
 
     u64 ansa_chartae;
     AOS_H_printf("%llu, ansa est %llu\n", aso_charta_media_crea(1000, &ansa_chartae), ansa_chartae);
+    AOS_H_printf("ante omittendum magnitudo = %llu\n", aso_chartae_mediae_magnitudem_disce(ansa_chartae));
+    aso_chartam_mediam_omitte(ansa_chartae);
+    AOS_H_printf("post omittendum magnitudo = %llu\n", aso_chartae_mediae_magnitudem_disce(ansa_chartae));
 
     /// END TESTING
 

@@ -22,7 +22,7 @@ void nucleus_lineam_chartarum_mediarum_initia() // kernel, initiate the array of
 
 // allocation - adsignatio - distribution or allotment of land - the plot of land granted - allocation
 
-void chartam_mediam_aliena(u64 ansa_chartae)
+void chartam_mediam_omitte(u64 ansa_chartae)
 {
     rwlock_acquire_read(&NUCLEUS_SLSERA_LINEAE_CHARTARUM_MEDIARUM);
     assert(ansa_chartae < NUCLEUS_MAGNITUDO_LINEAE_CHARTARUM_MEDIARUM, "handle is within range");

@@ -3211,7 +3211,113 @@ void syscall_charta_media_crea(u64 hart)
             rwlock_release_write(&process->process_lock);
             frame->regs[10] = 1;
             *((u64*)mmu_virt_to_phys_buffer_get_address(my_buffer, 0)) = ansa_processus;
+
+            chartam_mediam_omitte(ansa_universa);
         }
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_chartam_mediam_omitte(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_ansa_chartae = frame->regs[11];
+
+    {
+        rwlock_acquire_read(&process->process_lock);
+
+        u8 was_valid = 0;
+        ProcessusChartaMedia buffer_to_be_destroyed;
+        if(user_ansa_chartae < process->magnitudo_lineae_chartarum_mediarum)
+        {
+            ProcessusChartaMedia* chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
+            spinlock_acquire(&chartae[user_ansa_chartae].sera_versandi);
+            if(chartae[user_ansa_chartae].si_creata_et_numerus_ponendi > 0)
+            {
+                buffer_to_be_destroyed = chartae[user_ansa_chartae];
+                chartae[user_ansa_chartae].si_creata_et_numerus_ponendi = 0;
+                was_valid = 1;
+            }
+            spinlock_release(&chartae[user_ansa_chartae].sera_versandi);
+        }
+        rwlock_release_read(&process->process_lock);
+
+        if(was_valid) // then forget about the buffer
+        {
+            rwlock_acquire_write(&process->process_lock);
+
+            for(u64 i = 0; i + 1 < buffer_to_be_destroyed.si_creata_et_numerus_ponendi; i++)
+            {
+                // TODO unmap buffers
+            }
+            chartam_mediam_omitte(buffer_to_be_destroyed.ansa_chartae_mediae_superae);
+
+            rwlock_release_write(&process->process_lock);
+            frame->regs[10] = 1;
+        }
+        else
+        {
+            frame->regs[10] = 0;
+        }
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_chartae_mediae_magnitudem_disce(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_ansa_chartae = frame->regs[11];
+
+    {
+        rwlock_acquire_read(&process->process_lock);
+
+        if(user_ansa_chartae < process->magnitudo_lineae_chartarum_mediarum)
+        {
+            ProcessusChartaMedia* chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
+            spinlock_acquire(&chartae[user_ansa_chartae].sera_versandi);
+
+            if(chartae[user_ansa_chartae].si_creata_et_numerus_ponendi > 0)
+            {
+                frame->regs[10] = chartae[user_ansa_chartae].adsignatio_chartae_mediae_superae.page_count;
+            }
+            else
+            { frame->regs[10] = 0; }
+
+            spinlock_release(&chartae[user_ansa_chartae].sera_versandi);
+        }
+        rwlock_release_read(&process->process_lock);
     }
 
     current_thread->program_counter += 4;
@@ -3347,6 +3453,10 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_file_set_name(hart); }
     else if(call_num == 71)
     { syscall_charta_media_crea(hart); }
+    else if(call_num == 72)
+    { syscall_chartam_mediam_omitte(hart); }
+    else if(call_num == 73)
+    { syscall_chartae_mediae_magnitudem_disce(hart); }
     else
     { uart_printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

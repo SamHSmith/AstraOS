@@ -1176,6 +1176,7 @@ typedef struct
     // number of placements is actually this var minus 1
     u32 si_creata_et_numerus_ponendi; // is_initialized and number of placement
     Spinlock sera_versandi; // lock of spinning
+    u64 ansa_chartae_mediae_superae;
     Kallocation adsignatio_chartae_mediae_superae; // allocation of the above middle buffer
     Kallocation adsignatio_lineae_locorum_ponendi; // allocation of array of locations of placement
 } ProcessusChartaMedia; // Of process, Middle Buffer
@@ -1193,6 +1194,7 @@ u64 processus_chartam_mediam_crea(Process* process, u64 ansa_chartae)
         {
             chartae[i].si_creata_et_numerus_ponendi = 1;
             spinlock_create(&chartae[i].sera_versandi);
+            chartae[i].ansa_chartae_mediae_superae = ansa_chartae;
             chartae[i].adsignatio_chartae_mediae_superae = al;
             chartae[i].adsignatio_lineae_locorum_ponendi.page_count = 0;
             return i;
@@ -1221,6 +1223,7 @@ u64 processus_chartam_mediam_crea(Process* process, u64 ansa_chartae)
     ProcessusChartaMedia* chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
     chartae[index].si_creata_et_numerus_ponendi = 1;
     spinlock_create(&chartae[index].sera_versandi);
+    chartae[index].ansa_chartae_mediae_superae = ansa_chartae;
     chartae[index].adsignatio_chartae_mediae_superae = al;
     chartae[index].adsignatio_lineae_locorum_ponendi.page_count = 0;
     return index;

@@ -202,9 +202,9 @@ void kmain()
     assert(charta_media_crea(1000, &ansa_chartae), "charta_media_crea succeeds");
     uart_printf("post create : "); mem_debug_dump_table_counts(1);
     uart_printf("allocation size is %llu\n", charta_media_calculum_possessorum_augmenta(ansa_chartae).page_count);
-    chartam_mediam_aliena(ansa_chartae);
+    chartam_mediam_omitte(ansa_chartae);
     uart_printf("post free : "); mem_debug_dump_table_counts(1);
-    chartam_mediam_aliena(ansa_chartae);
+    chartam_mediam_omitte(ansa_chartae);
     uart_printf("post second free : "); mem_debug_dump_table_counts(1);
 
 

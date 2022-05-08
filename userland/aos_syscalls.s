@@ -514,5 +514,16 @@ aso_charta_media_crea:
     ecall
     ret
 
-#u64 aso_charta_medii_omitte(u64 ansa_chartae);
-#u64 aso_charta_medii_magnitudem_disce(u64 ansa_chartae);
+.global aso_chartam_mediam_omitte
+aso_chartam_mediam_omitte:
+    mv a1, a0
+    addi a0, x0, 72
+    ecall
+    ret
+
+.global aso_chartae_mediae_magnitudem_disce
+aso_chartae_mediae_magnitudem_disce:
+    mv a1, a0
+    addi a0, x0, 73
+    ecall
+    ret
