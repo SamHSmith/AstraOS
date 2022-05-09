@@ -527,3 +527,13 @@ aso_chartae_mediae_magnitudem_disce:
     addi a0, x0, 73
     ecall
     ret
+
+.global aso_chartam_mediam_pone
+aso_chartam_mediam_pone:
+    mv a4, a3
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 74
+    ecall
+    ret

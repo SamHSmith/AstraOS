@@ -1170,6 +1170,11 @@ void process_add_program_argument(Process* process, ProgramArgument argument)
     argument_array[index] = argument;
 }
 
+typedef struct
+{
+    u64 vaddr;
+    u64 numerus_paginae;
+} ProcessusLocusPonendiChartaeMediae;
 
 typedef struct
 {
@@ -1178,7 +1183,7 @@ typedef struct
     Spinlock sera_versandi; // lock of spinning
     u64 ansa_chartae_mediae_superae;
     Kallocation adsignatio_chartae_mediae_superae; // allocation of the above middle buffer
-    Kallocation adsignatio_lineae_locorum_ponendi; // allocation of array of locations of placement
+    Kallocation adsignatio_lineae_locorum_ponendi; // allocation of array of locations of placement, ProcessusLocusPonendiChartaeMediae array
 } ProcessusChartaMedia; // Of process, Middle Buffer
 
 // have write lock on process

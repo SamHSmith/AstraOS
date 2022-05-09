@@ -922,6 +922,15 @@ while(1) {
 
     u64 ansa_chartae;
     AOS_H_printf("%llu, ansa est %llu\n", aso_charta_media_crea(1000, &ansa_chartae), ansa_chartae);
+
+    u64* rando_addr = 0x123423000;
+
+    aso_chartam_mediam_pone(ansa_chartae, rando_addr, 0, 1);
+    aso_chartam_mediam_pone(ansa_chartae, rando_addr + 4096, 0, 1);
+
+    rando_addr[1] = 43;
+    AOS_H_printf("%llu == %llu\n", rando_addr[1], rando_addr[1+4096]);
+
     AOS_H_printf("ante omittendum magnitudo = %llu\n", aso_chartae_mediae_magnitudem_disce(ansa_chartae));
     aso_chartam_mediam_omitte(ansa_chartae);
     AOS_H_printf("post omittendum magnitudo = %llu\n", aso_chartae_mediae_magnitudem_disce(ansa_chartae));

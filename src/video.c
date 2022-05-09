@@ -1,4 +1,9 @@
 
+// TODO this file should not exist in it's current form.
+// Everything here has goto go, except a tiny sliver to do with
+// VO's. Still uncertain how we will do that though.
+// Video should be done by IPFC and ChartaMedia!
+
 typedef struct
 {
     Kallocation alloc;
