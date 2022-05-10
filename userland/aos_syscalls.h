@@ -197,11 +197,14 @@ u64 AOS_process_get_program_argument_file(u64 argument_index);
 // kernel - nucleus
 // linea - array
 
+// locus, quo chartam positus est - The location, where the buffer has been placed
+// index_ad_locum_quo_chartam_positus_est - pointer to the location where the buffer has been placed
+
 u64 aso_charta_media_crea(u64 numerus_paginae, u64* index_ad_ansam_chartae);
 u64 aso_chartam_mediam_omitte(u64 ansa_chartae);
 u64 aso_chartae_mediae_magnitudem_disce(u64 ansa_chartae);
 u64 aso_chartam_mediam_pone(u64 ansa_chartae, void* index_ad_locum_ponendi, u64 pagina_prima, u64 numerus_paginae);
-u64 aso_chartam_mediam_deme(u64 ansa_chartae, void* index_ad_locum_charta_positus_est);
+u64 aso_chartam_mediam_deme(u64 ansa_chartae, void* index_ad_locum_quo_chartam_positus_est);
 u64 aso_chartam_mediam_da(u64 ansa_chartae, u64 ansa_processus_alieni, u64* index_ad_ansam_alienum);
 
 // elementa synchronizatoria, aka synchronization primitives

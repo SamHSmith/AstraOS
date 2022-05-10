@@ -3262,9 +3262,9 @@ void syscall_chartam_mediam_omitte(u64 hart)
         {
             rwlock_acquire_write(&process->process_lock);
 
+            ProcessusLocusPonendiChartaeMediae* loca = buffer_to_be_destroyed.adsignatio_lineae_locorum_ponendi.memory;
             for(u64 i = 0; i + 1 < buffer_to_be_destroyed.si_creata_et_numerus_ponendi; i++)
             {
-                ProcessusLocusPonendiChartaeMediae* loca = buffer_to_be_destroyed.adsignatio_lineae_locorum_ponendi.memory;
                 Kallocation dummy;
                 dummy.memory = 0;
                 dummy.page_count = loca[i].numerus_paginae;
@@ -3353,7 +3353,7 @@ void syscall_chartam_mediam_pone(u64 hart)
 
 
     frame->regs[10] = 0;
-    if(user_index_ad_locum_ponendi & 0xff != 0 || user_numerus_paginae == 0)
+    if(user_index_ad_locum_ponendi & 0xfff != 0 || user_numerus_paginae == 0)
     {}
     else
     {
@@ -3375,7 +3375,7 @@ void syscall_chartam_mediam_pone(u64 hart)
         }
         rwlock_release_read(&process->process_lock);
 
-        if(was_valid) // then forget about the buffer
+        if(was_valid)
         {
             rwlock_acquire_write(&process->process_lock);                   // TODO allow memory allocation without locking all threads
             chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
@@ -3412,6 +3412,87 @@ void syscall_chartam_mediam_pone(u64 hart)
 
                 frame->regs[10] = 1;
             }
+
+            rwlock_release_write(&process->process_lock);
+        }
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
+void syscall_chartam_mediam_deme(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_ansa_chartae = frame->regs[11];
+    u64 user_index_ad_locum_quo_chartam_positus_est = frame->regs[12];
+
+
+    frame->regs[10] = 0;
+    {
+        rwlock_acquire_read(&process->process_lock);
+        ProcessusChartaMedia* chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
+
+        u8 found_match = 0;
+        ProcessusLocusPonendiChartaeMediae match;
+        if(user_ansa_chartae < process->magnitudo_lineae_chartarum_mediarum)
+        {
+            spinlock_acquire(&chartae[user_ansa_chartae].sera_versandi);
+
+            if(chartae[user_ansa_chartae].si_creata_et_numerus_ponendi > 0)
+            {
+                ProcessusChartaMedia* charta = chartae + user_ansa_chartae;
+                ProcessusLocusPonendiChartaeMediae* loca = charta->adsignatio_lineae_locorum_ponendi.memory;
+
+                u64 index_of_the_found = U64_MAX;
+                for(u64 i = 0; i + 1 < charta->si_creata_et_numerus_ponendi; i++)
+                {
+                    if(loca[i].vaddr == user_index_ad_locum_quo_chartam_positus_est)
+                    {
+                        found_match = 1;
+                        index_of_the_found = i;
+                        break;
+                    }
+                }
+                if(found_match)
+                {
+                    match = loca[index_of_the_found];
+                    for(u64 i = index_of_the_found; i + 2 < charta->si_creata_et_numerus_ponendi; i++)
+                    {
+                        loca[i] = loca[i+1];
+                    }
+                    charta->si_creata_et_numerus_ponendi--;
+                }
+            }
+
+            spinlock_release(&chartae[user_ansa_chartae].sera_versandi);
+        }
+        rwlock_release_read(&process->process_lock);
+
+        if(found_match) // then unmap the buffer at that location
+        {
+            rwlock_acquire_write(&process->process_lock);                   // TODO allow memory allocation without locking all threads
+
+            Kallocation dummy;
+            dummy.memory = 0;
+            dummy.page_count = match.numerus_paginae;
+
+            mmu_map_kallocation(process->mmu_table, dummy, match.vaddr, 0);
+            frame->regs[10] = 1;
 
             rwlock_release_write(&process->process_lock);
         }
@@ -3556,6 +3637,8 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_chartae_mediae_magnitudem_disce(hart); }
     else if(call_num == 74)
     { syscall_chartam_mediam_pone(hart); }
+    else if(call_num == 75)
+    { syscall_chartam_mediam_deme(hart); }
     else
     { uart_printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }
