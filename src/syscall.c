@@ -3502,6 +3502,92 @@ void syscall_chartam_mediam_deme(u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_chartam_mediam_da(u64 hart)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_ansa_chartae_inferae = frame->regs[11];
+    u64 user_ansa_processus_alieni = frame->regs[12];
+    u64 user_index_ad_ansam_alienam = frame->regs[13];
+
+    mmu_virt_to_phys_buffer(my_buffer, process->mmu_table, user_index_ad_ansam_alienam, sizeof(u64))
+
+    if(mmu_virt_to_phys_buffer_return_value(my_buffer) || (user_index_ad_ansam_alienam % sizeof(u64)) != 0)
+    { // failed
+        frame->regs[10] = 0;
+    }
+    else
+    {
+        u8 ansa_chartae_rata_est = 0;
+        u64 ansa_chartae_superae;
+
+        rwlock_acquire_read(&process->process_lock);
+        ProcessusChartaMedia* chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
+        if(user_ansa_chartae_inferae < process->magnitudo_lineae_chartarum_mediarum)
+        {
+            ProcessusChartaMedia* charta = chartae + user_ansa_chartae_inferae;
+            spinlock_acquire(&charta->sera_versandi);
+
+            if(charta->si_creata_et_numerus_ponendi)
+            {
+                ansa_chartae_rata_est = 1;
+                ansa_chartae_superae = charta->ansa_chartae_mediae_superae;
+                charta_media_calculum_possessorum_augmenta(ansa_chartae_superae); // increment reference counter so it won't get freed in the mean time
+            }
+
+            spinlock_release(&charta->sera_versandi);
+        }
+
+        u8 ansa_processus_alieni_rata_est = 0;
+        u64 foreign_pid;
+
+        OwnedProcess* ops = process->owned_process_alloc.memory;
+        if(user_ansa_processus_alieni < process->owned_process_count &&
+           ops[user_ansa_processus_alieni].is_initialized &&
+           ops[user_ansa_processus_alieni].is_alive)
+        {
+            ansa_processus_alieni_rata_est = 1;
+            foreign_pid = ops[user_ansa_processus_alieni].pid;
+        }
+        rwlock_release_read(&process->process_lock);
+
+        if(!ansa_chartae_rata_est || !ansa_processus_alieni_rata_est)
+        {
+            frame->regs[10] = 0;
+        }
+        else
+        {
+            Process* foreign_process = KERNEL_PROCESS_ARRAY[foreign_pid];
+            rwlock_acquire_write(&foreign_process->process_lock);
+            u64 ansa_processus = processus_chartam_mediam_crea(foreign_process, ansa_chartae_superae);
+            rwlock_release_write(&foreign_process->process_lock);
+            frame->regs[10] = 1;
+            *((u64*)mmu_virt_to_phys_buffer_get_address(my_buffer, 0)) = ansa_processus;
+        }
+
+        if(ansa_chartae_rata_est)
+        {
+            chartam_mediam_omitte(ansa_chartae_superae);
+        }
+    }
+
+    current_thread->program_counter += 4;
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
 {
     u64 call_num = frame->regs[10];
@@ -3639,6 +3725,8 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_chartam_mediam_pone(hart); }
     else if(call_num == 75)
     { syscall_chartam_mediam_deme(hart); }
+    else if(call_num == 76)
+    { syscall_chartam_mediam_da(hart); }
     else
     { uart_printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

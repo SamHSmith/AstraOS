@@ -126,8 +126,8 @@ while(1)
         }
     }
 
-    AOS_thread_awake_on_surface(&surfaces, surface_count);
-    AOS_thread_sleep();
+    //AOS_thread_awake_on_surface(&surfaces, surface_count);
+    //AOS_thread_sleep();
 
     { // read from stdin
         while(1)
@@ -144,10 +144,23 @@ while(1)
         }
     }
 
+static last_middle_buffer_handle = U64_MAX;
+
     AOS_Framebuffer* fb = 0x424242000; // the three zeroes alignes it to the page boundry
-    u64 fb_page_count;
-    if(surface_count) { fb_page_count = AOS_surface_acquire(surfaces[0], 0, 0); }
-    if(surface_count && AOS_surface_acquire(surfaces[0], fb, fb_page_count))
+    {
+        u64 scratch[1024/8];
+        scratch[0] = twa_window_handle;
+        AOS_IPFC_call(twa_session_id, 4, scratch, scratch);
+        if(scratch[0] != last_middle_buffer_handle)
+        {
+            AOS_H_printf("OMG I was given a new middle buffer!\n");
+            aso_chartam_mediam_pone(scratch[0], fb, 0, 1000);
+            last_middle_buffer_handle = scratch[0];
+        }
+    }
+//    u64 fb_page_count;
+//    if(surface_count) { fb_page_count = AOS_surface_acquire(surfaces[0], 0, 0); }
+//    if(surface_count && AOS_surface_acquire(surfaces[0], fb, fb_page_count))
     {
         f64 frame_start = AOS_H_time_get_seconds();
         f64 delta_time = frame_start - last_frame_time;
@@ -251,6 +264,8 @@ while(1)
         f32 pfy = -1.0;
         for(u64 y = 0; y < fb->height; y++)
         {
+            for(u64 i = 0; i < 1000000; i++) { __asm__("nop"); }
+            AOS_thread_sleep();
             for(u64 x = 0; x < fb->width; x++)
             {
                 u64 i = x + y * fb->width;
@@ -294,9 +309,9 @@ while(1)
         pfx = -1.0;
         pfy += dpfy;
         }
-        AOS_surface_commit(surfaces[0]);
+//        AOS_surface_commit(surfaces[0]);
         f64 frame_end = AOS_H_time_get_seconds();
-//        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
+        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
     }
 }
 }

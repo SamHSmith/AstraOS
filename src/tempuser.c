@@ -37,6 +37,10 @@ typedef struct
     AOS_Framebuffer* fb;
     u64 fb_page_count;
     u8 we_have_frame;
+
+    u64 middle_buffer_handle;
+    AOS_Framebuffer* middle_buffer_fb;
+    u64 middle_buffer_foreign_handle;
 } Window;
 
 f32 clamp_01(f32 f)
@@ -370,7 +374,7 @@ void render_function(u64 threadid, u64 total_threads)
 }
 
 #define WORKER_THREAD_STACK_SIZE (8+((sizeof(RenderArea)*300*2)/4096))
-#define THREAD_COUNT 4
+#define THREAD_COUNT 0
 #define JOBS_PER_THREAD 8
 
 u64 render_work_semaphore;
@@ -436,6 +440,23 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                     windows[window_count].we_have_frame = 0;
                     windows[window_count].window_handle = *window_handle;
                     windows[window_count].other_surface_slot = surface_slot;
+
+                    aso_charta_media_crea(1000, &windows[window_count].middle_buffer_handle);
+                    windows[window_count].middle_buffer_fb = 0x789342000;
+                    aso_chartam_mediam_pone(windows[window_count].middle_buffer_handle, windows[window_count].middle_buffer_fb, 0, 1000);
+
+                    windows[window_count].middle_buffer_fb->width = 200;
+                    windows[window_count].middle_buffer_fb->height = 200;
+
+                    if(!aso_chartam_mediam_da(
+                        windows[window_count].middle_buffer_handle,
+                        windows[window_count].pid,
+                        &windows[window_count].middle_buffer_foreign_handle))
+                    {
+                        AOS_H_printf("failed to give middle buffer\n");
+                    }
+
+
                     window_count++;
 
                     if(is_moving_window)
@@ -548,6 +569,28 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
 
             copy_to[0] = windows[i].cursor_x;
             copy_to[1] = windows[i].cursor_y;
+            rwlock_release_read(&thunder_lock);
+            AOS_IPFC_return(1);
+        }
+        rwlock_release_read(&thunder_lock);
+        AOS_IPFC_return(0);
+    }
+    else if(function_index == 4)
+    {
+        u64 window_handle;
+        {
+            u64* window_handle_pointer = static_data_1024b;
+            window_handle = *window_handle_pointer;
+        }
+
+        u64* copy_to = static_data_1024b;
+
+        for(u64 i = 0; i < window_count; i++)
+        {
+            if(windows[i].pid != source_pid || windows[i].window_handle != window_handle)
+            { continue; }
+
+            copy_to[0] = windows[i].middle_buffer_foreign_handle;
             rwlock_release_read(&thunder_lock);
             AOS_IPFC_return(1);
         }
@@ -917,26 +960,6 @@ while(1) {
     rwlock_acquire_read(&thunder_lock);
 //AOS_H_printf("temp slept for %lf seconds\n", AOS_H_time_get_seconds() - pre_sleep);
 
-
-    /// TESTING
-
-    u64 ansa_chartae;
-    AOS_H_printf("%llu, ansa est %llu\n", aso_charta_media_crea(1000, &ansa_chartae), ansa_chartae);
-
-    u64* rando_addr = 0x123423000;
-
-    aso_chartam_mediam_pone(ansa_chartae, rando_addr, 0, 1);
-    aso_chartam_mediam_pone(ansa_chartae, rando_addr + 4096, 0, 1);
-
-    rando_addr[1] = 43;
-    AOS_H_printf("%llu == %llu\n", rando_addr[1], rando_addr[1+4096]);
-
-    AOS_H_printf("ante omittendum magnitudo = %llu\n", aso_chartae_mediae_magnitudem_disce(ansa_chartae));
-    aso_chartam_mediam_omitte(ansa_chartae);
-    AOS_H_printf("post omittendum magnitudo = %llu\n", aso_chartae_mediae_magnitudem_disce(ansa_chartae));
-
-    /// END TESTING
-
     AOS_Framebuffer* fb = 0x54000;
     u64 fb_page_count = AOS_surface_acquire(0, 0, 0);
     if(AOS_surface_acquire(0, fb, fb_page_count))
@@ -963,7 +986,7 @@ while(1) {
                 else
                 {
                     spinlock_acquire(&tempuser_printout_lock);
-                    AOS_H_printf("frame has been dropped\n");
+                    //AOS_H_printf("frame has been dropped\n");
                     spinlock_release(&tempuser_printout_lock);
                 }
 
@@ -991,7 +1014,7 @@ while(1) {
         if(fb->height > 16) { bottom_banner_y = fb->height - 16; }
 
         f64 time_render_start = AOS_H_time_get_seconds();
-#if 1
+#if 0
         render_buffer = fb;
         atomic_s64_set(&render_work_done, 0);
         atomic_s64_set(&render_work_started, 0);
@@ -1100,23 +1123,23 @@ while(1) {
                 u64 i = external_x + (external_y * fb->width);
 
                 if(x >= BORDER_SIZE && y >= BORDER_SIZE &&
-                   x - BORDER_SIZE < windows[j].fb->width && y - BORDER_SIZE < windows[j].fb->height)
+                   x - BORDER_SIZE < windows[j].middle_buffer_fb->width && y - BORDER_SIZE < windows[j].middle_buffer_fb->height)
                 {
                     u64 internal_x = x - BORDER_SIZE;
                     u64 internal_y = y - BORDER_SIZE;
-                    u64 k = internal_x + (internal_y * windows[j].fb->width);
+                    u64 k = internal_x + (internal_y * windows[j].middle_buffer_fb->width);
 
 #if 0
 // this is the good version with clamping and alpha
-                    float cover = 1.0 - clamp_01(windows[j].fb->data[k*4 + 3]);
-        fb->data[i*3 + 0] = clamp_01(fb->data[i*3 + 0] * cover + clamp_01(windows[j].fb->data[k*4 + 0]));
-        fb->data[i*3 + 1] = clamp_01(fb->data[i*3 + 1] * cover + clamp_01(windows[j].fb->data[k*4 + 1]));
-        fb->data[i*3 + 2] = clamp_01(fb->data[i*3 + 2] * cover + clamp_01(windows[j].fb->data[k*4 + 2]));
+                    float cover = 1.0 - clamp_01(windows[j].middle_buffer_fb->data[k*4 + 3]);
+        fb->data[i*3 + 0] = clamp_01(fb->data[i*3 + 0] * cover + clamp_01(windows[j].middle_buffer_fb->data[k*4 + 0]));
+        fb->data[i*3 + 1] = clamp_01(fb->data[i*3 + 1] * cover + clamp_01(windows[j].middle_buffer_fb->data[k*4 + 1]));
+        fb->data[i*3 + 2] = clamp_01(fb->data[i*3 + 2] * cover + clamp_01(windows[j].middle_buffer_fb->data[k*4 + 2]));
 #else
 // this is the trash version with no clamping and no alpha
-        fb->data[i*3 + 0] = windows[j].fb->data[k*3 + 0];
-        fb->data[i*3 + 1] = windows[j].fb->data[k*3 + 1];
-        fb->data[i*3 + 2] = windows[j].fb->data[k*3 + 2];
+        fb->data[i*3 + 0] = windows[j].middle_buffer_fb->data[k*3 + 0];
+        fb->data[i*3 + 1] = windows[j].middle_buffer_fb->data[k*3 + 1];
+        fb->data[i*3 + 2] = windows[j].middle_buffer_fb->data[k*3 + 2];
 #endif
                 }
                 else
