@@ -39,8 +39,16 @@ typedef struct
     u8 we_have_frame;
 
     u64 middle_buffer_handle;
+    u64* base_middle_buffer_ptr;
     AOS_Framebuffer* middle_buffer_fb;
+    AOS_Framebuffer* second_middle_buffer_fb;
     u64 middle_buffer_foreign_handle;
+
+    u64 foreign_commit_semaphore_handle;
+    u64 own_commit_semaphore_handle;
+
+    u64 foreign_acquire_semaphore_handle;
+    u64 own_acquire_semaphore_handle;
 } Window;
 
 f32 clamp_01(f32 f)
@@ -433,20 +441,27 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                     windows[window_count].new_y = windows[window_count].y;
                     windows[window_count].width = 0;
                     windows[window_count].height = 0;
-                    windows[window_count].new_width = 64;
-                    windows[window_count].new_height = 64;
+                    windows[window_count].new_width = 300;
+                    windows[window_count].new_height = 300;
                     windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                     windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
                     windows[window_count].we_have_frame = 0;
                     windows[window_count].window_handle = *window_handle;
                     windows[window_count].other_surface_slot = surface_slot;
 
-                    aso_charta_media_crea(1000, &windows[window_count].middle_buffer_handle);
-                    windows[window_count].middle_buffer_fb = 0x789342000;
-                    aso_chartam_mediam_pone(windows[window_count].middle_buffer_handle, windows[window_count].middle_buffer_fb, 0, 1000);
+                    aso_charta_media_crea(100, &windows[window_count].middle_buffer_handle);
+                    windows[window_count].base_middle_buffer_ptr = 0x789342000;
+                    windows[window_count].middle_buffer_fb = ((u64)windows[window_count].base_middle_buffer_ptr) + 4096 * 1;
+                    windows[window_count].second_middle_buffer_fb = ((u64)windows[window_count].base_middle_buffer_ptr) + 4096 * 60;
+                    aso_chartam_mediam_pone(windows[window_count].middle_buffer_handle, windows[window_count].base_middle_buffer_ptr, 0, 100);
 
                     windows[window_count].middle_buffer_fb->width = 200;
                     windows[window_count].middle_buffer_fb->height = 200;
+
+                    windows[window_count].second_middle_buffer_fb->width = 200;
+                    windows[window_count].second_middle_buffer_fb->height = 200;
+
+                    *windows[window_count].base_middle_buffer_ptr = (u64)windows[window_count].second_middle_buffer_fb - (u64)windows[window_count].base_middle_buffer_ptr;
 
                     if(!aso_chartam_mediam_da(
                         windows[window_count].middle_buffer_handle,
@@ -456,6 +471,27 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                         AOS_H_printf("failed to give middle buffer\n");
                     }
 
+                    if(!aso_semaphorum_medium_crea(
+                        0,
+                        1,
+                        &windows[window_count].foreign_commit_semaphore_handle,
+                        windows[window_count].pid,
+                        &windows[window_count].own_commit_semaphore_handle,
+                        U64_MAX))
+                    {
+                        AOS_H_printf("failed to create commit semaphore\n");
+                    }
+
+                    if(!aso_semaphorum_medium_crea(
+                        1,
+                        1,
+                        &windows[window_count].own_acquire_semaphore_handle,
+                        U64_MAX,
+                        &windows[window_count].foreign_acquire_semaphore_handle,
+                        windows[window_count].pid))
+                    {
+                        AOS_H_printf("failed to create acquire semaphore\n");
+                    }
 
                     window_count++;
 
@@ -591,6 +627,8 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
             { continue; }
 
             copy_to[0] = windows[i].middle_buffer_foreign_handle;
+            copy_to[1] = windows[i].foreign_commit_semaphore_handle;
+            copy_to[2] = windows[i].foreign_acquire_semaphore_handle;
             rwlock_release_read(&thunder_lock);
             AOS_IPFC_return(1);
         }
@@ -970,6 +1008,18 @@ while(1) {
         {
             for(u64 i = 0; i < window_count; i++)
             {
+                if(aso_semaphorum_medium_expectare_conare(windows[i].own_commit_semaphore_handle)) // aka new frame
+                {
+                    AOS_Framebuffer* temp = windows[i].middle_buffer_fb;
+                    windows[i].middle_buffer_fb = windows[i].second_middle_buffer_fb;
+                    windows[i].second_middle_buffer_fb = temp;
+                    *windows[i].base_middle_buffer_ptr = (u64)windows[i].second_middle_buffer_fb - (u64)windows[i].base_middle_buffer_ptr;
+
+                    aso_semaphorum_medium_suscita(windows[i].own_acquire_semaphore_handle, 1, 0);
+                }
+                else
+                { AOS_H_printf("framed missed\n"); }
+
                 if(AOS_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
                 {
                     // allocate address space

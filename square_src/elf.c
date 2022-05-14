@@ -146,7 +146,9 @@ while(1)
 
 static last_middle_buffer_handle = U64_MAX;
 
-    AOS_Framebuffer* fb = 0x424242000; // the three zeroes alignes it to the page boundry
+    u64* middle_buffer_ptr = 0x424242000; // the three zeroes alignes it to the page boundry
+    u64 commit_semaphore_handle = 0;
+    u64 acquire_semaphore_handle = 0;
     {
         u64 scratch[1024/8];
         scratch[0] = twa_window_handle;
@@ -154,10 +156,18 @@ static last_middle_buffer_handle = U64_MAX;
         if(scratch[0] != last_middle_buffer_handle)
         {
             AOS_H_printf("OMG I was given a new middle buffer!\n");
-            aso_chartam_mediam_pone(scratch[0], fb, 0, 1000);
+            aso_chartam_mediam_pone(scratch[0], middle_buffer_ptr, 0, 100);
             last_middle_buffer_handle = scratch[0];
         }
+        commit_semaphore_handle = scratch[1];
+        acquire_semaphore_handle = scratch[2];
     }
+
+    while(!aso_semaphorum_medium_expectare_conare(acquire_semaphore_handle))
+    { __asm__("nop"); } // TODO actually wait for semaphore instead
+
+    // what framebuffer should I write to?
+    AOS_Framebuffer* fb = (u64)middle_buffer_ptr + *middle_buffer_ptr;
 //    u64 fb_page_count;
 //    if(surface_count) { fb_page_count = AOS_surface_acquire(surfaces[0], 0, 0); }
 //    if(surface_count && AOS_surface_acquire(surfaces[0], fb, fb_page_count))
@@ -245,6 +255,10 @@ static last_middle_buffer_handle = U64_MAX;
         f32 green = 255.0 * (sineF32((time*M_PI)/3.0) + 1.0) / 2.0;
         f32 blue =  255.0 * (sineF32((time*M_PI)/5.0) + 1.0) / 2.0;
 
+        u8 background_red = AOS_get_cpu_time();
+        u8 background_green = AOS_get_cpu_time();
+        u8 background_blue = AOS_get_cpu_time();
+
         f32 s = cosineF32(time/10.0 * 2*M_PI);
         f32 c = sineF32(time/10.0 * 2*M_PI);
         f32 p1x = -0.25 * c -  0.25 * s;
@@ -264,8 +278,6 @@ static last_middle_buffer_handle = U64_MAX;
         f32 pfy = -1.0;
         for(u64 y = 0; y < fb->height; y++)
         {
-            for(u64 i = 0; i < 1000000; i++) { __asm__("nop"); }
-            AOS_thread_sleep();
             for(u64 x = 0; x < fb->width; x++)
             {
                 u64 i = x + y * fb->width;
@@ -300,14 +312,18 @@ static last_middle_buffer_handle = U64_MAX;
                 }
                 else
                 {
-                    fb->data[i*3 + 0] = 0.0;
-                    fb->data[i*3 + 1] = 0.0;
-                    fb->data[i*3 + 2] = 0.0;
+                    fb->data[i*3 + 0] = 0;
+                    fb->data[i*3 + 1] = 0;
+                    fb->data[i*3 + 2] = 0;
                 }
                 pfx += dpfx;
             }
         pfx = -1.0;
         pfy += dpfy;
+        }
+        {
+            if(!aso_semaphorum_medium_suscita(commit_semaphore_handle, 1, 0))
+            { AOS_H_printf("My frames are not being read...\n"); }
         }
 //        AOS_surface_commit(surfaces[0]);
         f64 frame_end = AOS_H_time_get_seconds();

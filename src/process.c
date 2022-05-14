@@ -136,6 +136,9 @@ typedef struct
     Kallocation adsignatio_lineae_chartarum_mediarum; // allocation of array of middle buffers
     u64 magnitudo_lineae_chartarum_mediarum;
 
+    Kallocation adsignatio_lineae_semaphororum_mediorum; // allocation of array of middle semaphores
+    u64 magnitudo_lineae_semaphororum_mediorum;
+
     Kallocation owned_process_alloc; // OwnedProcess array
     u64 owned_process_count;
 
@@ -1174,7 +1177,7 @@ typedef struct
 {
     u64 vaddr;
     u64 numerus_paginae;
-} ProcessusLocusPonendiChartaeMediae;
+} ProgrammatisLocusPonendiChartaeMediae;
 
 typedef struct
 {
@@ -1183,18 +1186,18 @@ typedef struct
     Spinlock sera_versandi; // lock of spinning
     u64 ansa_chartae_mediae_superae;
     Kallocation adsignatio_chartae_mediae_superae; // allocation of the above middle buffer
-    Kallocation adsignatio_lineae_locorum_ponendi; // allocation of array of locations of placement, ProcessusLocusPonendiChartaeMediae array
-} ProcessusChartaMedia; // Of process, Middle Buffer
+    Kallocation adsignatio_lineae_locorum_ponendi; // allocation of array of locations of placement, ProgrammatisLocusPonendiChartaeMediae array
+} ProgrammatisChartaMedia; // Of process, Middle Buffer
 
 // have write lock on process
 // increments reference count on middle buffer you passed in
-u64 processus_chartam_mediam_crea(Process* process, u64 ansa_chartae)
+u64 programmatis_chartam_mediam_crea(Process* process, u64 ansa_chartae)
 {
     Kallocation al = charta_media_calculum_possessorum_augmenta(ansa_chartae);
 
     for(u64 i = 0; i < process->magnitudo_lineae_chartarum_mediarum; i++)
     {
-        ProcessusChartaMedia* chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
+        ProgrammatisChartaMedia* chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
         if(chartae[i].si_creata_et_numerus_ponendi == 0)
         {
             chartae[i].si_creata_et_numerus_ponendi = 1;
@@ -1206,11 +1209,11 @@ u64 processus_chartam_mediam_crea(Process* process, u64 ansa_chartae)
         }
     }
 
-    if((process->magnitudo_lineae_chartarum_mediarum + 1) * sizeof(ProcessusChartaMedia) > process->adsignatio_lineae_chartarum_mediarum.page_count * PAGE_SIZE)
+    if((process->magnitudo_lineae_chartarum_mediarum + 1) * sizeof(ProgrammatisChartaMedia) > process->adsignatio_lineae_chartarum_mediarum.page_count * PAGE_SIZE)
     {
         Kallocation new_alloc = kalloc_pages(process->adsignatio_lineae_chartarum_mediarum.page_count + 1);
-        ProcessusChartaMedia* new_array = new_alloc.memory;
-        ProcessusChartaMedia* old_array = process->adsignatio_lineae_chartarum_mediarum.memory;
+        ProgrammatisChartaMedia* new_array = new_alloc.memory;
+        ProgrammatisChartaMedia* old_array = process->adsignatio_lineae_chartarum_mediarum.memory;
         for(u64 i = 0; i < process->magnitudo_lineae_chartarum_mediarum; i++)
         {
             new_array[i] = old_array[i];
@@ -1225,11 +1228,55 @@ u64 processus_chartam_mediam_crea(Process* process, u64 ansa_chartae)
     u64 index = process->magnitudo_lineae_chartarum_mediarum;
     process->magnitudo_lineae_chartarum_mediarum++;
 
-    ProcessusChartaMedia* chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
+    ProgrammatisChartaMedia* chartae = process->adsignatio_lineae_chartarum_mediarum.memory;
     chartae[index].si_creata_et_numerus_ponendi = 1;
     spinlock_create(&chartae[index].sera_versandi);
     chartae[index].ansa_chartae_mediae_superae = ansa_chartae;
     chartae[index].adsignatio_chartae_mediae_superae = al;
     chartae[index].adsignatio_lineae_locorum_ponendi.page_count = 0;
+    return index;
+}
+
+typedef struct
+{
+    // most significant bit, (1llu << 63), marks if this slot is initialized
+    // the second most significant bit, (1llu << 62), marks signalling/awating permission, 1 is signal, 0 is wait
+    u64 ansa_semaphori_medii_superi_et_alia_data; // handle of above middle semaphore, and other data
+} ProgrammatisSemaphorumMediorum;
+
+// have write lock on process
+u64 programmatis_semaphorum_medium_crea(Process* process)
+{
+    for(u64 i = 0; i < process->magnitudo_lineae_semaphororum_mediorum; i++)
+    {
+        ProgrammatisSemaphorumMediorum* semaphora = process->adsignatio_lineae_semaphororum_mediorum.memory;
+        if(semaphora[i].ansa_semaphori_medii_superi_et_alia_data == 0)
+        {
+            semaphora[i].ansa_semaphori_medii_superi_et_alia_data = U64_MAX;
+            return i;
+        }
+    }
+
+    if((process->magnitudo_lineae_semaphororum_mediorum + 1) * sizeof(ProgrammatisSemaphorumMediorum) > process->adsignatio_lineae_semaphororum_mediorum.page_count * PAGE_SIZE)
+    {
+        Kallocation new_alloc = kalloc_pages(process->adsignatio_lineae_semaphororum_mediorum.page_count + 1);
+        ProgrammatisSemaphorumMediorum* new_array = new_alloc.memory;
+        ProgrammatisSemaphorumMediorum* old_array = process->adsignatio_lineae_semaphororum_mediorum.memory;
+        for(u64 i = 0; i < process->magnitudo_lineae_semaphororum_mediorum; i++)
+        {
+            new_array[i] = old_array[i];
+        }
+        if(process->adsignatio_lineae_semaphororum_mediorum.page_count)
+        {
+            kfree_pages(process->adsignatio_lineae_semaphororum_mediorum);
+        }
+        process->adsignatio_lineae_semaphororum_mediorum = new_alloc;
+    }
+
+    u64 index = process->magnitudo_lineae_semaphororum_mediorum;
+    process->magnitudo_lineae_semaphororum_mediorum++;
+
+    ProgrammatisSemaphorumMediorum* semaphora = process->adsignatio_lineae_semaphororum_mediorum.memory;
+    semaphora[index].ansa_semaphori_medii_superi_et_alia_data = U64_MAX;
     return index;
 }

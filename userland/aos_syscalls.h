@@ -205,25 +205,35 @@ u64 aso_chartam_mediam_omitte(u64 ansa_chartae);
 u64 aso_chartae_mediae_magnitudem_disce(u64 ansa_chartae);
 u64 aso_chartam_mediam_pone(u64 ansa_chartae, void* index_ad_locum_ponendi, u64 pagina_prima, u64 numerus_paginae);
 u64 aso_chartam_mediam_deme(u64 ansa_chartae, void* index_ad_locum_quo_chartam_positus_est);
-u64 aso_chartam_mediam_da(u64 ansa_chartae, u64 ansa_processus_alieni, u64* index_ad_ansam_alienam);
+u64 aso_chartam_mediam_da(u64 ansa_chartae, u64 ansa_programmatis_alieni, u64* index_ad_ansam_alienam);
 
 // elementa synchronizatoria, aka synchronization primitives
 
 // semaphorum, aka semaphore
 
+// processus is fourth declension and does not accurately portray what I mean when I say "process"
+// "program" in english, or "programma" (III decl) in latin much more accurately represents what I mean.
+
+// ansa_programmatis_quod_suscitat - handle of the program who/that writes.
+
 // Refert unum si actio felix est, si non refert zerum.
-u64 aso_semaphorum_crea(s64 pretium_primus, s64 pretium_maximum, u64* index_ad_ansam_semaphori);
+// pass U64_MAX to any of the ansa_programmatis fields to mean this program
+u64 aso_semaphorum_medium_crea(s64 pretium_primum,
+                               s64 pretium_maximum,
+                               u64* index_ad_ansam_suscitandi,
+                               u64 ansa_programmatis_quod_suscitat,
+                               u64* index_ad_ansam_expectandi,
+                               u64 ansa_programmatis_quod_expectat);
 
 // index zerum esse potest
 // Refert unum si ansa recta est et pretium semaphori cum numerus_suscitandi est minor quam pretium maximum semaphori.
 // Si non refert zerum.
-u64 aso_semaphorum_suscita(u64 ansam_semaphori, s64 numerus_suscitandi, s64* index_ad_pretium_prius);
+u64 aso_semaphorum_medium_suscita(u64 ansam_semaphori, u64 numerus_suscitandi, s64* index_ad_pretium_prius);
+
+// attempt to wait for semaphore
+u64 aso_semaphorum_medium_expectare_conare(u64 ansam_semaphori);
 
 // Refert unum si ansa recta alioqui refert zerum.
-u64 aso_semaphorum_expecta(u64 ansam_semaphori);
-
-// potestas suscitandi
-
-// potestas expectandi
+u64 aso_semaphorum_medium_expecta(u64 ansam_semaphori);
 
 #endif

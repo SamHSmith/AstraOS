@@ -555,3 +555,31 @@ aso_chartam_mediam_da:
     ecall
     ret
 
+.global aso_semaphorum_medium_crea
+aso_semaphorum_medium_crea:
+    mv a6, a5
+    mv a5, a4
+    mv a4, a3
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 77
+    ecall
+    ret
+
+
+.global aso_semaphorum_medium_suscita
+aso_semaphorum_medium_suscita:
+    mv a3, a2
+    mv a2, a1
+    mv a1, a0
+    addi a0, x0, 78
+    ecall
+    ret
+
+.global aso_semaphorum_medium_expectare_conare
+aso_semaphorum_medium_expectare_conare:
+    mv a1, a0
+    addi a0, x0, 79
+    ecall
+    ret

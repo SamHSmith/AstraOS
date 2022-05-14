@@ -59,6 +59,7 @@ void assert(u64 stat, char* error)
 
 #include "memory.c"
 #include "charta_media.c"
+#include "semaphorum_medium.c"
 
 #include "libfuncs2.c"
 #include "cyclone_crypto/hash/sha512.h"
@@ -727,7 +728,7 @@ u64 m_trap(
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 4) {
-                uart_printf("Interrupt: Load access misaligned CPU%lld -> 0x%llx: 0x%llx\n", hart, epc, tval);
+                uart_printf("Interrupt: Load access misaligned CPU%lld -> 0x%llx : 0x%llx\n", hart, epc, tval);
                 trap_hang_kernel(epc, tval, cause, hart, status, frame);
         }
         else if(cause_num == 5) {
