@@ -990,9 +990,9 @@ while(1) {
 //f64 pre_sleep = AOS_H_time_get_seconds();
     u64 AOS_wait_surface = 0;
     AOS_thread_awake_on_surface(&AOS_wait_surface, 1);
-    AOS_thread_awake_on_mouse();
-    AOS_thread_awake_on_keyboard();
-    AOS_thread_awake_after_time(1000000);
+    //AOS_thread_awake_on_mouse();
+    //AOS_thread_awake_on_keyboard();
+    //AOS_thread_awake_after_time(1000000);
     rwlock_release_read(&thunder_lock);
     AOS_thread_sleep();
     rwlock_acquire_read(&thunder_lock);

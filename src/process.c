@@ -52,6 +52,9 @@ typedef struct
 
     u32 awake_count;
     ThreadAwakeCondition awakes[THREAD_MAX_AWAKE_COUNT];
+
+    // most significant bit signifies, is waiting.
+    u64 is_waiting_on_semaphore_and_semaphore_handle;
 } Thread;
 
 typedef struct
@@ -291,6 +294,7 @@ u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64* out_runtime_
             KERNEL_PROCESS_ARRAY[pid]->threads[i].awake_count = 0;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].frame.satp = thread_satp;
             KERNEL_PROCESS_ARRAY[pid]->threads[i].process_pid = pid;
+            KERNEL_PROCESS_ARRAY[pid]->threads[i].is_waiting_on_semaphore_and_semaphore_handle = 0;
             KERNEL_PROCESS_ARRAY[pid]->reference_count_for_threads++;
             tid = i;
             has_been_allocated = 1;
@@ -325,6 +329,7 @@ u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64* out_runtime_
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].awake_count = 0;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].frame.satp = thread_satp;
         KERNEL_PROCESS_ARRAY[pid]->threads[tid].process_pid = pid;
+        KERNEL_PROCESS_ARRAY[pid]->threads[tid].is_waiting_on_semaphore_and_semaphore_handle = 0;
         KERNEL_PROCESS_ARRAY[pid]->reference_count_for_threads++;
     }
 

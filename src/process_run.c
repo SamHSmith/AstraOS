@@ -9,6 +9,19 @@ u64 thread_runtime_is_live(Thread* t, u64 mtime)
     if(t->is_running)
     {  rwlock_release_read(&process->process_lock); return 1;  }
 
+    if(t->is_waiting_on_semaphore_and_semaphore_handle & (1llu << 63))
+    {
+        u64 ansa_semaphori = t->is_waiting_on_semaphore_and_semaphore_handle & (~(1llu << 63));
+        if(semaphorum_medium_expectare_conare(ansa_semaphori))
+        {
+            t->is_running = 1;
+            t->is_waiting_on_semaphore_and_semaphore_handle = 0;
+            semaphorum_medium_omitte(ansa_semaphori);
+        }
+        rwlock_release_read(&process->process_lock);
+        return t->is_running;
+    }
+
     for(u64 i = 0; i < t->awake_count; i++)
     {
         u8 wake_up = 0;

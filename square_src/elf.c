@@ -163,8 +163,16 @@ static last_middle_buffer_handle = U64_MAX;
         acquire_semaphore_handle = scratch[2];
     }
 
+#if 0
     while(!aso_semaphorum_medium_expectare_conare(acquire_semaphore_handle))
     { __asm__("nop"); } // TODO actually wait for semaphore instead
+#endif
+#if 1
+    u64 before_wait_time = AOS_get_cpu_time();
+    aso_semaphorum_medium_expecta(acquire_semaphore_handle);
+    u64 after_wait_time = AOS_get_cpu_time();
+    AOS_H_printf("waited for %llu \u03BCs\n", ((after_wait_time - before_wait_time) * 1000000) / AOS_get_cpu_timer_frequency());
+#endif
 
     // what framebuffer should I write to?
     AOS_Framebuffer* fb = (u64)middle_buffer_ptr + *middle_buffer_ptr;
@@ -276,14 +284,28 @@ static last_middle_buffer_handle = U64_MAX;
         f32 alias_by = (dpfx + dpfy) / 2.0;
         f32 pfx = -1.0;
         f32 pfy = -1.0;
-        for(u64 y = 0; y < fb->height; y++)
+
+        u64 start_y = (1.0 - square_y - 0.35)/2.0 * (f32)fb->height;
+        u64 end_y = (1.0 - square_y + 0.35)/2.0 * (f32)fb->height;
+
+        u64 start_x = (1.0 + square_x - 0.35)/2.0 * (f32)fb->width;
+        u64 end_x = (1.0 + square_x + 0.35)/2.0 * (f32)fb->width;
+
+        for(u64 i = 0; i < fb->width * fb->height * 3 + 24; i += 24)
         {
-            for(u64 x = 0; x < fb->width; x++)
+            *((u64*)&fb->data[i]) = 0;
+            *((u64*)&fb->data[i+8]) = 0;
+            *((u64*)&fb->data[i+16]) = 0;
+        }
+
+        for(u64 y = start_y; y < end_y; y++)
+        {
+            for(u64 x = start_x; x < end_x; x++)
             {
                 u64 i = x + y * fb->width;
 
-                f32 e1 = (pfx-square_x) * d1y * x_scale - (pfy+square_y) * d1x * y_scale;
-                f32 e2 = (pfx-square_x) * d2y * x_scale - (pfy+square_y) * d2x * y_scale;
+                f32 e1 = (-1.0 + dpfx * (f32)x - square_x) * d1y * x_scale - (-1.0 + dpfy * (f32)y + square_y) * d1x * y_scale;
+                f32 e2 = (-1.0 + dpfx * (f32)x - square_x) * d2y * x_scale - (-1.0 + dpfy * (f32)y + square_y) * d2x * y_scale;
 
                 if(
                 e1 <  0.125 &&
@@ -292,29 +314,9 @@ static last_middle_buffer_handle = U64_MAX;
                 e2 > -0.125
                 )
                 {
-                    f32 cover1 = 1.0;
-                    f32 cover2 = 1.0;
-                    if(e1 > 0.0 && 0.125 - e1 < alias_by)
-                    { cover1 = (0.125 - e1) / alias_by; }
-                    else if(e1 < 0.0 && 0.125 + e1 < alias_by)
-                    { cover1 = (0.125 + e1) / alias_by; }
-                    if(e2 > 0.0 && 0.125 - e2 < alias_by)
-                    { cover2 = (0.125 - e2) / alias_by; }
-                    else if(e2 < 0.0 && 0.125 + e2 < alias_by)
-                    { cover2 = (0.125 + e2) / alias_by; }
-
-                    f32 cover = cover1;
-                    if(cover2 < cover1) { cover = cover2; }
-
-                    fb->data[i*3 + 0] = red * cover;
-                    fb->data[i*3 + 1] = green * cover;
-                    fb->data[i*3 + 2] = blue * cover;
-                }
-                else
-                {
-                    fb->data[i*3 + 0] = 0;
-                    fb->data[i*3 + 1] = 0;
-                    fb->data[i*3 + 2] = 0;
+                    fb->data[i*3 + 0] = red;
+                    fb->data[i*3 + 1] = green;
+                    fb->data[i*3 + 2] = blue;
                 }
                 pfx += dpfx;
             }

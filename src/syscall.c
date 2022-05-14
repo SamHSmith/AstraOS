@@ -3805,6 +3805,60 @@ void syscall_semaphorum_medium_expectare_conare(u64 hart)
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 
+void syscall_semaphorum_medium_expecta(u64 hart, u64 mtime)
+{
+    {
+        volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
+        volatile u64* mtime = (u64*)0x0200bff8;
+        u64 start_wait = *mtime;
+        rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+        u64 end_wait = *mtime;
+
+        wait_time_acc[hart] += end_wait - start_wait;
+        wait_time_times[hart] += 1;
+    }
+
+    Process* process = KERNEL_PROCESS_ARRAY[kernel_current_threads[hart].process_pid];
+    Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
+    TrapFrame* frame = &current_thread->frame;
+
+    u64 user_ansam_semaphori = frame->regs[11];
+
+    rwlock_acquire_read(&process->process_lock);
+
+    current_thread->program_counter += 4;
+    {
+        ProgrammatisSemaphorumMediorum* semaphora = process->adsignatio_lineae_semaphororum_mediorum.memory;
+
+        if( user_ansam_semaphori >= process->magnitudo_lineae_semaphororum_mediorum ||
+            (semaphora[user_ansam_semaphori].ansa_semaphori_medii_superi_et_alia_data & (2llu << 62)) != (2llu << 62)) // is this a wait handle?
+        {
+            frame->regs[10] = 0;
+        }
+        else
+        {
+            u64 ansa_semaphori_superi = semaphora[user_ansam_semaphori].ansa_semaphori_medii_superi_et_alia_data & (~(3llu << 62));
+
+            frame->regs[10] = semaphorum_medium_expectare_conare(ansa_semaphori_superi);
+
+            if(!frame->regs[10]) // we are going to sleep
+            {
+                frame->regs[10] = 1;
+                current_thread->is_running = 0;
+                current_thread->is_waiting_on_semaphore_and_semaphore_handle = (1llu << 63) | ansa_semaphori_superi;
+                semaphorum_medium_calculum_possessorum_augmenta(ansa_semaphori_superi); // the waiting thread get's to keep the semaphore alive
+
+                rwlock_release_read(&process->process_lock);
+                kernel_choose_new_thread(mtime, hart);
+                rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+                return;
+            }
+        }
+    }
+    rwlock_release_read(&process->process_lock);
+    rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
+}
+
 void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
 {
     u64 call_num = frame->regs[10];
@@ -3950,6 +4004,8 @@ void do_syscall(TrapFrame* frame, u64 mtime, u64 hart)
     { syscall_semaphorum_medium_suscita(hart); }
     else if(call_num == 79)
     { syscall_semaphorum_medium_expectare_conare(hart); }
+    else if(call_num == 80)
+    { syscall_semaphorum_medium_expecta(hart, mtime); }
     else
     { uart_printf("invalid syscall, we should handle this case but we don't\n"); while(1) {} }
 }

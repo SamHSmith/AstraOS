@@ -583,3 +583,10 @@ aso_semaphorum_medium_expectare_conare:
     addi a0, x0, 79
     ecall
     ret
+
+.global aso_semaphorum_medium_expecta
+aso_semaphorum_medium_expecta:
+    mv a1, a0
+    addi a0, x0, 80
+    ecall
+    ret
