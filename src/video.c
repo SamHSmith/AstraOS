@@ -588,10 +588,6 @@ u64 surface_consumer_fetch(Process* process, u64 consumer_slot, Framebuffer* fb_
 
     if(fb_location && page_count == 0)
     {
-        if(!surface_has_commited)
-        {
-            kernel_log_kernel(hart, "surface has not commited");
-        }
         rwlock_release_read(&process2->process_lock);
         rwlock_acquire_write(&process->process_lock);
         return surface_has_commited;

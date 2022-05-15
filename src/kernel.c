@@ -10,8 +10,6 @@
 #include "../common/atomics.h"
 #include "../common/rwlock.h"
 
-#include "log.c"
-
 Spinlock KERNEL_SPINLOCK;
 Spinlock KERNEL_MEMORY_SPINLOCK;
 Spinlock KERNEL_VIEWER_SPINLOCK;
@@ -465,8 +463,6 @@ u64 m_trap(
         }
         else if(cause_num == 7) {
 
-            kernel_log_kernel(hart, "hart got a timer interrupt");
-
             // Store thread
             if(kernel_current_thread_has_thread[hart])
             {
@@ -492,9 +488,7 @@ u64 m_trap(
 
             if(spinlock_try_acquire(&KERNEL_VIEWER_SPINLOCK))
             {
-                kernel_log_kernel(hart, "hart start viewer talk block");
                 spinlock_acquire(&KERNEL_SPINLOCK);
-                kernel_log_kernel(hart, "hart has kernel spinlock for viewer talk");
 
                 // massive time loss in talking to the viewer
                 // either the slowness is in here or in qemu
@@ -548,7 +542,6 @@ u64 m_trap(
                 }
                 spinlock_release(&KERNEL_SPINLOCK);
                 spinlock_release(&KERNEL_VIEWER_SPINLOCK);
-                kernel_log_kernel(hart, "hart end viewer talk block");
             }
 
             volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
@@ -639,47 +632,7 @@ u64 m_trap(
                 {
                     uart_read(&character, 1);
 
-                    //TEMP
-                    if(character == 'l')
-                    {
-                        uart_printf("Printing kernel event log:\n");
-                        rwlock_acquire_write(&KERNEL_LOG_LOCK);
-                        s64 log_len = KERNEL_LOG_SIZE;
-                        s64 log_index = atomic_s64_read(&KERNEL_LOG_INDEX);
-                        if(log_index < KERNEL_LOG_SIZE)
-                        { log_len = log_index; }
-
-                        u64 log_entry_counter = 0;
-                        for(s64 i = log_len; i > 0; i--)
-                        {
-                            KernelLogEntry entry = KERNEL_LOG[(log_index - i) % KERNEL_LOG_SIZE];
-                            if(entry.is_kernel)
-                            {
-                                uart_printf("%4.4llu) H:%llu - T: %llu | %s:%llu - %s\n",
-                                       log_entry_counter++,
-                                       entry.hart,
-                                       entry.time,
-                                       entry.function_name,
-                                       entry.line_number,
-                                       entry.message);
-                            }
-                            else
-                            {
-                                uart_printf("%4.4llu) H:%llu - T: %llu - PID:%llu - TID:%llu | %s:%llu - %s\n",
-                                       log_entry_counter++,
-                                       entry.hart,
-                                       entry.time,
-                                       entry.pid,
-                                       entry.tid,
-                                       entry.function_name,
-                                       entry.line_number,
-                                       entry.message);
-                            }
-                        }
-
-                        rwlock_release_write(&KERNEL_LOG_LOCK);
-                    }
-                    else if(KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_count > 0)
+                    if(KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_count > 0)
                     {
                         Stream* in_stream =
                             *((Stream**)KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->in_stream_alloc.memory);

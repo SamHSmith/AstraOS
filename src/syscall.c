@@ -15,11 +15,6 @@ void syscall_surface_commit(u64 hart)
     Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
     TrapFrame* frame = &current_thread->frame;
 
-    kernel_log_user(hart,
-                    kernel_current_threads[hart].process_pid,
-                    kernel_current_thread_tid[hart],
-                    "process is attempting to commit surface");
-
     rwlock_acquire_write(&process->process_lock);
 
     u64 surface_slot = frame->regs[11];
@@ -57,11 +52,6 @@ void syscall_surface_acquire(u64 hart)
     Thread* current_thread = &process->threads[kernel_current_thread_tid[hart]];
     TrapFrame* frame = &current_thread->frame;
 
-    kernel_log_user(hart,
-                    kernel_current_threads[hart].process_pid,
-                    kernel_current_thread_tid[hart],
-                    "process is attempting to acquire surface");
-
     rwlock_acquire_write(&process->process_lock);
 
     u64 surface_slot = frame->regs[11];
@@ -82,14 +72,6 @@ void syscall_surface_acquire(u64 hart)
         else if(page_count >= slot->fb_draw->alloc.page_count)
         {
             ret = surface_acquire(surface_slot, fb, process);
-
-            if(ret)
-            {
-                kernel_log_user(hart,
-                                kernel_current_threads[hart].process_pid,
-                                kernel_current_thread_tid[hart],
-                                "process has acquired surface");
-            }
         }
     }
     frame->regs[10] = ret;
@@ -709,11 +691,6 @@ void syscall_surface_consumer_fetch(u64 hart)
     u64 page_count = frame->regs[13];
     u64 ret = 0;
 
-    kernel_log_user(hart,
-                    kernel_current_thread_pid[hart],
-                    kernel_current_thread_tid[hart],
-                    "process called consumer fetch");
-
     ret = surface_consumer_fetch(process, consumer_slot, fb, page_count, hart);
 
     frame->regs[10] = ret;
@@ -1140,11 +1117,6 @@ void syscall_surface_consumer_fire(u64 hart)
     rwlock_acquire_read(&process->process_lock);
 
     u64 consumer_slot = frame->regs[11];
-
-    kernel_log_user(hart,
-                    kernel_current_thread_pid[hart],
-                    kernel_current_thread_tid[hart],
-                    "process is firing a consumer");
 
     frame->regs[10] = surface_consumer_fire(process, consumer_slot);
     current_thread->program_counter += 4;
@@ -2289,11 +2261,6 @@ void syscall_IPFC_call(u64 hart, u64 mtime)
 
     try_assign_ipfc_stack(ipfc_process, ipfc_thread);
 
-    kernel_log_user(hart,
-                    kernel_current_threads[hart].process_pid,
-                    kernel_current_thread_tid[hart],
-                    "thread called ipfc");
-
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
     rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 
@@ -2400,11 +2367,6 @@ void syscall_IPFC_return(u64 hart, u64 mtime)
     }
     else
     { rwlock_release_write(&process->process_lock); }
-
-    kernel_log_user(hart,
-                    kernel_current_threads[hart].process_pid,
-                    kernel_current_thread_tid[hart],
-                    "thread returned ipfc");
 
     kernel_choose_new_thread(mtime, hart);
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
