@@ -152,7 +152,13 @@ static last_middle_buffer_handle = U64_MAX;
     {
         u64 scratch[1024/8];
         scratch[0] = twa_window_handle;
+
+        u64 before_wait_time = AOS_get_cpu_time();
         AOS_IPFC_call(twa_session_id, 4, scratch, scratch);
+        u64 after_wait_time = AOS_get_cpu_time();
+
+        AOS_H_printf("ipfc took for %llu \u03BCs\n", ((after_wait_time - before_wait_time) * 1000000) / AOS_get_cpu_timer_frequency());
+
         if(scratch[0] != last_middle_buffer_handle)
         {
             AOS_H_printf("OMG I was given a new middle buffer!\n");
@@ -171,7 +177,7 @@ static last_middle_buffer_handle = U64_MAX;
     u64 before_wait_time = AOS_get_cpu_time();
     aso_semaphorum_medium_expecta(acquire_semaphore_handle);
     u64 after_wait_time = AOS_get_cpu_time();
-    AOS_H_printf("waited for %llu \u03BCs\n", ((after_wait_time - before_wait_time) * 1000000) / AOS_get_cpu_timer_frequency());
+    //AOS_H_printf("waited for %llu \u03BCs\n", ((after_wait_time - before_wait_time) * 1000000) / AOS_get_cpu_timer_frequency());
 #endif
 
     // what framebuffer should I write to?
@@ -329,7 +335,7 @@ static last_middle_buffer_handle = U64_MAX;
         }
 //        AOS_surface_commit(surfaces[0]);
         f64 frame_end = AOS_H_time_get_seconds();
-        AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
+        //AOS_H_printf("elf time : %10.10lf ms\n", (frame_end - frame_start) * 1000.0);
     }
 }
 }

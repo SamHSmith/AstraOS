@@ -575,7 +575,7 @@ u64 m_trap(
 
             if(kernel_current_thread_has_thread[hart])
             {
-                *mtimecmp = *mtime + (MACHINE_TIMER_SECOND / 180);
+                *mtimecmp = *mtime + (MACHINE_TIMER_SECOND / 120);
                 // Load thread
                 *frame = kernel_current_threads[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
@@ -584,7 +584,7 @@ u64 m_trap(
             }
             else // Load kernel thread
             {
-                *mtimecmp = *mtime;
+                *mtimecmp = 0;
                 *frame = KERNEL_THREADS[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
                 KERNEL_TRAP_ENTER_ACC[hart]--;

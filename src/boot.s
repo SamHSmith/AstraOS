@@ -234,3 +234,18 @@ has_entered:
 4:
     wfi
     j        4b
+
+.global kernel_rdtime
+kernel_rdtime:
+    rdtime a0
+    ret
+
+.global kernel_rdcycle
+kernel_rdcycle:
+    rdcycle a0
+    ret
+
+.global kernel_rdinstret
+kernel_rdinstret:
+    rdinstret a0
+    ret

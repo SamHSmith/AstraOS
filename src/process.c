@@ -242,14 +242,8 @@ typedef struct
     u32 tid;
     u32 thread_group; // these don't change during lifetime
 
-    u8 is_initialized;
-    u8 is_being_run;
-    atomic_s64 owning_hart;
     u16 allowed_width;
     u32 thread_group_index;
-
-    u32 t_value;
-    Spinlock lock;
 } ThreadRuntime;
 
 Kallocation THREAD_RUNTIME_ARRAY_ALLOC;
@@ -336,20 +330,7 @@ u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64* out_runtime_
     // Now the thread has been created it has to be allocated a "runtime" so that it can be schedualed
     rwlock_acquire_write(&THREAD_RUNTIME_ARRAY_LOCK);
     u64 runtime = 0;
-    u8 has_runtime = 0;
  
-
-    for(u64 i = 0; i < THREAD_RUNTIME_ARRAY_LEN; i++)
-    {
-        ThreadRuntime* array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
-        if(!array[i].is_initialized)
-        {
-            runtime = i;
-            has_runtime = 1;
-        }
-    }
-    // We maybe must allocate a new runtime
-    if(!has_runtime)
     {
         if((THREAD_RUNTIME_ARRAY_LEN + 1) * sizeof(ThreadRuntime) >
             THREAD_RUNTIME_ARRAY_ALLOC.page_count * PAGE_SIZE)
@@ -374,14 +355,10 @@ u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64* out_runtime_
     KERNEL_PROCESS_ARRAY[pid]->threads[tid].thread_runtime_index = runtime;
  
     ThreadRuntime* r = ((ThreadRuntime*)THREAD_RUNTIME_ARRAY_ALLOC.memory) + runtime;
-    spinlock_create(&r->lock);
     r->pid = pid;
     r->tid = tid;
     r->thread_group = thread_group;
-    r->is_initialized = 1;
-    r->owning_hart.value = hart;
     r->allowed_width = KERNEL_HART_COUNT.value; // less temp
-    r->t_value = 0;
 
     // now we must identify and log the thread group
     {
@@ -439,7 +416,7 @@ u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64* out_runtime_
         ThreadGroup* array = THREAD_GROUP_ARRAY_ALLOC.memory;
         array[group_index].pid = r->pid;
         array[group_index].thread_group = r->thread_group;
-        atomic_s64_increment(&array[group_index].counts[r->owning_hart.value]);
+        atomic_s64_increment(&array[group_index].counts[hart]);
         r->thread_group_index = group_index;
     }
 

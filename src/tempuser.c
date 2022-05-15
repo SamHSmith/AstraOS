@@ -400,7 +400,8 @@ void render_thread_entry(u64 thread_number)
     }
 }
 
-RWLock thunder_lock;
+u64 thunder_lock_mutex_semaphore_handle_signal;
+u64 thunder_lock_mutex_semaphore_handle_wait;
 const char* TWA_IPFC_API_NAME = "thunder_windowed_application_ipfc_api_v1";
 // f0 is create window
 // f1 is destroy window
@@ -414,12 +415,13 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
     __asm__(".option relax");
 
 //    f64 before = AOS_H_time_get_seconds();
-    rwlock_acquire_read(&thunder_lock);
+    u64 before_lock_time = kernel_rdtime();
+    aso_semaphorum_medium_expecta(thunder_lock_mutex_semaphore_handle_wait);
+    u64 post_lock_time = kernel_rdtime();
+    //AOS_H_printf("thunder lock took %llu \u03BCs\n", ((post_lock_time - before_lock_time) * 1000000) / MACHINE_TIMER_SECOND);
 
     if(function_index == 0)
     {
-        rwlock_release_read(&thunder_lock);
-        rwlock_acquire_write(&thunder_lock);
         spinlock_acquire(&tempuser_printout_lock);
         AOS_H_printf("new window! from pid %llu\n", source_pid);
         spinlock_release(&tempuser_printout_lock);
@@ -441,8 +443,8 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                     windows[window_count].new_y = windows[window_count].y;
                     windows[window_count].width = 0;
                     windows[window_count].height = 0;
-                    windows[window_count].new_width = 300;
-                    windows[window_count].new_height = 300;
+                    windows[window_count].new_width = 100;
+                    windows[window_count].new_height = 100;
                     windows[window_count].fb = 0x54000 + (6900*6900*4*4 * (window_count+1));
                     windows[window_count].fb = (u64)windows[window_count].fb & ~0xfff;
                     windows[window_count].we_have_frame = 0;
@@ -450,16 +452,16 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                     windows[window_count].other_surface_slot = surface_slot;
 
                     aso_charta_media_crea(100, &windows[window_count].middle_buffer_handle);
-                    windows[window_count].base_middle_buffer_ptr = 0x789342000;
+                    windows[window_count].base_middle_buffer_ptr = 0x789342000 + 5000 * 4096 * window_count;
                     windows[window_count].middle_buffer_fb = ((u64)windows[window_count].base_middle_buffer_ptr) + 4096 * 1;
                     windows[window_count].second_middle_buffer_fb = ((u64)windows[window_count].base_middle_buffer_ptr) + 4096 * 60;
                     aso_chartam_mediam_pone(windows[window_count].middle_buffer_handle, windows[window_count].base_middle_buffer_ptr, 0, 100);
 
-                    windows[window_count].middle_buffer_fb->width = 200;
-                    windows[window_count].middle_buffer_fb->height = 200;
+                    windows[window_count].middle_buffer_fb->width = 100;
+                    windows[window_count].middle_buffer_fb->height = 100;
 
-                    windows[window_count].second_middle_buffer_fb->width = 200;
-                    windows[window_count].second_middle_buffer_fb->height = 200;
+                    windows[window_count].second_middle_buffer_fb->width = 100;
+                    windows[window_count].second_middle_buffer_fb->height = 100;
 
                     *windows[window_count].base_middle_buffer_ptr = (u64)windows[window_count].second_middle_buffer_fb - (u64)windows[window_count].base_middle_buffer_ptr;
 
@@ -509,12 +511,12 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                     spinlock_release(&tempuser_printout_lock);
                 }
             }
-            rwlock_release_write(&thunder_lock);
+            aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
             AOS_IPFC_return(1);
         }
         else
         {
-            rwlock_release_write(&thunder_lock);
+            aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
             AOS_IPFC_return(0);
         }
     }
@@ -526,9 +528,6 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
         AOS_H_printf("destroy window with handle=%llu! from pid %llu\n", window_handle, source_pid);
         spinlock_release(&tempuser_printout_lock);
         // destroy thingy
-
-        rwlock_release_read(&thunder_lock);
-        rwlock_acquire_write(&thunder_lock);
 
         u64 destroyed = 0;
 
@@ -553,7 +552,7 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
             window_count--;
         }
 
-        rwlock_release_write(&thunder_lock);
+        aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
         AOS_IPFC_return(destroyed);
     }
     else if(function_index == 2)
@@ -575,14 +574,14 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
             { continue; }
 
             copy_to[0] = windows[i].other_surface_slot;
-            rwlock_release_read(&thunder_lock);
+            aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
 //            f64 after = AOS_H_time_get_seconds();
 //            spinlock_acquire(&tempuser_printout_lock);
 //            AOS_H_printf("total ipfc time is %lf ms\n", (after-before) * 1000.0);
 //            spinlock_release(&tempuser_printout_lock);
             AOS_IPFC_return(1);
         }
-        rwlock_release_read(&thunder_lock);
+        aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
         AOS_IPFC_return(0);
     }
     else if(function_index == 3)
@@ -605,10 +604,10 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
 
             copy_to[0] = windows[i].cursor_x;
             copy_to[1] = windows[i].cursor_y;
-            rwlock_release_read(&thunder_lock);
+            aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
             AOS_IPFC_return(1);
         }
-        rwlock_release_read(&thunder_lock);
+        aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
         AOS_IPFC_return(0);
     }
     else if(function_index == 4)
@@ -629,14 +628,14 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
             copy_to[0] = windows[i].middle_buffer_foreign_handle;
             copy_to[1] = windows[i].foreign_commit_semaphore_handle;
             copy_to[2] = windows[i].foreign_acquire_semaphore_handle;
-            rwlock_release_read(&thunder_lock);
+            aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
             AOS_IPFC_return(1);
         }
-        rwlock_release_read(&thunder_lock);
+        aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
         AOS_IPFC_return(0);
     }
 
-    rwlock_release_read(&thunder_lock);
+    aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
     AOS_IPFC_return(0);
 }
 
@@ -652,8 +651,9 @@ void program_loader_program(u64 drive1_partitions_directory)
     AOS_stream_put(0, print_text, strlen(print_text));
 
     spinlock_create(&tempuser_printout_lock);
-    rwlock_create(&thunder_lock);
-    rwlock_acquire_read(&thunder_lock);
+    aso_semaphorum_medium_crea(0, 1,
+                               &thunder_lock_mutex_semaphore_handle_signal, U64_MAX,
+                               &thunder_lock_mutex_semaphore_handle_wait, U64_MAX);
     render_work_semaphore = AOS_semaphore_create(0, THREAD_COUNT * JOBS_PER_THREAD);
     render_work_done_semaphore = AOS_semaphore_create(0, 1);
     {
@@ -711,8 +711,6 @@ void program_loader_program(u64 drive1_partitions_directory)
 while(1) {
 
     { // Check for program not alive's
-        rwlock_release_read(&thunder_lock);
-        rwlock_acquire_write(&thunder_lock);
         for(u64 i = 0; i < window_count; i++)
         {
             if(AOS_process_is_alive(windows[i].pid))
@@ -731,8 +729,6 @@ while(1) {
             }
             window_count--;
         }
-        rwlock_release_write(&thunder_lock);
-        rwlock_acquire_read(&thunder_lock);
     }
 
 #if 0
@@ -778,8 +774,6 @@ while(1) {
     }
 
     { // Mouse events
-        rwlock_release_read(&thunder_lock);
-        rwlock_acquire_write(&thunder_lock);
         u64 mouse_event_count = AOS_get_rawmouse_events(0, 0);
         AOS_RawMouseEvent mouse_events[mouse_event_count];
         mouse_event_count = AOS_get_rawmouse_events(mouse_events, mouse_event_count);
@@ -903,9 +897,6 @@ while(1) {
             windows[i].cursor_x = dx;
             windows[i].cursor_y = dy;
         }
-
-        rwlock_release_write(&thunder_lock);
-        rwlock_acquire_read(&thunder_lock);
     }
 
     { // Keyboard events
@@ -993,9 +984,9 @@ while(1) {
     //AOS_thread_awake_on_mouse();
     //AOS_thread_awake_on_keyboard();
     //AOS_thread_awake_after_time(1000000);
-    rwlock_release_read(&thunder_lock);
+    aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
     AOS_thread_sleep();
-    rwlock_acquire_read(&thunder_lock);
+    aso_semaphorum_medium_expecta(thunder_lock_mutex_semaphore_handle_wait);
 //AOS_H_printf("temp slept for %lf seconds\n", AOS_H_time_get_seconds() - pre_sleep);
 
     AOS_Framebuffer* fb = 0x54000;
@@ -1277,8 +1268,6 @@ while(1) {
 
         // move windows and resize them
         {
-            rwlock_release_read(&thunder_lock);
-            rwlock_acquire_write(&thunder_lock);
             for(u64 i = 0; i < window_count; i++)
             {
                 windows[i].x = windows[i].new_x;
@@ -1286,8 +1275,6 @@ while(1) {
                 windows[i].width = windows[i].new_width;
                 windows[i].height = windows[i].new_height;
             }
-            rwlock_release_write(&thunder_lock);
-            rwlock_acquire_read(&thunder_lock);
         }
 
         cursor_x = new_cursor_x;
