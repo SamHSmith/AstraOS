@@ -49,6 +49,8 @@ typedef struct
 
     u64 foreign_acquire_semaphore_handle;
     u64 own_acquire_semaphore_handle;
+
+    u8 dropped_frame;
 } Window;
 
 f32 clamp_01(f32 f)
@@ -494,6 +496,8 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                     {
                         AOS_H_printf("failed to create acquire semaphore\n");
                     }
+
+                    windows[window_count].dropped_frame = 1;
 
                     window_count++;
 
@@ -1006,10 +1010,11 @@ while(1) {
                     windows[i].second_middle_buffer_fb = temp;
                     *windows[i].base_middle_buffer_ptr = (u64)windows[i].second_middle_buffer_fb - (u64)windows[i].base_middle_buffer_ptr;
 
+                    windows[i].dropped_frame = 0;
                     aso_semaphorum_medium_suscita(windows[i].own_acquire_semaphore_handle, 1, 0);
                 }
                 else
-                { AOS_H_printf("framed missed\n"); }
+                { windows[i].dropped_frame = 1; }
 
                 if(AOS_surface_consumer_fetch(windows[i].consumer, 1, 0)) // Poll
                 {
@@ -1178,9 +1183,18 @@ while(1) {
         fb->data[i*3 + 2] = clamp_01(fb->data[i*3 + 2] * cover + clamp_01(windows[j].middle_buffer_fb->data[k*4 + 2]));
 #else
 // this is the trash version with no clamping and no alpha
-        fb->data[i*3 + 0] = windows[j].middle_buffer_fb->data[k*3 + 0];
-        fb->data[i*3 + 1] = windows[j].middle_buffer_fb->data[k*3 + 1];
-        fb->data[i*3 + 2] = windows[j].middle_buffer_fb->data[k*3 + 2];
+        if(!windows[j].dropped_frame)
+        {
+            fb->data[i*3 + 0] = windows[j].middle_buffer_fb->data[k*3 + 0];
+            fb->data[i*3 + 1] = windows[j].middle_buffer_fb->data[k*3 + 1];
+            fb->data[i*3 + 2] = windows[j].middle_buffer_fb->data[k*3 + 2];
+        }
+        else
+        {
+            fb->data[i*3 + 0] = 200;
+            fb->data[i*3 + 1] = 200;
+            fb->data[i*3 + 2] = 200;
+        }
 #endif
                 }
                 else
@@ -1242,6 +1256,7 @@ while(1) {
         // time since last frame, bottom right, above frametime
         f64 time_right_now = AOS_H_time_get_seconds();
         f64 time_passed = (time_right_now-last_frame_time) *1000.0;
+        //AOS_H_printf("Time passed since last frame : %5.5lf s\n", time_passed);
         rolling_time_passed = rolling_time_passed *0.9 + time_passed *0.1;
         time_passed = rolling_time_passed;
         last_frame_time = time_right_now;

@@ -520,10 +520,7 @@ u64 m_trap(
 
                         frame_has_been_requested = 0;
                     }
-                    else
-                    {
-                        surface_slot_fire(process, 0, 0);
-                    }
+                    surface_slot_fire(process, 0, 0);
                     rwlock_release_write(&process->process_lock);
                 }
 
@@ -575,7 +572,7 @@ u64 m_trap(
 
             if(kernel_current_thread_has_thread[hart])
             {
-                *mtimecmp = *mtime + (MACHINE_TIMER_SECOND / 120);
+                *mtimecmp = *mtime + (MACHINE_TIMER_SECOND / 180);
                 // Load thread
                 *frame = kernel_current_threads[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
@@ -721,6 +718,7 @@ u64 m_trap(
             }
 
             volatile u64* mtime = (u64*)0x0200bff8;
+            volatile u64* mtimecmp = ((u64*)0x02004000) + hart;
             // locking happens inside do_syscall
             do_syscall(&kernel_current_threads[hart].frame, *mtime, hart);
 
@@ -742,6 +740,7 @@ u64 m_trap(
             }
             else // Load kernel thread
             {
+                *mtimecmp = 0;
                 *frame = KERNEL_THREADS[hart].frame;
                 rwlock_release_read(&KERNEL_TRAP_LOCK);
                 KERNEL_TRAP_ENTER_ACC[hart]--;

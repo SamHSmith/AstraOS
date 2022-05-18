@@ -99,7 +99,7 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
     rwlock_acquire_read(&THREAD_RUNTIME_ARRAY_LOCK);
     ThreadRuntime* runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
 
-    if(kernel_current_thread_has_thread[hart])
+    if(kernel_current_thread_has_thread[hart] && kernel_current_thread_pid[hart] != vos[current_vo].pid)
     {
         ThreadRuntime just_ran = runtime_array[current_thread_runtimes[hart]];
         for(u64 i = current_thread_runtimes[hart]; i + 1 < THREAD_RUNTIME_ARRAY_LEN; i++)

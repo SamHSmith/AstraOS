@@ -157,7 +157,7 @@ static last_middle_buffer_handle = U64_MAX;
         AOS_IPFC_call(twa_session_id, 4, scratch, scratch);
         u64 after_wait_time = AOS_get_cpu_time();
 
-        AOS_H_printf("ipfc took for %llu \u03BCs\n", ((after_wait_time - before_wait_time) * 1000000) / AOS_get_cpu_timer_frequency());
+        //AOS_H_printf("ipfc took for %llu \u03BCs\n", ((after_wait_time - before_wait_time) * 1000000) / AOS_get_cpu_timer_frequency());
 
         if(scratch[0] != last_middle_buffer_handle)
         {
@@ -294,8 +294,8 @@ static last_middle_buffer_handle = U64_MAX;
         u64 start_y = (1.0 - square_y - 0.35)/2.0 * (f32)fb->height;
         u64 end_y = (1.0 - square_y + 0.35)/2.0 * (f32)fb->height;
 
-        u64 start_x = (1.0 + square_x - 0.35)/2.0 * (f32)fb->width;
-        u64 end_x = (1.0 + square_x + 0.35)/2.0 * (f32)fb->width;
+        u64 start_x = (1.0 + square_x - 0.4)/2.0 * (f32)fb->width;
+        u64 end_x = (1.0 + square_x + 0.4)/2.0 * (f32)fb->width;
 
         for(u64 i = 0; i < fb->width * fb->height * 3 + 24; i += 24)
         {
