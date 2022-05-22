@@ -1,4 +1,4 @@
-#define SCHEDUALER_SHUFFLE_CHANCE_INVERSE 32
+#define SCHEDUALER_SHUFFLE_CHANCE_INVERSE 8
 
 
 u64 thread_runtime_is_live(Thread* t, u64 mtime)
@@ -81,7 +81,7 @@ u64 kernel_current_thread_pid[KERNEL_MAX_HART_COUNT];
 u32 kernel_current_thread_tid[KERNEL_MAX_HART_COUNT];
 u8 kernel_current_thread_has_thread[KERNEL_MAX_HART_COUNT];
 
-u64 current_thread_runtimes[KERNEL_MAX_HART_COUNT];
+Spinlock per_hart_thread_runtime_array_lock[KERNEL_MAX_HART_COUNT];
 
 u64 last_mtimes[KERNEL_MAX_HART_COUNT];
 
@@ -93,31 +93,102 @@ u64 last_mtimes[KERNEL_MAX_HART_COUNT];
 struct xoshiro256ss_state kernel_choose_new_thread_rando_state[KERNEL_MAX_HART_COUNT];
 void kernel_choose_new_thread(u64 new_mtime, u64 hart)
 {
-    u64 before_time = kernel_rdtime();
-    u64 before_instructions = kernel_rdinstret();
-
     rwlock_acquire_read(&THREAD_RUNTIME_ARRAY_LOCK);
+    spinlock_acquire(&per_hart_thread_runtime_array_lock[hart]);
+
     ThreadRuntime* runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
+    runtime_array += hart * THREAD_RUNTIME_ARRAY_TOTAL_LEN;
 
     if(kernel_current_thread_has_thread[hart] && kernel_current_thread_pid[hart] != vos[current_vo].pid)
     {
         ThreadRuntime just_ran = runtime_array[current_thread_runtimes[hart]];
-        for(u64 i = current_thread_runtimes[hart]; i + 1 < THREAD_RUNTIME_ARRAY_LEN; i++)
+        for(u64 i = current_thread_runtimes[hart]; i + 1 < THREAD_RUNTIME_ARRAY_LEN[hart]; i++)
         {
             runtime_array[i] = runtime_array[i+1];
         }
-        runtime_array[THREAD_RUNTIME_ARRAY_LEN-1] = just_ran;
+        runtime_array[THREAD_RUNTIME_ARRAY_LEN[hart]-1] = just_ran;
     }
 
     kernel_current_thread_has_thread[hart] = 0;
+
+    // TODO sort by priority
+
+    {
+    u64 assign_array_index = 0;
+    // push threads to other harts
+    for(s64 i = 0; i < THREAD_RUNTIME_ARRAY_LEN[hart]; i++)
+    {
+        ThreadRuntime current_runtime = runtime_array[i];
+        runtime_array[assign_array_index++] = current_runtime;
+
+        Thread* thread = &KERNEL_PROCESS_ARRAY[runtime_array[i].pid]
+                            ->threads[runtime_array[i].tid];
+
+        if(thread->IPFC_status) // all threads involved with ipfc's are core locked so they are not considered
+        { continue; }
+
+        ThreadGroup* group = ((ThreadGroup*)THREAD_GROUP_ARRAY_ALLOC.memory) + runtime_array[i].thread_group_index;
+
+        // How *wide* is the current thread group spread on all harts?
+        u64 width_measure = 0;
+        for(u64 j = 0; j < KERNEL_HART_COUNT.value; j++)
+        {
+            s64 count = atomic_s64_read(&group->counts[j]);
+            width_measure += count > 0;
+        }
+
+
+        // TODO punting
+
+        // should I try shuffle? aka send this thread to another hart
+        u64 random_number = xoshiro256ss(&kernel_choose_new_thread_rando_state[hart]);
+        if(random_number < U64_MAX / SCHEDUALER_SHUFFLE_CHANCE_INVERSE)
+        {
+            u64 send_hart = random_number % (u64)KERNEL_HART_COUNT.value;
+            if(send_hart == hart)
+            {
+                send_hart = (random_number+1) % (u64)KERNEL_HART_COUNT.value;
+                if(send_hart == hart)
+                { continue; } // we are single hart machine
+            }
+
+            u64 me_count = atomic_s64_read(&group->counts[hart]);
+            u64 dest_count = atomic_s64_read(&group->counts[send_hart]);
+            u64 should_send = dest_count < me_count;
+
+            if(width_measure >= runtime_array[i].allowed_width)
+            {
+                should_send = should_send && (me_count == 1 || dest_count);
+            }
+
+            if(should_send && spinlock_try_acquire(&per_hart_thread_runtime_array_lock[send_hart]))
+            {
+                atomic_s64_increment(&group->counts[send_hart]);
+                atomic_s64_decrement(&group->counts[hart]);
+
+                ThreadRuntime* other_runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
+                other_runtime_array += send_hart * THREAD_RUNTIME_ARRAY_TOTAL_LEN;
+
+                u64 other_runtime_index = THREAD_RUNTIME_ARRAY_LEN[send_hart]++;
+                other_runtime_array[other_runtime_index] = runtime_array[i];
+                assign_array_index--;
+
+                spinlock_release(&per_hart_thread_runtime_array_lock[send_hart]);
+                continue;
+            }
+        }
+    }
+    THREAD_RUNTIME_ARRAY_LEN[hart] = assign_array_index;
+    }
 
     u8 found_new_thread = 0;
     u64 new_thread_runtime;
 
     u64 assign_array_index = 0;
 
-    for(u64 i = 0; i < THREAD_RUNTIME_ARRAY_LEN; i++)
+    for(u64 i = 0; i < THREAD_RUNTIME_ARRAY_LEN[hart]; i++)
     {
+        //uart_printf("%llu\n", runtime_array[i].pid);
         Thread* thread = &KERNEL_PROCESS_ARRAY[runtime_array[i].pid]
                             ->threads[runtime_array[i].tid];
         if(thread->should_be_destroyed)
@@ -131,6 +202,7 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
             process_destroy_thread(KERNEL_PROCESS_ARRAY[pid], tid);
             rwlock_acquire_read(&THREAD_RUNTIME_ARRAY_LOCK);
             runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
+            runtime_array += hart * THREAD_RUNTIME_ARRAY_TOTAL_LEN;
 
             continue;
         }
@@ -157,10 +229,11 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
         }
     }
 
-    THREAD_RUNTIME_ARRAY_LEN = assign_array_index;
+    THREAD_RUNTIME_ARRAY_LEN[hart] = assign_array_index;
 
     if(!found_new_thread)
     {
+        spinlock_release(&per_hart_thread_runtime_array_lock[hart]);
         rwlock_release_read(&THREAD_RUNTIME_ARRAY_LOCK);
         // Causes the KERNEL nop thread to be loaded
         return;
@@ -170,19 +243,12 @@ void kernel_choose_new_thread(u64 new_mtime, u64 hart)
 
     ThreadRuntime runtime = runtime_array[current_thread_runtimes[hart]];
 
+    spinlock_release(&per_hart_thread_runtime_array_lock[hart]);
     rwlock_release_read(&THREAD_RUNTIME_ARRAY_LOCK);
 
     kernel_current_thread_has_thread[hart] = 1;
     kernel_current_thread_tid[hart] = runtime.tid;
     kernel_current_thread_pid[hart] = runtime.pid;
-
-    u64 after_time = kernel_rdtime();
-    u64 after_instructions = kernel_rdinstret();
-#if 0
-    uart_printf("choose thread time = %llu\n      instructions = %llu\n",
-                ((after_time - before_time) * 1000000) / MACHINE_TIMER_SECOND,
-                after_instructions - before_instructions);
-#endif
 }
 
 void program_loader_program(u64 drive1_partitions_directory);

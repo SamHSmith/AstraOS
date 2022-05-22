@@ -2235,8 +2235,7 @@ void syscall_IPFC_call(u64 hart, u64 mtime)
 
     // In order to jump directly into the ipfc thread if there is space for it
     // we must put it at the front of the round robin.
-    u64 ipfc_thread_runtime_index;
-    u32 ipfc_tid = process_thread_create(parent_pid, 0, hart, &ipfc_thread_runtime_index); // This guy can move ipfc_process
+    u32 ipfc_tid = process_thread_create(parent_pid, 0, hart, 1); // This guy can move ipfc_process
     ipfc_process =  KERNEL_PROCESS_ARRAY[parent_pid];                   //  be wary.
     Thread* ipfc_thread = &ipfc_process->threads[ipfc_tid];
 
@@ -2245,7 +2244,6 @@ void syscall_IPFC_call(u64 hart, u64 mtime)
     ipfc_thread->IPFC_other_pid = process_pid;
     ipfc_thread->IPFC_function_index = user_function_index;
     ipfc_thread->IPFC_handler_index = handler_index;
-    ipfc_thread->IPFC_caller_runtime_index = current_thread->thread_runtime_index;
 
     ipfc_thread->frame.regs[10] = owned_process_index;
     ipfc_thread->frame.regs[11] = user_function_index;
@@ -2259,33 +2257,11 @@ void syscall_IPFC_call(u64 hart, u64 mtime)
     current_thread->IPFC_handler_index = handler_index;
     current_thread->is_running = 0;
 
-    try_assign_ipfc_stack(ipfc_process, ipfc_thread);
-
     rwlock_release_write(&KERNEL_PROCESS_ARRAY_RWLOCK);
     rwlock_acquire_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 
-    ipfc_process =  KERNEL_PROCESS_ARRAY[parent_pid];
-    ipfc_thread = &ipfc_process->threads[ipfc_tid];
+    kernel_choose_new_thread(mtime, hart);
 
-    if(ipfc_thread->IPFC_status == 3)
-    {
-        rwlock_acquire_read(&THREAD_RUNTIME_ARRAY_LOCK);
-        ThreadRuntime* runtime_array = THREAD_RUNTIME_ARRAY_ALLOC.memory;
-
-        current_thread_runtimes[hart] = ipfc_thread->thread_runtime_index;
-
-        ThreadRuntime runtime = runtime_array[current_thread_runtimes[hart]];
-
-        rwlock_release_read(&THREAD_RUNTIME_ARRAY_LOCK);
-
-        kernel_current_thread_has_thread[hart] = 1;
-        kernel_current_thread_tid[hart] = runtime.tid;
-        kernel_current_thread_pid[hart] = runtime.pid;
-    }
-    else
-    {
-        kernel_choose_new_thread(mtime, hart);
-    }
     rwlock_release_read(&KERNEL_PROCESS_ARRAY_RWLOCK);
 }
 

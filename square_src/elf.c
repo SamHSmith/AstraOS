@@ -162,7 +162,7 @@ static last_middle_buffer_handle = U64_MAX;
         if(scratch[0] != last_middle_buffer_handle)
         {
             AOS_H_printf("OMG I was given a new middle buffer!\n");
-            aso_chartam_mediam_pone(scratch[0], middle_buffer_ptr, 0, 100);
+            aso_chartam_mediam_pone(scratch[0], middle_buffer_ptr, 0, 14000);
             last_middle_buffer_handle = scratch[0];
         }
         commit_semaphore_handle = scratch[1];

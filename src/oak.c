@@ -42,7 +42,7 @@ void oak_send_video(Framebuffer* framebuffer)
     send_oak_packet(&packet);
 
     u64 end_time = *mtime;
-    uart_printf("send video took : %llu \u03BCs\n", (1000 * 1000 * (end_time - start_time)) / MACHINE_TIMER_SECOND);
+    //uart_printf("send video took : %llu \u03BCs\n", (1000 * 1000 * (end_time - start_time)) / MACHINE_TIMER_SECOND);
 }
 
 typedef struct
@@ -150,7 +150,7 @@ void oak_send_block_fetch(u8 write, u64* block_address_pairs, u64 pair_count)
     send_oak_packet(packet);
 
     u64 end_time = *mtime;
-    uart_printf("send block_fetch took : %llu \u03BCs\n", (1000 * 1000 * (end_time - start_time)) / MACHINE_TIMER_SECOND);
+    //uart_printf("send block_fetch took : %llu \u03BCs\n", (1000 * 1000 * (end_time - start_time)) / MACHINE_TIMER_SECOND);
 }
 
 void oak_recieve_block_fetch_complete(OakPacketBlockFetchComplete* packet)

@@ -1,9 +1,9 @@
 
 typedef struct
 {
-    u64 regs[32];
-    u64 fregs[32];
-    u64 satp;
+    volatile u64 regs[32];
+    volatile u64 fregs[32];
+    volatile u64 satp;
 } TrapFrame;
 
 #define THREAD_AWAKE_TIME 0
@@ -30,7 +30,6 @@ typedef struct
     Kallocation stack_alloc;
     u64 program_counter;
     u64 process_pid;
-    u64 thread_runtime_index;
     u8 is_initialized;
     u8 is_running;
     u8 should_be_destroyed;
@@ -41,7 +40,6 @@ typedef struct
     // 2 is IPFC thread awaiting stack
     // 3 is IPFC running
     u64 IPFC_other_pid;
-    u64 IPFC_caller_runtime_index;
     u32 IPFC_other_tid;
     u16 IPFC_function_index;
     u16 IPFC_handler_index;
@@ -247,8 +245,11 @@ typedef struct
 } ThreadRuntime;
 
 Kallocation THREAD_RUNTIME_ARRAY_ALLOC;
-u64 THREAD_RUNTIME_ARRAY_LEN;
+u64 THREAD_RUNTIME_ARRAY_LEN[KERNEL_MAX_HART_COUNT];
+u64 THREAD_RUNTIME_ARRAY_TOTAL_LEN = 0;
 RWLock THREAD_RUNTIME_ARRAY_LOCK;
+
+u64 current_thread_runtimes[KERNEL_MAX_HART_COUNT];
 
 typedef struct
 {
@@ -266,7 +267,7 @@ u64 THREAD_GROUP_ARRAY_LEN;
 // have thread_group be zero if you don't have special intentions
 // out_runtime_index should either be zero or a pointer to a u64
 // it gives you the runtime index of the new thread
-u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64* out_runtime_index)
+u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64 place_at_front_of_hart_runtime_queue)
 {
     assert(pid < KERNEL_PROCESS_ARRAY_LEN, "pid is within range");
     assert(KERNEL_PROCESS_ARRAY[pid]->mmu_table != 0, "pid refers to a valid process");
@@ -329,32 +330,52 @@ u32 process_thread_create(u64 pid, u32 thread_group, u64 hart, u64* out_runtime_
 
     // Now the thread has been created it has to be allocated a "runtime" so that it can be schedualed
     rwlock_acquire_write(&THREAD_RUNTIME_ARRAY_LOCK);
-    u64 runtime = 0;
- 
+    u64 local_runtime = 0;
+
+    u64 new_runtime_array_total_len = 0;
     {
-        if((THREAD_RUNTIME_ARRAY_LEN + 1) * sizeof(ThreadRuntime) >
-            THREAD_RUNTIME_ARRAY_ALLOC.page_count * PAGE_SIZE)
+        // the actual value of THREAD_RUNTIME_ARRAY_TOTAL_LEN may have drifted because
+        // harts will delete thread runtimes on their own. We must therefore recalculate
+        for(u64 h = 0; h < KERNEL_HART_COUNT.value; h++)
         {
-            Kallocation new_alloc = kalloc_pages(THREAD_RUNTIME_ARRAY_ALLOC.page_count + 1);
-            for(u64 i = 0; i < (new_alloc.page_count - 1) * (PAGE_SIZE / 8); i++)
+            new_runtime_array_total_len += THREAD_RUNTIME_ARRAY_LEN[h];
+        }
+        new_runtime_array_total_len += 1;
+    }
+    if(new_runtime_array_total_len > THREAD_RUNTIME_ARRAY_TOTAL_LEN) // only grow to not hit the memory allocator as much
+    {
+        u64 array_byte_count = (THREAD_RUNTIME_ARRAY_TOTAL_LEN + 1) * (u64)KERNEL_HART_COUNT.value * sizeof(ThreadRuntime);
+        {
+            Kallocation new_alloc = kalloc_pages((array_byte_count + PAGE_SIZE - 1) / PAGE_SIZE);
+
+            for(u64 h = 0; h < KERNEL_HART_COUNT.value; h++)
             {
-                *(((u64*)new_alloc.memory) + i) =
-                        *(((u64*)THREAD_RUNTIME_ARRAY_ALLOC.memory) + i);
+                ThreadRuntime* old_array = ((ThreadRuntime*)THREAD_RUNTIME_ARRAY_ALLOC.memory) + (THREAD_RUNTIME_ARRAY_TOTAL_LEN * h);
+                ThreadRuntime* new_array = ((ThreadRuntime*)new_alloc.memory) + (new_runtime_array_total_len * h);
+                for(u64 i = 0; i < THREAD_RUNTIME_ARRAY_LEN[h]; i++)
+                {
+                    new_array[i] = old_array[i];
+                }
             }
             kfree_pages(THREAD_RUNTIME_ARRAY_ALLOC);
             THREAD_RUNTIME_ARRAY_ALLOC = new_alloc;
         }
- 
-        runtime = THREAD_RUNTIME_ARRAY_LEN++;
+        THREAD_RUNTIME_ARRAY_TOTAL_LEN = new_runtime_array_total_len;
     }
+    local_runtime = THREAD_RUNTIME_ARRAY_LEN[hart]++;
 
-    if(out_runtime_index)
+    ThreadRuntime* local_runtime_array = ((ThreadRuntime*)THREAD_RUNTIME_ARRAY_ALLOC.memory) + (THREAD_RUNTIME_ARRAY_TOTAL_LEN * hart);
+    if(0)
     {
-        *out_runtime_index = runtime;
+        for(s64 i = local_runtime; i > 0; i--)
+        {
+            local_runtime_array[i] = local_runtime_array[i-1];
+        }
+        current_thread_runtimes[hart]++; // we move this up by one so that it still points to the same thing
+        local_runtime = 0;
     }
-    KERNEL_PROCESS_ARRAY[pid]->threads[tid].thread_runtime_index = runtime;
  
-    ThreadRuntime* r = ((ThreadRuntime*)THREAD_RUNTIME_ARRAY_ALLOC.memory) + runtime;
+    ThreadRuntime* r = &local_runtime_array[local_runtime];
     r->pid = pid;
     r->tid = tid;
     r->thread_group = thread_group;

@@ -453,11 +453,11 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                     windows[window_count].window_handle = *window_handle;
                     windows[window_count].other_surface_slot = surface_slot;
 
-                    aso_charta_media_crea(100, &windows[window_count].middle_buffer_handle);
-                    windows[window_count].base_middle_buffer_ptr = 0x789342000 + 5000 * 4096 * window_count;
+                    aso_charta_media_crea(14000, &windows[window_count].middle_buffer_handle);
+                    windows[window_count].base_middle_buffer_ptr = 0x379342000 + 15000 * 4096 * windows[window_count].window_handle;
                     windows[window_count].middle_buffer_fb = ((u64)windows[window_count].base_middle_buffer_ptr) + 4096 * 1;
-                    windows[window_count].second_middle_buffer_fb = ((u64)windows[window_count].base_middle_buffer_ptr) + 4096 * 60;
-                    aso_chartam_mediam_pone(windows[window_count].middle_buffer_handle, windows[window_count].base_middle_buffer_ptr, 0, 100);
+                    windows[window_count].second_middle_buffer_fb = ((u64)windows[window_count].base_middle_buffer_ptr) + 4096 * 7000;
+                    aso_chartam_mediam_pone(windows[window_count].middle_buffer_handle, windows[window_count].base_middle_buffer_ptr, 0, 14000);
 
                     windows[window_count].middle_buffer_fb->width = 100;
                     windows[window_count].middle_buffer_fb->height = 100;
@@ -1011,6 +1011,10 @@ while(1) {
                     *windows[i].base_middle_buffer_ptr = (u64)windows[i].second_middle_buffer_fb - (u64)windows[i].base_middle_buffer_ptr;
 
                     windows[i].dropped_frame = 0;
+
+                    windows[i].second_middle_buffer_fb->width = windows[i].new_width - 2*BORDER_SIZE;
+                    windows[i].second_middle_buffer_fb->height = windows[i].new_height - 2*BORDER_SIZE;
+
                     aso_semaphorum_medium_suscita(windows[i].own_acquire_semaphore_handle, 1, 0);
                 }
                 else
