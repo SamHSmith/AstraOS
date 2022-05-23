@@ -1,6 +1,8 @@
 #include "../userland/aos_syscalls.h"
 #include "../userland/aos_helper.h"
 
+#include "../userland/aso_tonitrus.h"
+
 #include "../common/maths.h"
 
 u64 strlen(char* str)
@@ -162,7 +164,7 @@ static last_middle_buffer_handle = U64_MAX;
         if(scratch[0] != last_middle_buffer_handle)
         {
             AOS_H_printf("OMG I was given a new middle buffer!\n");
-            aso_chartam_mediam_pone(scratch[0], middle_buffer_ptr, 0, 14000);
+            aso_chartam_mediam_pone(scratch[0], middle_buffer_ptr, 0, aso_chartae_mediae_magnitudem_disce(scratch[0]));
             last_middle_buffer_handle = scratch[0];
         }
         commit_semaphore_handle = scratch[1];
@@ -180,8 +182,18 @@ static last_middle_buffer_handle = U64_MAX;
     //AOS_H_printf("waited for %llu \u03BCs\n", ((after_wait_time - before_wait_time) * 1000000) / AOS_get_cpu_timer_frequency());
 #endif
 
-    // what framebuffer should I write to?
-    AOS_Framebuffer* fb = (u64)middle_buffer_ptr + *middle_buffer_ptr;
+
+    PicturaAnimata* pictura = middle_buffer_ptr;
+    u8* data_picturae;
+    if(pictura->dispositio_elementorum)
+    {
+        data_picturae = index_absolutus_ad_picturam_primam(pictura);
+    }
+    else
+    {
+        data_picturae = index_absolutus_ad_picturam_secundam(pictura);
+    }
+
 //    u64 fb_page_count;
 //    if(surface_count) { fb_page_count = AOS_surface_acquire(surfaces[0], 0, 0); }
 //    if(surface_count && AOS_surface_acquire(surfaces[0], fb, fb_page_count))
@@ -195,13 +207,13 @@ static last_middle_buffer_handle = U64_MAX;
         // unsquishing the square
         f64 x_scale = 1.0;
         f64 y_scale = 1.0;
-        if(fb->height > fb->width)
+        if(pictura->altitudo > pictura->latitudo)
         {
-            y_scale = (f64)fb->height / (f64)fb->width;
+            y_scale = (f64)pictura->altitudo / (f64)pictura->latitudo;
         }
         else
         {
-            x_scale = (f64)fb->width / (f64)fb->height;
+            x_scale = (f64)pictura->latitudo / (f64)pictura->altitudo;
         }
 
         { // Keyboard events
@@ -285,30 +297,30 @@ static last_middle_buffer_handle = U64_MAX;
         f32 d2x = -p1x - p2x;
         f32 d2y = -p1y - p2y;
 
-        f32 dpfx = 2.0 / (f32)fb->width;
-        f32 dpfy = 2.0 / (f32)fb->height;
+        f32 dpfx = 2.0 / (f32)pictura->latitudo;
+        f32 dpfy = 2.0 / (f32)pictura->altitudo;
         f32 alias_by = (dpfx + dpfy) / 2.0;
         f32 pfx = -1.0;
         f32 pfy = -1.0;
 
-        u64 start_y = (1.0 - square_y - 0.35)/2.0 * (f32)fb->height;
-        u64 end_y = (1.0 - square_y + 0.35)/2.0 * (f32)fb->height;
+        u64 start_y = (1.0 - square_y - 0.35)/2.0 * (f32)pictura->altitudo;
+        u64 end_y = (1.0 - square_y + 0.35)/2.0 * (f32)pictura->altitudo;
 
-        u64 start_x = (1.0 + square_x - 0.4)/2.0 * (f32)fb->width;
-        u64 end_x = (1.0 + square_x + 0.4)/2.0 * (f32)fb->width;
+        u64 start_x = (1.0 + square_x - 0.4)/2.0 * (f32)pictura->latitudo;
+        u64 end_x = (1.0 + square_x + 0.4)/2.0 * (f32)pictura->latitudo;
 
-        for(u64 i = 0; i < fb->width * fb->height * 3 + 24; i += 24)
+        for(u64 i = 0; i < pictura->latitudo * pictura->altitudo * 3 + 24; i += 24)
         {
-            *((u64*)&fb->data[i]) = 0;
-            *((u64*)&fb->data[i+8]) = 0;
-            *((u64*)&fb->data[i+16]) = 0;
+            *((u64*)&data_picturae[i]) = 0;
+            *((u64*)&data_picturae[i+8]) = 0;
+            *((u64*)&data_picturae[i+16]) = 0;
         }
 
         for(u64 y = start_y; y < end_y; y++)
         {
             for(u64 x = start_x; x < end_x; x++)
             {
-                u64 i = x + y * fb->width;
+                u64 i = x + y * pictura->latitudo;
 
                 f32 e1 = (-1.0 + dpfx * (f32)x - square_x) * d1y * x_scale - (-1.0 + dpfy * (f32)y + square_y) * d1x * y_scale;
                 f32 e2 = (-1.0 + dpfx * (f32)x - square_x) * d2y * x_scale - (-1.0 + dpfy * (f32)y + square_y) * d2x * y_scale;
@@ -320,9 +332,9 @@ static last_middle_buffer_handle = U64_MAX;
                 e2 > -0.125
                 )
                 {
-                    fb->data[i*3 + 0] = red;
-                    fb->data[i*3 + 1] = green;
-                    fb->data[i*3 + 2] = blue;
+                    data_picturae[i*3 + 0] = red;
+                    data_picturae[i*3 + 1] = green;
+                    data_picturae[i*3 + 2] = blue;
                 }
                 pfx += dpfx;
             }

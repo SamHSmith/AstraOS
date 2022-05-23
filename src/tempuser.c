@@ -1,5 +1,7 @@
 #include "../userland/aos_helper.h"
 
+#include "../userland/aso_tonitrus.h"
+
 #include "samorak.c"
 //#include "qwerty.h"
 
@@ -39,10 +41,9 @@ typedef struct
     u8 we_have_frame;
 
     u64 middle_buffer_handle;
-    u64* base_middle_buffer_ptr;
-    AOS_Framebuffer* middle_buffer_fb;
-    AOS_Framebuffer* second_middle_buffer_fb;
-    u64 middle_buffer_foreign_handle;
+    u64 foreign_middle_buffer_handle;
+    PicturaAnimata* pictura;
+    u8 displaying_primary;
 
     u64 foreign_commit_semaphore_handle;
     u64 own_commit_semaphore_handle;
@@ -453,24 +454,16 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                     windows[window_count].window_handle = *window_handle;
                     windows[window_count].other_surface_slot = surface_slot;
 
-                    aso_charta_media_crea(14000, &windows[window_count].middle_buffer_handle);
-                    windows[window_count].base_middle_buffer_ptr = 0x379342000 + 15000 * 4096 * windows[window_count].window_handle;
-                    windows[window_count].middle_buffer_fb = ((u64)windows[window_count].base_middle_buffer_ptr) + 4096 * 1;
-                    windows[window_count].second_middle_buffer_fb = ((u64)windows[window_count].base_middle_buffer_ptr) + 4096 * 7000;
-                    aso_chartam_mediam_pone(windows[window_count].middle_buffer_handle, windows[window_count].base_middle_buffer_ptr, 0, 14000);
-
-                    windows[window_count].middle_buffer_fb->width = 100;
-                    windows[window_count].middle_buffer_fb->height = 100;
-
-                    windows[window_count].second_middle_buffer_fb->width = 100;
-                    windows[window_count].second_middle_buffer_fb->height = 100;
-
-                    *windows[window_count].base_middle_buffer_ptr = (u64)windows[window_count].second_middle_buffer_fb - (u64)windows[window_count].base_middle_buffer_ptr;
+                    PicturaAnimata* pictura = 0x379342000 + magnitudo_picturae_animatae_disce(300, 300) * 4096 * windows[window_count].window_handle;
+                    if(!pictura_animata_crea(300, 300, &windows[window_count].middle_buffer_handle, pictura))
+                    { AOS_H_printf("I am sad\n"); }
+                    windows[window_count].displaying_primary = 1;
+                    windows[window_count].pictura = pictura;
 
                     if(!aso_chartam_mediam_da(
                         windows[window_count].middle_buffer_handle,
                         windows[window_count].pid,
-                        &windows[window_count].middle_buffer_foreign_handle))
+                        &windows[window_count].foreign_middle_buffer_handle))
                     {
                         AOS_H_printf("failed to give middle buffer\n");
                     }
@@ -629,7 +622,7 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
             if(windows[i].pid != source_pid || windows[i].window_handle != window_handle)
             { continue; }
 
-            copy_to[0] = windows[i].middle_buffer_foreign_handle;
+            copy_to[0] = windows[i].foreign_middle_buffer_handle;
             copy_to[1] = windows[i].foreign_commit_semaphore_handle;
             copy_to[2] = windows[i].foreign_acquire_semaphore_handle;
             aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
@@ -711,6 +704,8 @@ void program_loader_program(u64 drive1_partitions_directory)
         )
         { AOS_H_printf("failed to init twa ipfc handler. Something is very wrong.\n"); }
     }
+
+
 
 while(1) {
 
@@ -1005,15 +1000,12 @@ while(1) {
             {
                 if(aso_semaphorum_medium_expectare_conare(windows[i].own_commit_semaphore_handle)) // aka new frame
                 {
-                    AOS_Framebuffer* temp = windows[i].middle_buffer_fb;
-                    windows[i].middle_buffer_fb = windows[i].second_middle_buffer_fb;
-                    windows[i].second_middle_buffer_fb = temp;
-                    *windows[i].base_middle_buffer_ptr = (u64)windows[i].second_middle_buffer_fb - (u64)windows[i].base_middle_buffer_ptr;
+                    windows[i].displaying_primary = !windows[i].displaying_primary;
 
                     windows[i].dropped_frame = 0;
 
-                    windows[i].second_middle_buffer_fb->width = windows[i].new_width - 2*BORDER_SIZE;
-                    windows[i].second_middle_buffer_fb->height = windows[i].new_height - 2*BORDER_SIZE;
+                    // HACK to tell client what buffer to render into
+                    windows[i].pictura->dispositio_elementorum = !windows[i].displaying_primary;
 
                     aso_semaphorum_medium_suscita(windows[i].own_acquire_semaphore_handle, 1, 0);
                 }
@@ -1162,6 +1154,18 @@ while(1) {
                 continue;
             }
 
+            u64 latitudo_picturae = windows[j].pictura->latitudo;
+            u64 altitudo_picturae = windows[j].pictura->altitudo;
+            u8* data_picturae;
+            if(windows[j].displaying_primary)
+            {
+                data_picturae = index_absolutus_ad_picturam_primam(windows[j].pictura);
+            }
+            else
+            {
+                data_picturae = index_absolutus_ad_picturam_secundam(windows[j].pictura);
+            }
+
             for(u64 y = start_y; y < end_y; y++)
             for(u64 x = start_x; x < end_x; x++)
             {
@@ -1173,25 +1177,25 @@ while(1) {
                 u64 i = external_x + (external_y * fb->width);
 
                 if(x >= BORDER_SIZE && y >= BORDER_SIZE &&
-                   x - BORDER_SIZE < windows[j].middle_buffer_fb->width && y - BORDER_SIZE < windows[j].middle_buffer_fb->height)
+                   x - BORDER_SIZE < latitudo_picturae && y - BORDER_SIZE < altitudo_picturae)
                 {
                     u64 internal_x = x - BORDER_SIZE;
                     u64 internal_y = y - BORDER_SIZE;
-                    u64 k = internal_x + (internal_y * windows[j].middle_buffer_fb->width);
+                    u64 k = internal_x + (internal_y * latitudo_picturae);
 
 #if 0
 // this is the good version with clamping and alpha
-                    float cover = 1.0 - clamp_01(windows[j].middle_buffer_fb->data[k*4 + 3]);
-        fb->data[i*3 + 0] = clamp_01(fb->data[i*3 + 0] * cover + clamp_01(windows[j].middle_buffer_fb->data[k*4 + 0]));
-        fb->data[i*3 + 1] = clamp_01(fb->data[i*3 + 1] * cover + clamp_01(windows[j].middle_buffer_fb->data[k*4 + 1]));
-        fb->data[i*3 + 2] = clamp_01(fb->data[i*3 + 2] * cover + clamp_01(windows[j].middle_buffer_fb->data[k*4 + 2]));
+                    float cover = 1.0 - clamp_01(data_picturae[k*4 + 3]);
+        fb->data[i*3 + 0] = clamp_01(fb->data[i*3 + 0] * cover + clamp_01(data_picturae[k*4 + 0]));
+        fb->data[i*3 + 1] = clamp_01(fb->data[i*3 + 1] * cover + clamp_01(data_picturae[k*4 + 1]));
+        fb->data[i*3 + 2] = clamp_01(fb->data[i*3 + 2] * cover + clamp_01(data_picturae[k*4 + 2]));
 #else
 // this is the trash version with no clamping and no alpha
         if(!windows[j].dropped_frame)
         {
-            fb->data[i*3 + 0] = windows[j].middle_buffer_fb->data[k*3 + 0];
-            fb->data[i*3 + 1] = windows[j].middle_buffer_fb->data[k*3 + 1];
-            fb->data[i*3 + 2] = windows[j].middle_buffer_fb->data[k*3 + 2];
+            fb->data[i*3 + 0] = data_picturae[k*3 + 0];
+            fb->data[i*3 + 1] = data_picturae[k*3 + 1];
+            fb->data[i*3 + 2] = data_picturae[k*3 + 2];
         }
         else
         {
