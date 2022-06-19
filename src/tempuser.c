@@ -17,7 +17,8 @@ void user_assert(u64 condition, u8* message)
     *ptr = 5;
 }
 
-#define BORDER_SIZE 3
+#define BORDER_SIZE 4
+#define WINDOW_BANNER_HEIGHT 19
 
 typedef struct
 {
@@ -1056,15 +1057,7 @@ while(1) {
         if(fb->height > 16) { bottom_banner_y = fb->height - 16; }
 
         f64 time_render_start = AOS_H_time_get_seconds();
-#if 0
-        render_buffer = fb;
-        atomic_s64_set(&render_work_done, 0);
-        atomic_s64_set(&render_work_started, 0);
-        AOS_semaphore_release(render_work_semaphore, THREAD_COUNT * JOBS_PER_THREAD, 0);
 
-        user_assert(AOS_thread_awake_on_semaphore(render_work_done_semaphore), "actually awaking semaphore");
-        AOS_thread_sleep();
-#else
         for(u64 y = 0; y < fb->height; y++)
         for(u64 x = 0; x < fb->width; x++)
         {
@@ -1134,26 +1127,6 @@ while(1) {
             else if(j + 1 == window_count)
             { blue = 140.0; }
 
-            if(!windows[j].we_have_frame ||
-                windows[j].width <= 2*BORDER_SIZE || windows[j].height <= 2*BORDER_SIZE)
-            {
-                for(u64 y = start_y; y < end_y; y++)
-                for(u64 x = start_x; x < end_x; x++)
-                {
-                    if((s64)x + windows[j].x < 0 || (s64)y + windows[j].y < 0 ||
-                       (s64)x + windows[j].x >= fb->width || (s64)y + windows[j].y >= fb->height)
-                    { continue; }
-                    u64 external_x = (u64)((s64)x + windows[j].x);
-                    u64 external_y = (u64)((s64)y + windows[j].y);
-                    u64 i = external_x + (external_y * fb->width);
-
-                    fb->data[i*3 + 0] = red;
-                    fb->data[i*3 + 1] = green;
-                    fb->data[i*3 + 2] = blue;
-                }
-                continue;
-            }
-
             u64 latitudo_picturae = windows[j].pictura->latitudo;
             u64 altitudo_picturae = windows[j].pictura->altitudo;
             u8* data_picturae;
@@ -1166,6 +1139,13 @@ while(1) {
                 data_picturae = index_absolutus_ad_picturam_secundam(windows[j].pictura);
             }
 
+            u8 border_column_colours[end_x - start_x]; // this is an optimization
+            for(u64 x = 0; x < end_x - start_x; x++)
+            {
+                f32 lerp_factor = (f32)x / (f32)windows[j].width;
+                border_column_colours[x] = 106 + (u8)(120.0f * lerp_factor);
+            }
+
             for(u64 y = start_y; y < end_y; y++)
             for(u64 x = start_x; x < end_x; x++)
             {
@@ -1176,46 +1156,79 @@ while(1) {
                 u64 external_y = (u64)((s64)y + windows[j].y);
                 u64 i = external_x + (external_y * fb->width);
 
-                if(x >= BORDER_SIZE && y >= BORDER_SIZE &&
+                if( x < BORDER_SIZE || x + BORDER_SIZE > windows[j].width ||
+                    y < WINDOW_BANNER_HEIGHT || y + BORDER_SIZE > windows[j].height)  // aka this is a border
+                {
+                    fb->data[i*3 + 0] = 54;
+                    fb->data[i*3 + 1] = 160;
+                    fb->data[i*3 + 2] = border_column_colours[x - start_x];
+
+                    if(j + 1 == window_count && (is_moving_window || is_resizing_window))
+                    {
+                        fb->data[i*3 + 0] += 10;
+                        fb->data[i*3 + 1] += 10;
+                        fb->data[i*3 + 2] += 10;
+                    }
+                    else if(j + 1 == window_count)
+                    {
+                        fb->data[i*3 + 0] += 30;
+                        fb->data[i*3 + 1] += 30;
+                        fb->data[i*3 + 2] += 30;
+                    }
+
+                    u8* temp_title = "Title of window";
+                    u64 temp_title_len = strlen(temp_title);
+                    if( x >= BORDER_SIZE && x + BORDER_SIZE < windows[j].width &&
+                        y >= 3 && y + 3 < WINDOW_BANNER_HEIGHT)
+                    {
+                        if(x < BORDER_SIZE + temp_title_len*8 && font8_16_pixel_filled(temp_title[(x-BORDER_SIZE)/8], (x-BORDER_SIZE)%8, y - 3))
+                        {
+                            fb->data[i*3 + 0] = 230;
+                            fb->data[i*3 + 1] = 230;
+                            fb->data[i*3 + 2] = 230;
+                        }
+                        else
+                        {
+                            fb->data[i*3 + 0] -= 20;
+                            fb->data[i*3 + 1] -= 20;
+                            fb->data[i*3 + 2] -= 20;
+                        }
+                    }
+
+                    continue;
+                }
+
+                if(x >= BORDER_SIZE && y >= WINDOW_BANNER_HEIGHT &&
                    x - BORDER_SIZE < latitudo_picturae && y - BORDER_SIZE < altitudo_picturae)
                 {
                     u64 internal_x = x - BORDER_SIZE;
                     u64 internal_y = y - BORDER_SIZE;
                     u64 k = internal_x + (internal_y * latitudo_picturae);
 
-#if 0
-// this is the good version with clamping and alpha
-                    float cover = 1.0 - clamp_01(data_picturae[k*4 + 3]);
-        fb->data[i*3 + 0] = clamp_01(fb->data[i*3 + 0] * cover + clamp_01(data_picturae[k*4 + 0]));
-        fb->data[i*3 + 1] = clamp_01(fb->data[i*3 + 1] * cover + clamp_01(data_picturae[k*4 + 1]));
-        fb->data[i*3 + 2] = clamp_01(fb->data[i*3 + 2] * cover + clamp_01(data_picturae[k*4 + 2]));
-#else
-// this is the trash version with no clamping and no alpha
-        if(!windows[j].dropped_frame)
-        {
-            fb->data[i*3 + 0] = data_picturae[k*3 + 0];
-            fb->data[i*3 + 1] = data_picturae[k*3 + 1];
-            fb->data[i*3 + 2] = data_picturae[k*3 + 2];
-        }
-        else
-        {
-            fb->data[i*3 + 0] = 200;
-            fb->data[i*3 + 1] = 200;
-            fb->data[i*3 + 2] = 200;
-        }
-#endif
+                    if(!windows[j].dropped_frame)
+                    {
+                        fb->data[i*3 + 0] = data_picturae[k*3 + 0];
+                        fb->data[i*3 + 1] = data_picturae[k*3 + 1];
+                        fb->data[i*3 + 2] = data_picturae[k*3 + 2];
+                    }
+                    else
+                    {
+                        fb->data[i*3 + 0] = 200;
+                        fb->data[i*3 + 1] = 200;
+                        fb->data[i*3 + 2] = 200;
+                    }
                 }
                 else
                 {
-                    fb->data[i*3 + 0] = red;
-                    fb->data[i*3 + 1] = green;
-                    fb->data[i*3 + 2] = blue;
+                    fb->data[i*3 + 0] = 60; // Application has failed to give us data for this part.
+                    fb->data[i*3 + 1] = 60; // so the correct response is eye-sore grey.
+                    fb->data[i*3 + 2] = 60;
                 }
             }
         }
-#endif
+
         f64 time_render_end = AOS_H_time_get_seconds();
-        //printf("it took %lf ms to render\n", (time_render_end - time_render_start)*1000.0);
+        //AOS_H_printf("it took %lf ms to render\n", (time_render_end - time_render_start)*1000.0);
 
         { // draw cursor
             if(cursor_x < 0.0) { cursor_x = 0.0; }
