@@ -41,8 +41,12 @@ typedef struct
     u64 fb_page_count;
     u8 we_have_frame;
 
-    u64 middle_buffer_handle;
-    u64 foreign_middle_buffer_handle;
+    u64 draw_info_middle_buffer_handle;
+    u64 draw_info_foreign_middle_buffer_handle;
+    IndiciumPingendi* indicium_pingendi;
+
+    u64 pictura_middle_buffer_handle;
+    u64 pictura_foreign_middle_buffer_handle;
     PicturaAnimata* pictura;
     u8 displaying_primary;
 
@@ -121,289 +125,6 @@ f64 last_frame_time = 0.0;
 f64 rolling_time_passed = 0.0;
 f64 rolling_frame_time = 0.0;
 
-typedef struct
-{
-    u64 canvas_start;
-    u64 canvas_end;
-    AOS_Framebuffer* buffer;
-    u32 xoffset;
-    u32 y_index;
-    f32 red; f32 green; f32 blue;
-} RenderArea;
-void render_function(u64 threadid, u64 total_threads)
-{
-    RenderArea areas[window_count*2*2];
-    for(u64 y = threadid; y < render_buffer->height; y+=total_threads)
-    {
-        u64 area_count = 0;
-
-        for(u64 i = 0; i < window_count; i++)
-        {
-            {
-            if(!(windows[i].y <= (s64)y && windows[i].y + (s64)windows[i].height > (s64)y))
-            { continue; }
-            u64 start, end;
-            {
-                s64 _start = windows[i].x;
-                if(_start < 0) { _start = 0; }
-                s64 _end = windows[i].x + (s64)windows[i].width - 1;
-                if(_end > (s64)render_buffer->width - 1) { _end = (s64)render_buffer->width - 1; }
-                start = (u64)_start;
-                end = (u64)_end;
-            }
-            u64 insert_index = area_count;
-            s64 push_count = 0;
-            for(u64 i = 0; i < area_count; i++)
-            {
-                if(areas[i].canvas_start >= start)
-                { insert_index = i; break; }
-            }
-
-            {
-                push_count = 1;
-                for(u64 j = insert_index; j < area_count; j++)
-                {
-                    if(areas[j].canvas_end >= end)
-                    { break; }
-                    push_count--;
-                }
-                if(insert_index)
-                {
-                    if(areas[insert_index-1].canvas_end > end)
-                    { push_count++; }
-                }
-                if(push_count > 0)
-                {
-                    for(s64 i = ((s64)area_count)-1; i >= (s64)insert_index; i--)
-                    { areas[i+push_count] = areas[i]; }
-                    area_count += push_count;
-                }
-                else if(push_count < 0)
-                {
-                    for(u64 i = insert_index + (u64)(-push_count); i < area_count; i++)
-                    {
-                        areas[i - (u64)(-push_count)] = areas[i];
-                    }
-                    area_count -= (u64)(-push_count);
-                }
-            }
-            if(insert_index)
-            {
-                u64 prev_index = insert_index - 1;
-
-                if(areas[prev_index].canvas_end > end)
-                {
-                    u64 new_start = end + 1;
-                    areas[insert_index + 1] = areas[prev_index];
-                    areas[insert_index + 1].xoffset += new_start - areas[prev_index].canvas_start;
-                    areas[insert_index + 1].canvas_start = new_start;
-                }
-            }
-            for(u64 i = 0; i < insert_index; i++)
-            {
-                if(areas[i].canvas_end >= start)
-                { areas[i].canvas_end = start-1; }
-            }
-
-            u8 red = 51;
-            u8 green = 51;
-            u8 blue = 70;
-            if(i + 1 == window_count && (is_moving_window || is_resizing_window))
-            { blue = 180; }
-            else if(i + 1 == window_count)
-            { blue = 140; }
-
-            areas[insert_index].canvas_start = start;
-            areas[insert_index].canvas_end = end;
-            areas[insert_index].buffer = 0;
-            areas[insert_index].red = red;
-            areas[insert_index].green = green;
-            areas[insert_index].blue = blue;
-            }
-            {
-            if(!windows[i].we_have_frame || !(windows[i].y + BORDER_SIZE <= (s64)y && windows[i].y + BORDER_SIZE + windows[i].fb->height > (s64)y))
-            { continue; }
-            u64 start, end;
-            {
-                s64 _start = windows[i].x + BORDER_SIZE;
-                if(windows[i].width <= 2*BORDER_SIZE) { continue; }
-                if(windows[i].height <= 2*BORDER_SIZE) { continue; }
-                if((s64)y >= windows[i].y + (s64)windows[i].height - BORDER_SIZE) { continue; }
-                s64 _end = windows[i].x + (s64)windows[i].width - BORDER_SIZE;
-                if(_end > render_buffer->width) { _end = render_buffer->width; }
-                if((u64)(_end - _start) >= windows[i].fb->width)
-                { _end = _start + (s64)windows[i].fb->width - 1; }
-                if(_start < 0) { _start = 0; }
-                if(_end > windows[i].x + (s64)windows[i].width - 1 - BORDER_SIZE)
-                { _end = windows[i].x + (s64)windows[i].width - 1 - BORDER_SIZE; }
-                if(_end <= _start) { continue; }
-                start = (u64)_start;
-                end = (u64)_end;
-            }
-            u64 insert_index = area_count;
-            s64 push_count = 0;
-            for(u64 i = 0; i < area_count; i++)
-            {
-                if(areas[i].canvas_start >= start)
-                { insert_index = i; break; }
-            }
-
-            {
-                push_count = 1;
-                for(u64 j = insert_index; j < area_count; j++)
-                {
-                    if(areas[j].canvas_end >= end)
-                    { break; }
-                    push_count--;
-                }
-                if(insert_index)
-                {
-                    if(areas[insert_index-1].canvas_end > end)
-                    { push_count++; }
-                }
-                if(push_count > 0)
-                {
-                    for(s64 i = ((s64)area_count)-1; i >= (s64)insert_index; i--)
-                    { areas[i+push_count] = areas[i]; }
-                    area_count += push_count;
-                }
-                else if(push_count < 0)
-                {
-                    for(u64 i = insert_index + (u64)(-push_count); i < area_count; i++)
-                    {
-                        areas[i - (u64)(-push_count)] = areas[i];
-                    }
-                    area_count -= (u64)(-push_count);
-                }
-            }
-            if(insert_index)
-            {
-                u64 prev_index = insert_index - 1;
-
-                if(areas[prev_index].canvas_end > end)
-                {
-                    u64 new_start = end + 1;
-                    areas[insert_index + 1] = areas[prev_index];
-                    areas[insert_index + 1].xoffset += new_start - areas[prev_index].canvas_start;
-                    areas[insert_index + 1].canvas_start = new_start;
-                }
-            }
-            for(u64 i = 0; i < insert_index; i++)
-            {
-                if(areas[i].canvas_end >= start)
-                { areas[i].canvas_end = start-1; }
-            }
-
-            areas[insert_index].canvas_start = start;
-            areas[insert_index].canvas_end = end;
-            areas[insert_index].buffer = windows[i].fb;
-            areas[insert_index].xoffset = 0;
-            if(windows[i].x + BORDER_SIZE < 0) { areas[insert_index].xoffset = (u32)(-(windows[i].x + BORDER_SIZE)); }
-            areas[insert_index].y_index = ((s64)y - windows[i].y - BORDER_SIZE);
-            }
-        }
-
-    u64 area_index = 0;
-    for(u64 x = 0; x < render_buffer->width; x++)
-    {
-        u64 i = x + (y * render_buffer->width);
-
-        render_buffer->data[i*3 + 0] = 17;
-        render_buffer->data[i*3 + 1] = 80;
-        render_buffer->data[i*3 + 2] = 128;
-
-        u64 c = x / 8;
-        u64 r = y / 16;
-
-        if(r == slot_index)
-        {
-            render_buffer->data[i*3 + 0] = 28;
-            render_buffer->data[i*3 + 1] = 133;
-            render_buffer->data[i*3 + 2] = 213;
-        }
-        else if(r < slot_count)
-        {
-            render_buffer->data[i*3 + 0] = 8;
-            render_buffer->data[i*3 + 1] = 37;
-            render_buffer->data[i*3 + 2] = 57;
-        }
-
-        u64 here = 0;
-        if(r < slot_count && c < partition_name_lens[r])
-        {
-            u64 font_id = partition_names[r][c];
-            here = font8_16_pixel_filled(font_id, x - c*8, y - r*16);
-        }
-
-        if(y >= bottom_banner_y && c < bottom_banner_len)
-        {
-            u64 font_id = bottom_banner[c];
-            here = font8_16_pixel_filled(font_id, x - (c*8), y - bottom_banner_y);
-        }
-
-        if(here)
-        {
-            render_buffer->data[i*3 + 0] = 232;
-            render_buffer->data[i*3 + 1] = 227;
-            render_buffer->data[i*3 + 2] = 197;
-        }
-
-        if(area_index < area_count && areas[area_index].canvas_end < x)
-        {
-            area_index++;
-        }
-
-        RenderArea a;
-        u8 has_area = 0;
-        if(area_index < area_count && areas[area_index].canvas_start <= x && areas[area_index].canvas_end >= x)
-        {
-            a = areas[area_index];
-            has_area = 1;
-        }
-        if(has_area)
-        {
-            if(a.buffer)
-            {
-                u64 local_x = (x - (u64)a.canvas_start) + a.xoffset;
-                u64 j = local_x + (a.y_index * a.buffer->width);
-                render_buffer->data[i*3 + 0] = a.buffer->data[j*3 + 0];
-                render_buffer->data[i*3 + 1] = a.buffer->data[j*3 + 1];
-                render_buffer->data[i*3 + 2] = a.buffer->data[j*3 + 2];
-            }
-            else
-            {
-                render_buffer->data[i*3 + 0] = a.red;
-                render_buffer->data[i*3 + 1] = a.green;
-                render_buffer->data[i*3 + 2] = a.blue;
-                render_buffer->data[i*3 + 3] = 1.0;
-            }
-        }
-    }
-    }
-
-    if(atomic_s64_increment(&render_work_done) + 1 >= total_threads)
-    { AOS_semaphore_release(render_work_done_semaphore, 1, 0); }
-}
-
-#define WORKER_THREAD_STACK_SIZE (8+((sizeof(RenderArea)*300*2)/4096))
-#define THREAD_COUNT 0
-#define JOBS_PER_THREAD 8
-
-u64 render_work_semaphore;
-void render_thread_entry(u64 thread_number)
-{
-    while(1)
-    {
-        user_assert(AOS_thread_awake_on_semaphore(render_work_semaphore), "actually awaking the semaphore");
-        AOS_thread_sleep();
-        while(1) {
-            s64 jobid = atomic_s64_increment(&render_work_started);
-            if(jobid >= THREAD_COUNT * JOBS_PER_THREAD) { break; }
-            render_function(jobid, THREAD_COUNT * JOBS_PER_THREAD);
-        }
-    }
-}
-
 u64 thunder_lock_mutex_semaphore_handle_signal;
 u64 thunder_lock_mutex_semaphore_handle_wait;
 const char* TWA_IPFC_API_NAME = "thunder_windowed_application_ipfc_api_v1";
@@ -455,19 +176,42 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
                     windows[window_count].window_handle = *window_handle;
                     windows[window_count].other_surface_slot = surface_slot;
 
+                    IndiciumPingendi* indicium = 0x239342000 + 4096 * windows[window_count].window_handle;
+                    u64 ansa_chartae_mediae;
+                    if(!aso_charta_media_crea(1, &windows[window_count].draw_info_middle_buffer_handle))
+                    {
+                        assert(0, "no create");
+                    }
+                    if(!aso_chartam_mediam_pone(windows[window_count].draw_info_middle_buffer_handle, (u64)indicium, 0, 1))
+                    {
+                        assert(0, "no map");
+                    }
+                    if(!aso_chartam_mediam_da(
+                        windows[window_count].draw_info_middle_buffer_handle,
+                        windows[window_count].pid,
+                        &windows[window_count].draw_info_foreign_middle_buffer_handle))
+                    {
+                        AOS_H_printf("failed to give middle buffer\n");
+                    }
+                    windows[window_count].indicium_pingendi = indicium;
+
                     PicturaAnimata* pictura = 0x379342000 + magnitudo_picturae_animatae_disce(300, 300) * 4096 * windows[window_count].window_handle;
-                    if(!pictura_animata_crea(300, 300, &windows[window_count].middle_buffer_handle, pictura))
+                    if(!pictura_animata_crea(300, 300, &windows[window_count].pictura_middle_buffer_handle, pictura))
                     { AOS_H_printf("I am sad\n"); }
                     windows[window_count].displaying_primary = 1;
                     windows[window_count].pictura = pictura;
 
                     if(!aso_chartam_mediam_da(
-                        windows[window_count].middle_buffer_handle,
+                        windows[window_count].pictura_middle_buffer_handle,
                         windows[window_count].pid,
-                        &windows[window_count].foreign_middle_buffer_handle))
+                        &windows[window_count].pictura_foreign_middle_buffer_handle))
                     {
                         AOS_H_printf("failed to give middle buffer\n");
                     }
+
+                    // give draw indicators to application
+                    windows[window_count].indicium_pingendi->ansa_chartae_mediae_cum_pictura_animata = windows[window_count].pictura_foreign_middle_buffer_handle;
+                    windows[window_count].indicium_pingendi->pinge_in_picturam_primam = !windows[window_count].displaying_primary;
 
                     if(!aso_semaphorum_medium_crea(
                         0,
@@ -553,35 +297,6 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
         aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
         AOS_IPFC_return(destroyed);
     }
-    else if(function_index == 2)
-    {
-//        spinlock_acquire(&tempuser_printout_lock);
-//        AOS_H_printf("get window surfaces! from pid %llu\n", source_pid);
-//        spinlock_release(&tempuser_printout_lock);
-        u64 window_handle;
-        {
-            u64* window_handle_pointer = static_data_1024b;
-            window_handle = *window_handle_pointer;
-        }
-
-        u16* copy_to = static_data_1024b;
-
-        for(u64 i = 0; i < window_count; i++)
-        {
-            if(windows[i].pid != source_pid || windows[i].window_handle != window_handle)
-            { continue; }
-
-            copy_to[0] = windows[i].other_surface_slot;
-            aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
-//            f64 after = AOS_H_time_get_seconds();
-//            spinlock_acquire(&tempuser_printout_lock);
-//            AOS_H_printf("total ipfc time is %lf ms\n", (after-before) * 1000.0);
-//            spinlock_release(&tempuser_printout_lock);
-            AOS_IPFC_return(1);
-        }
-        aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
-        AOS_IPFC_return(0);
-    }
     else if(function_index == 3)
     {
 //        spinlock_acquire(&tempuser_printout_lock);
@@ -623,9 +338,10 @@ void thunder_windowed_application_ipfc_api_entry(u64 source_pid, u16 function_in
             if(windows[i].pid != source_pid || windows[i].window_handle != window_handle)
             { continue; }
 
-            copy_to[0] = windows[i].foreign_middle_buffer_handle;
+            copy_to[0] = windows[i].draw_info_foreign_middle_buffer_handle;
             copy_to[1] = windows[i].foreign_commit_semaphore_handle;
             copy_to[2] = windows[i].foreign_acquire_semaphore_handle;
+
             aso_semaphorum_medium_suscita(thunder_lock_mutex_semaphore_handle_signal, 1, 0);
             AOS_IPFC_return(1);
         }
@@ -652,22 +368,6 @@ void program_loader_program(u64 drive1_partitions_directory)
     aso_semaphorum_medium_crea(0, 1,
                                &thunder_lock_mutex_semaphore_handle_signal, U64_MAX,
                                &thunder_lock_mutex_semaphore_handle_wait, U64_MAX);
-    render_work_semaphore = AOS_semaphore_create(0, THREAD_COUNT * JOBS_PER_THREAD);
-    render_work_done_semaphore = AOS_semaphore_create(0, 1);
-    {
-        u64 base_stack_addr = (~(0x1ffffff << 39)) & (~0xfff);
-        AOS_alloc_pages(base_stack_addr - (4096*WORKER_THREAD_STACK_SIZE*(THREAD_COUNT+1)), WORKER_THREAD_STACK_SIZE*(THREAD_COUNT+1));
-
-        for(u64 i = 0; i < THREAD_COUNT; i++) // TODO: one day add feature to ask for the "width" of the system
-        {
-            AOS_TrapFrame frame;
-            frame.regs[10] = i;
-            frame.regs[8] = base_stack_addr;
-            frame.regs[2] = frame.regs[8] - 4 * sizeof(u64);
-            base_stack_addr -= 4096*WORKER_THREAD_STACK_SIZE;
-            AOS_thread_new(render_thread_entry, &frame, 2);
-        }
-    }
 
     slot_count = AOS_directory_get_files(drive1_partitions_directory, 0, 0);
     if(slot_count > MAX_SLOT_COUNT)
@@ -887,15 +587,6 @@ while(1) {
                 windows[i].new_width = (u64)new_width;
                 windows[i].new_height = (u64)new_height;
             }
-
-            f64 dx = (f64)new_cursor_x - (f64)(windows[i].new_x + BORDER_SIZE);
-            f64 dy = (f64)new_cursor_y - (f64)(windows[i].new_y + BORDER_SIZE);
-
-            dx /= (f64)(windows[i].new_width - 2*BORDER_SIZE);
-            dy /= (f64)(windows[i].new_height - 2*BORDER_SIZE);
-
-            windows[i].cursor_x = dx;
-            windows[i].cursor_y = dy;
         }
     }
 
@@ -1001,12 +692,23 @@ while(1) {
             {
                 if(aso_semaphorum_medium_expectare_conare(windows[i].own_commit_semaphore_handle)) // aka new frame
                 {
+                    windows[i].indicium_pingendi->pinge_in_picturam_primam = windows[i].displaying_primary;
                     windows[i].displaying_primary = !windows[i].displaying_primary;
 
                     windows[i].dropped_frame = 0;
 
-                    // HACK to tell client what buffer to render into
-                    windows[i].pictura->dispositio_elementorum = !windows[i].displaying_primary;
+                    { // cursor
+                        f64 dx = (f64)new_cursor_x - (f64)(windows[i].new_x + BORDER_SIZE);
+                        f64 dy = (f64)new_cursor_y - (f64)(windows[i].new_y + WINDOW_BANNER_HEIGHT);
+
+                        dx /= (f64)(windows[i].pictura->latitudo);
+                        dy /= (f64)(windows[i].pictura->altitudo);
+
+                        windows[i].indicium_pingendi->draw_cursor_x = dx;
+                        windows[i].indicium_pingendi->draw_cursor_y = dy;
+
+                        windows[i].indicium_pingendi->is_there_a_cursor = 1;
+                    }
 
                     aso_semaphorum_medium_suscita(windows[i].own_acquire_semaphore_handle, 1, 0);
                 }
@@ -1202,22 +904,22 @@ while(1) {
                    x - BORDER_SIZE < latitudo_picturae && y - BORDER_SIZE < altitudo_picturae)
                 {
                     u64 internal_x = x - BORDER_SIZE;
-                    u64 internal_y = y - BORDER_SIZE;
+                    u64 internal_y = y - WINDOW_BANNER_HEIGHT;
                     u64 k = internal_x + (internal_y * latitudo_picturae);
 
-                    if(!windows[j].dropped_frame)
-                    {
+//                    if(!windows[j].dropped_frame)
+//                    {
                         fb->data[i*3 + 0] = data_picturae[k*3 + 0];
                         fb->data[i*3 + 1] = data_picturae[k*3 + 1];
                         fb->data[i*3 + 2] = data_picturae[k*3 + 2];
-                    }
+/*                    }
                     else
                     {
                         fb->data[i*3 + 0] = 200;
                         fb->data[i*3 + 1] = 200;
                         fb->data[i*3 + 2] = 200;
                     }
-                }
+*/                }
                 else
                 {
                     fb->data[i*3 + 0] = 60; // Application has failed to give us data for this part.

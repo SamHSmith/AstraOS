@@ -68,4 +68,13 @@ u64 pictura_animata_crea(u64 latitudo, u64 altitudo, u64* index_ad_ansam_chartae
     return 1;
 }
 
+typedef struct
+{
+    u8 pinge_in_picturam_primam; // draw into the first frame buffer
+    u8 is_there_a_cursor;
+    u64 ansa_chartae_mediae_cum_pictura_animata;
+    f64 draw_cursor_x;
+    f64 draw_cursor_y;
+} IndiciumPingendi; // Indicator of painting
+
 #endif
