@@ -624,10 +624,17 @@ u64 m_trap(
                 }
 
                 u32 interrupt;
-                char character;
+                u8 character;
                 while(plic_interrupt_next(&interrupt) && interrupt == 10)
                 {
                     uart_read(&character, 1);
+
+#if 1
+                    if(character == 'm')
+                    {
+                        mem_debug_dump_table_counts(U64_MAX);
+                    }
+#endif
 
                     if(KERNEL_PROCESS_ARRAY[vos[current_vo].pid]->out_stream_count > 0)
                     {

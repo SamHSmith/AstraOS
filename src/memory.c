@@ -1,4 +1,6 @@
 
+#include "../common/bitfield_allocator.h"
+
 extern u64 HEAP_START;
 extern u64 HEAP_SIZE;
 extern u64 TEXT_START;
@@ -11,83 +13,8 @@ extern u64 BSS_START;
 extern u64 BSS_END;
 extern u64 KERNEL_STACK_START;
 extern u64 KERNEL_STACK_END;
- 
-#define K_HEAP_START (*(((volatile u64*)HEAP_START) + 0))
-#define K_PAGE_COUNT (*(((volatile u64*)HEAP_START) + 1))
-#define K_TABLE_COUNT (*(((volatile u64*)HEAP_START) + 2))
 
-struct KmemTable
-{
-    u64 table_len;
-    u8 data[];
-};
-#define K_MEMTABLES ((volatile struct KmemTable**)((u64*)HEAP_START + 3))
-
-#define PAGE_SIZE 4096
-#define ALLOCATION_SPLIT_COUNT 3
-
-void mem_table_set_taken(u64 start, u64 count, u8 taken)
-{
-    if(count == 0) { return; }
-    count -= 1;
-    for(s64 k = K_TABLE_COUNT - 1; k >= 0; k--)
-    {
-        struct KmemTable* last_table = K_MEMTABLES[k+1]; // Be careful with this one
-        struct KmemTable* table = K_MEMTABLES[k];
-        u64 start_byte = start >> 3;
-        u64 end_byte = (start+count) >> 3;
-    
-        u64 start_bit = start & 0b111;
-        u64 end_bit = (start+count) & 0b111;
-
-        u64 i = start_byte;
-        u64 j = start_bit;
-        while(i <= end_byte)
-        {
-            u64 e_b = 7;
-            if(i == end_byte) { e_b = end_bit; }
-            while(j <= e_b)
-            {
-                if(k == K_TABLE_COUNT - 1)
-                {
-                    if(taken)
-                    {
-                        table->data[i] |= 1 << j;
-                    }
-                    else
-                    {
-                        table->data[i] &= ~(1 << j);
-                    }
-                }
-                else
-                {
-                    table->data[i] &= ~(1 << j);
-
-                    u64 current = (i << 3) | j;
-                    current = current << 1;
-
-                    u64 yte = current >> 3;
-                    u64 it = current & 0b111;
-                    table->data[i] |= ((last_table->data[yte] & (1 << it)) != 0) << j;
-
-                    current++;
-                    yte = current >> 3;
-                    it = current & 0b111;
-                    table->data[i] |= ((last_table->data[yte] & (1 << it)) != 0) << j;
-                }
-                j++;
-            }
-            j = 0;
-            i++;
-        }
-        {
-            u64 e = start + count;
-            start = start >> 1;
-            e = e >> 1;
-            count = e - start;
-        }
-    }
-}
+u64 K_PAGE_COUNT;
 
 typedef struct Kallocation
 {
@@ -103,78 +30,16 @@ Kallocation kalloc_pages(u64 page_count)
         Kallocation al = {0};
         return al;
     }
-    s64 a_size = 0;
-    for(u64 i = 0; i < 64; i++)
-    {
-        u64 temp = (((u64)1) << (63 - i));
-        if((page_count & temp) != 0)
-        {
-            if(temp < page_count) { i--; } // go up to the next power of 2
-            a_size = K_TABLE_COUNT -1 - (63 - i);
-            break;
-        }
-    }
-
-    if(a_size < 0)
-    {
-        Kallocation al = {0};
-        return al;
-    }
-
-    u64 allocation_splits = 0;
-    for(u64 i = 0; i < ALLOCATION_SPLIT_COUNT; i++)
-    {
-        if((K_TABLE_COUNT - a_size) > 1) { a_size += 1; allocation_splits++; }
-    }
-
-
     spinlock_acquire(&KERNEL_MEMORY_SPINLOCK);
-    struct KmemTable* table = K_MEMTABLES[a_size];
-    u64 local_size_shift = K_TABLE_COUNT -1 - a_size;
 
-    u64 page_address = 0;
+    BitfieldAllocator* allocator = HEAP_START;
+    BitfieldAllocation bal = bitfield_allocate(allocator, page_count);
 
-    u64 last_count = 0;
-    u64 last_i = 0; u8 last_j = 0;
-    for(u64 i = 0; i < table->table_len; i++)
-    {
-        if(page_address != 0) { break; }
-        for(u8 j = 0; j < 8; j++)
-        {
-            if(page_address != 0) { break; }
-            if(allocation_splits == 0)
-            {
-                last_i = i; last_j = j;
-            }
-
-            if((table->data[i] & (1 << j)) == 0) // Page free
-            {
-                if(((last_count + 1) << local_size_shift) >= page_count) // last is also free
-                {
-                    page_address = (last_i * 8 + last_j) << local_size_shift;
-                    mem_table_set_taken(page_address, page_count, 1);
-                }
-                else
-                {
-                    last_count++;
-                    if(last_count == 1)
-                    { last_i = i; last_j = j; }
-                }
-            }
-            else // Page is not free
-            {
-                last_count = 0;
-            }
-        }
-    }
-    Kallocation al = {0};
-    if(page_address)
-    {
-        // HEAP_START isn't always 4096 aligned so the first page will be smaller in some cases.
-        al.memory = (void*)((HEAP_START & (~0xfff)) + (page_address * PAGE_SIZE));
-        al.page_count = page_count;
-    }
     spinlock_release(&KERNEL_MEMORY_SPINLOCK);
+
+    Kallocation al = {0};
+    al.memory = HEAP_START + bal.start_element * PAGE_SIZE;
+    al.page_count = bal.element_count;
     return al;
 }
 
@@ -189,7 +54,7 @@ void kfree_pages(Kallocation a)
     addr /= PAGE_SIZE;
 
     spinlock_acquire(&KERNEL_MEMORY_SPINLOCK);
-    mem_table_set_taken(addr, a.page_count, 0);
+    //mem_table_set_taken(addr, a.page_count, 0);
     spinlock_release(&KERNEL_MEMORY_SPINLOCK);
 }
 
@@ -201,21 +66,15 @@ void* kalloc_single_page()
 
 void mem_debug_dump_table_counts(u64 table_count)
 {
-    if(table_count > K_TABLE_COUNT) { table_count = K_TABLE_COUNT; }
-    for(u64 b = K_TABLE_COUNT - table_count; b < K_TABLE_COUNT; b++)
+    BitfieldAllocator* allocator = HEAP_START;
+    if(table_count > allocator->field_count) { table_count = allocator->field_count; }
+
+    u64 tables_filled_info[table_count*2];
+    bitfield_allocator_table_fillage_data(allocator, tables_filled_info, table_count);
+
+    for(u64 i = 0; i < table_count; i++)
     {
-        u64 count = 0;
-        u64 total = 0;
-        for(u64 i = 0; i < K_MEMTABLES[b]->table_len; i++)
-        {
-            for(u64 j = 0; j < 8; j++)
-            {
-                if((K_MEMTABLES[b]->data[i] & (1 << j)) != 0)
-                { count++; }
-                total++;
-            }
-        }
-        uart_printf("Memtable#%lld %lld/%lld used.\n", b, count, total);
+        uart_printf("Memory Table#%llu, %llu/%llu used.\n", i, tables_filled_info[i*2+0], tables_filled_info[i*2+1]);
     }
 }
 
@@ -402,50 +261,8 @@ u64* mem_init()
 {
     K_PAGE_COUNT = HEAP_SIZE / PAGE_SIZE;
 
-    K_TABLE_COUNT = 63;
-    while(1)
-    {
-        if((K_PAGE_COUNT & (((u64)1) << K_TABLE_COUNT)) != 0) { break; }
-        K_TABLE_COUNT -= 1;
-        if(K_TABLE_COUNT == 1) { break; }
-    }
-    if(((u64)1) << K_TABLE_COUNT < K_PAGE_COUNT) { K_TABLE_COUNT += 1; }
-
-    // But remember, the smallest buddy stores a byte of bitmap
-    for(u64 i = 0; i < 2 && K_TABLE_COUNT > 1; i++) { K_TABLE_COUNT -= 1; }
-
-    K_HEAP_START = HEAP_START + (3 * 8); // we have variables at the heap start see above
-    // Heap starts with memtables
-    K_HEAP_START += K_TABLE_COUNT * sizeof(u8*);
-
-    for(u64 i = 0; i < K_TABLE_COUNT; i++)
-    {
-        K_MEMTABLES[i] = (void*)K_HEAP_START;
-        s64 buddy_byte_count = ((u64)1) << i;
-        while((buddy_byte_count << (K_TABLE_COUNT - (i+1))) * 8 >= K_PAGE_COUNT)
-        { buddy_byte_count -= 1; }
-        buddy_byte_count += 1;
-        K_MEMTABLES[i]->table_len = buddy_byte_count;
-
-        K_HEAP_START += sizeof(struct KmemTable);
-        K_HEAP_START += K_MEMTABLES[i]->table_len;
-    }
-    K_HEAP_START += PAGE_SIZE - (K_HEAP_START % PAGE_SIZE);
-    for(u64 i = 0; i < K_TABLE_COUNT; i++)
-    {
-        u64 table_page_size = ((u64)PAGE_SIZE) << (K_TABLE_COUNT - (i+1));
-        u64 c = HEAP_START;
-        for(u64 j = 0; j < K_MEMTABLES[i]->table_len; j++)
-        {
-            K_MEMTABLES[i]->data[j] = 0;
-            for(u64 k = 0; k < 8; k++)
-            {
-                if(c < K_HEAP_START)
-                { K_MEMTABLES[i]->data[j] |= 1 << k; }
-                c += table_page_size;
-            }
-        }
-    }
+    BitfieldAllocator* allocator = HEAP_START;
+    assert(self_allocate_bitfield_allocator(allocator, K_PAGE_COUNT, PAGE_SIZE), "able to create allocator for the kernel heap inside the kernel heap");
 
     uart_printf("Memory has been initialized:\n\n");
     uart_printf("TEXT:        0x%x <-> 0x%x\n", TEXT_START, TEXT_END);
@@ -453,8 +270,7 @@ u64* mem_init()
     uart_printf("DATA:        0x%x <-> 0x%x\n", DATA_START, DATA_END);
     uart_printf("BSS:         0x%x <-> 0x%x\n", BSS_START, BSS_END);
     uart_printf("STACK:       0x%x <-> 0x%x\n", KERNEL_STACK_START, KERNEL_STACK_END);
-    uart_printf("HEAP META:   0x%x <-> 0x%x\n", HEAP_START, K_HEAP_START);
-    uart_printf("HEAP:        0x%x <-> 0x%x\n", K_HEAP_START, HEAP_START + HEAP_SIZE);
+    uart_printf("HEAP:        0x%x <-> 0x%x\n", HEAP_START, HEAP_START + HEAP_SIZE);
     uart_printf("\n\n");
 
 
