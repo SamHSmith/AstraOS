@@ -907,19 +907,19 @@ while(1) {
                     u64 internal_y = y - WINDOW_BANNER_HEIGHT;
                     u64 k = internal_x + (internal_y * latitudo_picturae);
 
-//                    if(!windows[j].dropped_frame)
-//                    {
+                    if(!windows[j].dropped_frame)
+                    {
                         fb->data[i*3 + 0] = data_picturae[k*3 + 0];
                         fb->data[i*3 + 1] = data_picturae[k*3 + 1];
                         fb->data[i*3 + 2] = data_picturae[k*3 + 2];
-/*                    }
+                    }
                     else
                     {
                         fb->data[i*3 + 0] = 200;
                         fb->data[i*3 + 1] = 200;
                         fb->data[i*3 + 2] = 200;
                     }
-*/                }
+                }
                 else
                 {
                     fb->data[i*3 + 0] = 60; // Application has failed to give us data for this part.
