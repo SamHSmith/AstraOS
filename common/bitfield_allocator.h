@@ -193,10 +193,11 @@ BitfieldAllocation bitfield_allocate(BitfieldAllocator* allocator, u64 number_of
     {
         for(u64 j = 0; j < 64 - looking_for_bit_count; j++)
         {
+            if(field[i] == U64_MAX)
+            { continue; } // early exit to save time
             u64 test_mask = looking_for_mask << j;
             if(test_mask & field[i] == 0) // empty space
             {
-
                 field[i] = field[i] | test_mask;
                 if(field_index + 1 < allocator->field_count)
                 {
@@ -239,6 +240,8 @@ void bitfield_allocator_table_fillage_data(BitfieldAllocator* allocator, u64* de
         u64 acc = 0;
         for(u64 j = 0; j < field_subfield_count; j++)
         {
+            if(field[j] == 0)
+            { continue; } // early exit to save time
             for(u64 k = 0; k < 64; k++)
             {
                 acc += !!(field[j] & (1llu << k));
