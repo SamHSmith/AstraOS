@@ -7,6 +7,7 @@
 typedef struct
 {
     u64 field_count;
+    u64 final_field_size;
     u64 field_data[];
 } BitfieldAllocator;
 
@@ -50,7 +51,9 @@ u64 bitfield_allocator_size(u64 number_of_elements_managed)
     // third field is 64^2 u64's
     // et cetera
 
-    u64 total_byte_size = _bitfield_allocator_size_of_fields(field_count) * sizeof(u64);
+    u64 final_field_size = (number_of_elements_managed + 64 - 1) / 64;
+
+    u64 total_byte_size = (_bitfield_allocator_size_of_fields(field_count - 1) + final_field_size) * sizeof(u64);
     return sizeof(BitfieldAllocator) + total_byte_size;
 }
 
@@ -64,10 +67,15 @@ u64 create_bitfield_allocator(BitfieldAllocator* allocator, u64 space_for_alloca
     { return 0; }
 
     u64 field_count = _bitfield_allocator_fields_required(number_of_elements_managed);
+    allocator->final_field_size = (number_of_elements_managed + 64 - 1) / 64;
+
     u64* field_ptr = allocator->field_data;
     u64 current_size = 1;
     for(u64 i = 0; i < field_count; i++)
     {
+        if(i + 1 == field_count)
+        { current_size = allocator->final_field_size; }
+
         for(u64 j = 0; j < current_size; j++)
         { *(field_ptr++) = 0; }
         current_size *= 64;
@@ -87,14 +95,14 @@ u64 self_allocate_bitfield_allocator(BitfieldAllocator* memory_base_pointer, u64
     }
 
     u64 memory_byte_count = number_of_elements_managed * bytes_per_element;
-    u64 needed_bytes = bitfield_allocator_size(memory_byte_count);
+    u64 needed_bytes = bitfield_allocator_size(number_of_elements_managed);
 
     if(memory_byte_count < needed_bytes)
     {
         return 0;
     }
 
-    if(!create_bitfield_allocator(memory_base_pointer, needed_bytes, memory_byte_count))
+    if(!create_bitfield_allocator(memory_base_pointer, needed_bytes, number_of_elements_managed))
     { u64* n = 0; *n = 0; }
 
     for(u64 i = 0; i < (needed_bytes + bytes_per_element - 1) / bytes_per_element; i++)
@@ -106,15 +114,7 @@ u64 self_allocate_bitfield_allocator(BitfieldAllocator* memory_base_pointer, u64
 // set_to is either 0 or U64_MAX
 void _bitfield_allocator_propagate_bit_change_down(BitfieldAllocator* allocator, u64 field_index, u64 local_index, u64 set_to)
 {
-    u64* field;
-    if(field_index == 0)
-    {
-        field = allocator->field_data;
-    }
-    else
-    {
-        field = allocator->field_data + _bitfield_allocator_size_of_fields(field_index-1);
-    }
+    u64* field = allocator->field_data + _bitfield_allocator_size_of_fields(field_index);
 
     field[local_index] = set_to;
 
@@ -129,15 +129,7 @@ void _bitfield_allocator_propagate_bit_change_down(BitfieldAllocator* allocator,
 
 void _bitfield_allocator_propagate_bit_change_up(BitfieldAllocator* allocator, u64 field_index, u64 bit_index, u64 set_to)
 {
-    u64* field;
-    if(field_index == 0)
-    {
-        field = allocator->field_data;
-    }
-    else
-    {
-        field = allocator->field_data + _bitfield_allocator_size_of_fields(field_index-1);
-    }
+    u64* field = allocator->field_data + _bitfield_allocator_size_of_fields(field_index);
 
     u64 local_index = bit_index / 64;
     u64 local_bit = bit_index % 64;
@@ -172,38 +164,35 @@ BitfieldAllocation bitfield_allocate(BitfieldAllocator* allocator, u64 number_of
 
     u64 field_local_bit_size = 1llu << ((_bitfield_allocator_fields_required(number_of_elements + 1) - 1) * 6);
     u64 looking_for_bit_count = (number_of_elements + field_local_bit_size - 1) / field_local_bit_size;
+
+    // field_local_bit_size * looking_for_bit_count will not always equal number_of_elements
+
     u64 looking_for_mask = 0;
     for(u64 i = 0; i < looking_for_bit_count; i++)
     {
         looking_for_mask = looking_for_mask | (1llu << i);
     }
 
-    u64* field;
-    if(field_index == 0)
-    {
-        field = allocator->field_data;
-    }
-    else
-    {
-        field = allocator->field_data + _bitfield_allocator_size_of_fields(field_index-1);
-    }
+    u64* field = allocator->field_data + _bitfield_allocator_size_of_fields(field_index);
     u64 field_subfield_count = 1llu << (field_index * 6);
+    if(field_index + 1 == allocator->field_count)
+    { field_subfield_count = allocator->final_field_size; }
 
     for(u64 i = 0; i < field_subfield_count; i++)
     {
-        for(u64 j = 0; j < 64 - looking_for_bit_count; j++)
+        if(field[i] == U64_MAX)
+        { continue; } // early exit to save time
+        for(u64 j = 0; j <= 64 - looking_for_bit_count; j++)
         {
-            if(field[i] == U64_MAX)
-            { continue; } // early exit to save time
             u64 test_mask = looking_for_mask << j;
-            if(test_mask & field[i] == 0) // empty space
+            if((test_mask & field[i]) == 0) // empty space
             {
                 field[i] = field[i] | test_mask;
                 if(field_index + 1 < allocator->field_count)
                 {
                     for(u64 k = 0; k < looking_for_bit_count; k++)
                     {
-                        _bitfield_allocator_propagate_bit_change_down(allocator, field_index + 1, i*64 + j, U64_MAX);
+                        _bitfield_allocator_propagate_bit_change_down(allocator, field_index + 1, i*64 + j + k, U64_MAX);
                     }
                 }
                 if(field_index > 0)
@@ -213,7 +202,7 @@ BitfieldAllocation bitfield_allocate(BitfieldAllocator* allocator, u64 number_of
 
                 BitfieldAllocation alloc;
                 alloc.start_element = (i * 64 + j) * field_local_bit_size;
-                alloc.element_count = looking_for_bit_count * field_local_bit_size;
+                alloc.element_count = field_local_bit_size * looking_for_bit_count;
                 return alloc;
             }
         }
@@ -224,18 +213,16 @@ BitfieldAllocation bitfield_allocate(BitfieldAllocator* allocator, u64 number_of
 
 void bitfield_allocator_table_fillage_data(BitfieldAllocator* allocator, u64* dest_buffer, u64 dest_buffer_field_count)
 {
-    for(u64 i = 0; i < allocator->field_count && i < dest_buffer_field_count; i++)
+    u64 start = 0;
+    if(dest_buffer_field_count < allocator->field_count)
+    { start = allocator->field_count - dest_buffer_field_count; }
+
+    for(u64 i = start; i < allocator->field_count; i++)
     {
-        u64* field;
-        if(i == 0)
-        {
-            field = allocator->field_data;
-        }
-        else
-        {
-            field = allocator->field_data + _bitfield_allocator_size_of_fields(i-1);
-        }
+        u64* field = allocator->field_data + _bitfield_allocator_size_of_fields(i);
         u64 field_subfield_count = 1llu << (i * 6);
+        if(i + 1 == allocator->field_count)
+        { field_subfield_count = allocator->final_field_size; }
 
         u64 acc = 0;
         for(u64 j = 0; j < field_subfield_count; j++)
@@ -247,8 +234,8 @@ void bitfield_allocator_table_fillage_data(BitfieldAllocator* allocator, u64* de
                 acc += !!(field[j] & (1llu << k));
             }
         }
-        dest_buffer[i*2 + 0] = acc;
-        dest_buffer[i*2 + 1] = field_subfield_count*64;
+        dest_buffer[(i-start)*2 + 0] = acc;
+        dest_buffer[(i-start)*2 + 1] = field_subfield_count*64;
     }
 }
 #endif

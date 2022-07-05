@@ -76,6 +76,8 @@ void _start()
 
     u8 lock_square_to_cursor = 0;
 
+    f32 square_time = 0.0;
+
 while(1)
 {
 
@@ -174,10 +176,10 @@ static last_middle_buffer_handle = U64_MAX;
         if(input & 8)
         { square_x_control += delta_time; }
 
-        f32 time = frame_start - start_time;
+        square_time += delta_time;
 
-        f32 square_x = (f32)square_x_control + sineF32(3.0*time)/2.0;
-        f32 square_y = (f32)square_y_control + sineF32(3.0*time/M_PI)/2.0;
+        f32 square_x = (f32)square_x_control + sineF32(3.0*square_time)/2.0;
+        f32 square_y = (f32)square_y_control + sineF32(3.0*square_time/M_PI)/2.0;
 
         if(draw_info->is_there_a_cursor && lock_square_to_cursor)
         {
@@ -185,16 +187,16 @@ static last_middle_buffer_handle = U64_MAX;
             square_y = (-draw_info->draw_cursor_y + 0.5) * 2.0;
         }
 
-        f32 red =   255.0 * (sineF32((time*M_PI)/2.0) + 1.0) / 2.0;
-        f32 green = 255.0 * (sineF32((time*M_PI)/3.0) + 1.0) / 2.0;
-        f32 blue =  255.0 * (sineF32((time*M_PI)/5.0) + 1.0) / 2.0;
+        f32 red =   255.0 * (sineF32((square_time*M_PI)/2.0) + 1.0) / 2.0;
+        f32 green = 255.0 * (sineF32((square_time*M_PI)/3.0) + 1.0) / 2.0;
+        f32 blue =  255.0 * (sineF32((square_time*M_PI)/5.0) + 1.0) / 2.0;
 
         u8 background_red = AOS_get_cpu_time();
         u8 background_green = AOS_get_cpu_time();
         u8 background_blue = AOS_get_cpu_time();
 
-        f32 s = cosineF32(time/10.0 * 2*M_PI);
-        f32 c = sineF32(time/10.0 * 2*M_PI);
+        f32 s = cosineF32(square_time/10.0 * 2*M_PI);
+        f32 c = sineF32(square_time/10.0 * 2*M_PI);
         f32 p1x = -0.25 * c -  0.25 * s;
         f32 p1y =  0.25 * c + -0.25 * s;
         f32 p2x =  0.25 * c -  0.25 * s;

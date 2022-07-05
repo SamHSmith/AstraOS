@@ -273,7 +273,6 @@ u64* mem_init()
     uart_printf("HEAP:        0x%x <-> 0x%x\n", HEAP_START, HEAP_START + HEAP_SIZE);
     uart_printf("\n\n");
 
-
     // Initialize MMU table for the kernel
     u64* table = kalloc_single_page();
 
